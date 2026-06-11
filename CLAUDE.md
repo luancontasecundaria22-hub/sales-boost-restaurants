@@ -146,3 +146,43 @@ actions (id, report_id, title, description, priority, status)
 - MVP validado: 3 restaurantes pagando R$300+/mês por 2 meses consecutivos
 - North star: % de clientes que renovam após o 3º relatório
 - Qualidade: dono consegue citar 1 ação que tomou por causa do relatório
+
+---
+
+## 9. Insights do Mercado (features inspiradas em concorrentes)
+
+> Estas features foram validadas pelo mercado (RMS, Klue, Visualping, Tastewise, Zenchef já fazem versões disso para o segmento enterprise). NÃO fazem parte do MVP. Servem como roadmap de upsell e visão de produto. Construir só após validação do core e sob demanda dos clientes.
+
+### Prioridade Alta (pós-MVP, primeiros upsells)
+
+**9.1 — Push de insights, não dashboard**
+A direção do mercado: o futuro são agentes que entregam inteligência proativamente, não painéis que o dono precisa visitar. Reforça o princípio "o relatório é o produto". Implementar alertas proativos (WhatsApp/email) quando algo relevante muda — não esperar o relatório mensal.
+- *Inspiração: Klue "Compete Agent"*
+
+**9.2 — Monitoramento contínuo de concorrentes**
+Detectar mudança de preço ou nova promoção do concorrente no momento em que acontece (não só no fechamento mensal). Alerta: "Concorrente X lançou combo promocional hoje". Vira feature de upsell premium.
+- *Inspiração: Visualping (monitoramento de URLs públicas com resumo por IA)*
+
+### Prioridade Média (v3+)
+
+**9.3 — Tendências do nicho via volume social**
+Ir além dos reviews do próprio restaurante: detectar o que está em alta na categoria e região ("pratos/formatos que estão viralizando em restaurantes similares perto de você"). Insight de oportunidade, não só de correção.
+- *Inspiração: Tastewise (análise de grande volume de posts sociais e pratos)*
+
+**9.4 — Engenharia de margem por item**
+Cruzar preço de venda + custo + volume → identificar quais pratos reprecificar, divulgar ou cortar. Conecta diretamente com o Pilar 2 (preços). Requer o dono informar custos (input manual no início).
+- *Inspiração: RMS Price Studio / SynergySuite*
+
+### Visão de Futuro (validar demanda antes de investir)
+
+**9.5 — Previsão de demanda**
+Histórico de movimento + eventos locais + clima → previsão de fluxo ("sábado tem evento próximo, prepare estoque/equipe"). É onde o mercado enxerga maior ROI, mas exige histórico de dados e maturidade da base.
+- *Inspiração: tendência geral do setor (forecasting é a aposta central da indústria para 2026+)*
+
+### ⚠️ Features deliberadamente EVITADAS (não construir)
+- **Integração com POS/PDV:** todos os grandes fazem, mas é complexo, frágil e prende o produto a integrações. Adiar ao máximo.
+- **Precificação dinâmica automática (mudar preço sozinho):** dono de restaurante pequeno tem receio. Sempre RECOMENDAR preço, nunca alterar automaticamente.
+- **Escala/gestão de funcionários por IA:** fora do escopo "vendas". Dispersa o foco do produto.
+
+### Posicionamento estratégico (a tese, reforçada pela pesquisa de mercado)
+Nenhuma dessas features é uma categoria nova e arriscada — todas já existem e são pagas no enterprise (RMS, Tastewise, Klue atendem grandes redes; Visualping/Semrush são genéricos). O movimento aqui NÃO é inventar categoria, é **levar uma categoria comprovada para o pequeno/médio restaurante LatAm, em português, com preço acessível e foco em ação concreta.** Adoção de IA em restaurantes está acelerando (≈26% dos operadores em 2026), e o independente continua mal servido. Esse é o território.
