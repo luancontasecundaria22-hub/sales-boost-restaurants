@@ -19,7 +19,7 @@ export default function Navbar() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <a href="#" className="flex items-center gap-2.5">
+        <a href="/" aria-label="Sales Boost — início" className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center shadow-sm">
             <span className="text-white font-black text-xs tracking-tight">SB</span>
           </div>
@@ -36,6 +36,7 @@ export default function Navbar() {
             ["Como Funciona", "#process"],
             ["Resultados", "#results"],
             ["Depoimentos", "#testimonials"],
+            ["Preços", "#pricing"],
           ].map(([label, href]) => (
             <a
               key={label}
@@ -48,10 +49,10 @@ export default function Navbar() {
         </div>
 
         <a
-          href="#cta"
+          href="/onboarding"
           className="bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition-all shadow-sm"
         >
-          Agendar Conversa
+          Diagnóstico grátis
         </a>
       </div>
     </nav>

@@ -1,6 +1,6 @@
 "use client";
 import { motion } from "framer-motion";
-import { ArrowRight, Play } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import type { Variants } from "framer-motion";
 
@@ -117,7 +117,7 @@ export default function Hero() {
             <motion.div variants={fadeUp}>
               <span className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-semibold px-3.5 py-1.5 rounded-full mb-6">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Plataforma de Crescimento para Restaurantes
+                A plataforma que te faz conhecer seu cliente
               </span>
             </motion.div>
 
@@ -126,16 +126,17 @@ export default function Hero() {
               className="font-black text-5xl lg:text-[3.6rem] leading-[1.08] tracking-tight text-slate-900 mb-6"
               style={{ fontFamily: "var(--font-inter-tight)" }}
             >
-              Transforme Mais Visitas ao Restaurante em{" "}
-              <span className="text-emerald-500">Receita</span>
+              Conheça seu cliente de verdade e{" "}
+              <span className="text-emerald-500">cresça com previsibilidade</span>
             </motion.h1>
 
             <motion.p
               variants={fadeUp}
               className="text-slate-500 text-lg leading-relaxed mb-10 max-w-lg"
             >
-              Sales Boost ajuda restaurantes a aumentar clientes recorrentes,
-              recuperar clientes inativos e gerar crescimento mensal previsível.
+              O Sales Boost varre a internet — reviews, redes sociais e Google Maps —
+              para montar o perfil real dos seus clientes e transformar isso em ações
+              que aumentam receita. Para qualquer tipo de estabelecimento.
             </motion.p>
 
             <motion.div
@@ -143,18 +144,18 @@ export default function Hero() {
               className="flex flex-col sm:flex-row gap-3 mb-12"
             >
               <a
-                href="#cta"
+                href="/onboarding"
                 className="inline-flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold text-base px-7 py-3.5 rounded-xl transition-all shadow-lg"
               >
-                Agendar Conversa Gratuita
+                Diagnóstico grátis do seu site
                 <ArrowRight className="w-4 h-4" />
               </a>
               <a
                 href="#testimonials"
                 className="inline-flex items-center justify-center gap-2 text-slate-700 hover:text-slate-900 font-semibold text-base px-7 py-3.5 rounded-xl border border-slate-200 hover:border-slate-300 transition-all"
               >
-                <Play className="w-4 h-4 fill-current" />
-                Ver Casos de Sucesso
+                Ver casos de sucesso
+                <ArrowRight className="w-4 h-4" />
               </a>
             </motion.div>
 
@@ -163,7 +164,7 @@ export default function Hero() {
               className="flex flex-wrap gap-x-8 gap-y-3"
             >
               {[
-                ["300+", "Restaurantes"],
+                ["300+", "Estabelecimentos"],
                 ["+27%", "Crescimento Médio"],
                 ["R$15M", "Receita Gerada"],
               ].map(([val, label]) => (

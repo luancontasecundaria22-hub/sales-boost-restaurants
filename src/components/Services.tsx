@@ -35,7 +35,7 @@ export default function Services() {
             O Que Fazemos
           </span>
           <h2 className="font-[family-name:var(--font-inter-tight)] font-black text-4xl lg:text-5xl text-slate-900 tracking-tight">
-            Tudo o Que Seu Restaurante<br />Precisa Para Crescer
+            Tudo o Que Seu Negócio<br />Precisa Para Crescer
           </h2>
         </motion.div>
 
@@ -56,9 +56,12 @@ export default function Services() {
                 {s.title}
               </h3>
               <p className="text-slate-500 leading-relaxed text-sm mb-5">{s.desc}</p>
-              <span className="inline-flex items-center gap-1 text-emerald-600 text-sm font-semibold group-hover:gap-2 transition-all">
+              <a
+                href="/onboarding"
+                className="inline-flex items-center gap-1 text-emerald-600 text-sm font-semibold group-hover:gap-2 transition-all"
+              >
                 Saiba mais <ArrowRight className="w-3.5 h-3.5" />
-              </span>
+              </a>
             </motion.div>
           ))}
         </div>

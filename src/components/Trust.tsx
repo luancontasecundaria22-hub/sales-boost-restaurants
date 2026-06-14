@@ -1,7 +1,7 @@
 "use client";
 import { motion } from "framer-motion";
 
-const brands = ["Burger Lab", "Sushi Palace", "Café Noir", "Pizza Nova", "The Grill House", "Dark Kitchen Co."];
+const brands = ["Burger Lab", "Studio Bella", "Clínica Vita", "Moda Urbana", "Pet & Cia", "Academia Forte"];
 
 export default function Trust() {
   return (
@@ -13,7 +13,7 @@ export default function Trust() {
           viewport={{ once: true }}
           className="text-center text-xs font-semibold uppercase tracking-widest text-slate-400 mb-8"
         >
-          Confiado por Marcas de Restaurantes em Crescimento
+          Confiado por estabelecimentos de todos os setores
         </motion.p>
         <div className="flex flex-wrap justify-center items-center gap-x-10 gap-y-5">
           {brands.map((brand, i) => (

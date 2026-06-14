@@ -15,16 +15,31 @@ export default function Footer() {
           </div>
 
           <div className="flex items-center gap-8">
-            {["Produto", "Empresa", "Privacidade"].map((link) => (
-              <a key={link} href="#" className="text-slate-500 hover:text-slate-300 text-sm transition-colors">
-                {link}
+            {[
+              { label: "Produto", href: "#services" },
+              { label: "Como funciona", href: "#process" },
+              { label: "Depoimentos", href: "#testimonials" },
+            ].map((link) => (
+              <a key={link.label} href={link.href} className="text-slate-500 hover:text-slate-300 text-sm transition-colors">
+                {link.label}
               </a>
             ))}
           </div>
 
           <div className="flex items-center gap-4">
-            {[Twitter, Linkedin, Instagram].map((Icon, i) => (
-              <a key={i} href="#" className="text-slate-600 hover:text-emerald-400 transition-colors">
+            {[
+              { Icon: Twitter, label: "Twitter", href: "https://twitter.com" },
+              { Icon: Linkedin, label: "LinkedIn", href: "https://linkedin.com" },
+              { Icon: Instagram, label: "Instagram", href: "https://instagram.com" },
+            ].map(({ Icon, label, href }) => (
+              <a
+                key={label}
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={label}
+                className="text-slate-600 hover:text-emerald-400 transition-colors"
+              >
                 <Icon className="w-4 h-4" />
               </a>
             ))}
