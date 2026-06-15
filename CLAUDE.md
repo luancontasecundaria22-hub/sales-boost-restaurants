@@ -1,4 +1,4 @@
-# CLAUDE.md — Plataforma de Inteligência de Vendas para Restaurantes
+# CLAUDE.md — SalesBoost: A plataforma que te faz conhecer seu cliente
 
 > Este arquivo orienta o Claude Code no desenvolvimento deste projeto. Leia antes de qualquer tarefa.
 
@@ -6,21 +6,25 @@
 
 ## 1. Visão do Produto
 
-**Nome provisório:** (definir) — sugestões: MesaInteligente, Prato Cheio, SalesBoost Restaurantes
+**Nome:** SalesBoost
 
-**One-liner:** Consultoria de vendas automatizada para restaurantes — cruzamos reputação online, perfil de clientes e preços de concorrentes para entregar um plano de ação mensal que aumenta vendas.
+**Tagline:** "A plataforma que te faz conhecer seu cliente"
 
-**Problema:** Donos de restaurante não têm tempo nem ferramenta para entender por que vendem menos do que poderiam. Ferramentas existentes (Birdeye, Falaê) entregam dashboards; nenhuma entrega "o que fazer amanhã".
+**One-liner:** Consultoria de vendas automatizada para qualquer tipo de estabelecimento — cruzamos reputação online, diagnóstico de site, perfil de clientes e presença digital para entregar um plano de ação concreto que aumenta vendas.
+
+**Problema:** Donos de negócio não têm tempo nem ferramenta para entender por que vendem menos do que poderiam. Ferramentas existentes entregam dashboards; nenhuma entrega "o que fazer amanhã".
 
 **Cliente-alvo:**
-- Fase 1: Restaurantes brasileiros em Miami + restaurantes médios no Rio de Janeiro (Barra da Tijuca)
+- Qualquer tipo de estabelecimento: restaurantes, varejo, serviços, beleza, saúde, e-commerce
+- Fase 1: Brasil (foco no Rio de Janeiro) + brasileiros nos EUA
 - Ticket: R$397–697/mês (BR) ou $197–397/mês (US)
 - Decisor: o dono, decisão individual e rápida
 
-**Diferencial competitivo (não existe no mercado):**
-1. Comparação de preços de concorrentes (raio de 2km, via iFood/cardápios públicos)
-2. Cruzamento reviews + preços + perfil de cliente → plano de ação concreto
-3. Bilíngue PT/EN (nicho: restaurantes brasileiros nos EUA)
+**Diferencial competitivo:**
+1. Diagnóstico gratuito do site (PageSpeed Insights + SEO técnico) como porta de entrada
+2. Varredura da presença digital via Apify (reviews, redes sociais, Google Maps)
+3. Cruzamento de reputação + performance digital + concorrentes → plano de ação concreto
+4. Bilíngue PT/EN
 
 ---
 
