@@ -1,152 +1,167 @@
-# CLAUDE.md — SalesBoost: A plataforma que te faz conhecer seu cliente
+# Sales Boost — O gerenciador de crescimento do seu negócio
 
-> Este arquivo orienta o Claude Code no desenvolvimento deste projeto. Leia antes de qualquer tarefa.
+> **Tagline:** "A plataforma que te faz conhecer seu cliente"
+> **Promessa:** gerar mais receita automaticamente para pequenos negócios.
 
----
+## O que é (visão de produto)
 
-## 1. Visão do Produto
+Sales Boost é o **"gerente de crescimento"** que trabalha sozinho pelo pequeno
+negócio. Não é um conjunto de ferramentas soltas — é **UM produto** com 3 peças
+que se reforçam:
 
-**Nome:** SalesBoost
+1. **Agente pessoal (chat)** — o dono fala em linguagem natural ("cria 5 posts pra
+   próxima semana e agenda seg/ter/qua às 12h", "quem não me respondeu?") e o
+   agente executa as tarefas de marketing e vendas.
+2. **Revenue Opportunities** — encontra a receita parada na mesa (leads sem
+   resposta, avaliações negativas, consultas não confirmadas) e resolve com 1 clique.
+3. **Dashboard** — métricas do negócio + histórico do que o agente fez e o que
+   está pendente de aprovação.
 
-**Tagline:** "A plataforma que te faz conhecer seu cliente"
+**Princípio central:** o Sales Boost gera receita no piloto automático, mas
+**nada vai ao público sem aprovação do dono** (human-in-the-loop).
 
-**One-liner:** Consultoria de vendas automatizada para qualquer tipo de estabelecimento — cruzamos reputação online, diagnóstico de site, perfil de clientes e presença digital para entregar um plano de ação concreto que aumenta vendas.
+## Stack
 
-**Problema:** Donos de negócio não têm tempo nem ferramenta para entender por que vendem menos do que poderiam. Ferramentas existentes entregam dashboards; nenhuma entrega "o que fazer amanhã".
-
-**Cliente-alvo:**
-- Qualquer tipo de estabelecimento: restaurantes, varejo, serviços, beleza, saúde, e-commerce
-- Fase 1: Brasil (foco no Rio de Janeiro) + brasileiros nos EUA
-- Ticket: R$397–697/mês (BR) ou $197–397/mês (US)
-- Decisor: o dono, decisão individual e rápida
-
-**Diferencial competitivo:**
-1. Diagnóstico gratuito do site (PageSpeed Insights + SEO técnico) como porta de entrada
-2. Varredura da presença digital via Apify (reviews, redes sociais, Google Maps)
-3. Cruzamento de reputação + performance digital + concorrentes → plano de ação concreto
-4. Bilíngue PT/EN
-
----
-
-## 2. Os 3 Pilares do Produto
-
-### Pilar 1 — Reputação (MVP core)
-- Coleta e análise de Google Reviews (API oficial do Google Places — começar por aqui, é legal e estável)
-- Fase 2: reviews do iFood, TripAdvisor, comentários de Instagram
-- IA (Claude API) classifica reviews por tema: atendimento, comida, preço, ambiente, tempo de espera
-- Extrai: pontos fortes (amplificar no marketing), reclamações recorrentes (corrigir), pratos/funcionários mais citados
-- Feature de upsell: resposta automática a reviews no tom do restaurante
-
-### Pilar 2 — Inteligência Competitiva (diferencial)
-- Mapeia 5–10 concorrentes num raio de 2km (Google Places API: tipo, nota, volume de reviews)
-- Coleta de preços: semiautomática no MVP (operador cola cardápio do iFood, IA estrutura os dados)
-- Cruzamento-chave: preço do concorrente + reviews do concorrente
-  - Ex: "Concorrente cobra 20% menos MAS reviews reclamam de qualidade → não baixe preço, comunique qualidade"
-- Atualização quinzenal/mensal (preços não mudam diariamente)
-
-### Pilar 3 — Perfil de Cliente (v2, após validação do core)
-- QR code na mesa → pesquisa de 30 segundos em troca de brinde (sobremesa/café)
-- Dados: faixa etária, como conheceu, frequência, satisfação
-- LGPD: consentimento explícito via checkbox, dados anonimizados em relatórios
-- Cruzamento com horários/ticket médio quando houver integração com PDV (futuro)
-
-### Saída final — O Relatório Mensal (o produto de verdade)
-1. **Resumo executivo** — Score de saúde 0–100
-2. **O que amam em você** — top 3 elogios + como usar no marketing
-3. **O que afasta clientes** — top 3 reclamações + ação corretiva
-4. **Seu posicionamento de preço** — tabela vs. concorrentes + recomendação
-5. **3 Ações do Mês** — concretas, priorizadas, com impacto estimado
-
----
-
-## 3. Stack Técnico
-
-| Camada | Tecnologia | Observação |
-|---|---|---|
-| Frontend | React + Vite | Mesmo padrão do Saúde que Sustenta |
-| Estilo | Tailwind CSS | Design profissional, evitar visual genérico |
-| Backend/DB | Supabase (Postgres + Auth + RLS) | RLS obrigatório — dados de cada restaurante isolados por tenant |
-| Hospedagem | Cloudflare Workers | Mesmo pipeline de deploy já dominado |
-| IA | Claude API (Anthropic) | Análise de reviews, geração de relatórios e planos de ação |
-| Dados externos | Google Places API | Reviews + dados de concorrentes (oficial, pago por uso) |
-| PDF | pdf-lib | Geração do relatório mensal (mesma lib do SqS) |
-| Email | Resend via Supabase Edge Functions | Entrega do relatório + alertas |
-| Pagamentos | Stripe | Assinatura mensal, suporte a BRL e USD |
+- **Frontend:** React + Vite, TypeScript, Tailwind CSS, deploy via Cloudflare Workers.
+- **Auth/DB:** Supabase (Auth + Postgres + RLS). *(já implementado)*
+- **Agente:** Claude API (Anthropic) via Supabase Edge Functions — definimos as
+  *ferramentas* (postar, agendar, ler leads, responder review) e a API orquestra
+  raciocínio + execução. *(implementado na edge function `agent-chat`)*
+- **Canais de integração:** Instagram, WhatsApp (API Cloud oficial),
+  Google Business Profile (Maps/Reviews), E-mail. *(novos, entram por etapas)*
+- **Coleta de dados:** Apify (reviews, redes sociais, Maps) + Google PageSpeed
+  Insights (diagnóstico de site).
+- **IA:** Claude API (`claude-sonnet-4-6`) — análise de reviews, geração de posts,
+  planos de ação, respostas a leads.
+- **PDF:** pdf-lib — geração de relatórios mensais.
+- **Email:** Resend via Supabase Edge Functions.
+- **Pagamentos:** Stripe (assinatura mensal BRL/USD).
 
 ### Regras de arquitetura
-- Multi-tenant desde o dia 1: tabela `restaurants` é a raiz; toda tabela tem `restaurant_id` com RLS
-- Roles: `owner` (dono do restaurante), `admin` (você/operador)
-- Nunca expor chaves de API no frontend; chamadas à Claude API e Google Places sempre via Edge Functions
-- Idioma: interface PT-BR primeiro, EN na sequência (i18n desde o início — usar arquivos de tradução, nunca strings hardcoded)
+- Multi-tenant: tabela `companies` é a raiz; toda tabela tem `company_id` com RLS.
+- Roles: `owner` (operador/admin), `client` (dono do negócio).
+- Nunca expor chaves de API no frontend — chamadas à Claude API e integrações
+  sempre via Supabase Edge Functions.
+- i18n desde o início — nunca strings hardcoded na UI.
 
----
+## Brand
 
-## 4. Modelo de Dados (inicial)
+- **Primary:** `#FF6D29` (laranja)
+- **Card BG:** `#150E08`
+- **Page BG:** `#0E0B0A`
+- **Muted:** `#BABABA`
+- **Font:** `'Bricolage Grotesque', system-ui, sans-serif`
+- Design dark, técnico, premium. Sem gradientes genéricos. Animações sutis.
+
+## As 3 peças do produto
+
+### 1. Agente pessoal (chat)
+- **Motor:** Claude API com tool use. Cada empresa tem contexto próprio
+  (nome, tipo, cidade, Instagram, objetivo) injetado no system prompt.
+- **Ferramentas que o agente pode chamar — todas com aprovação humana:**
+  - `create_post` — cria rascunho de post para aprovação
+  - `create_multiple_posts` — cria vários rascunhos de uma vez (semana de conteúdo)
+  - *(futuro)* listar leads sem resposta e rascunhar follow-up (WhatsApp / E-mail)
+  - *(futuro)* ler avaliações e rascunhar resposta (Google)
+  - *(futuro)* consultar métricas do dashboard
+- **Regra de ouro:** o agente **nunca** publica ou responde sozinho —
+  gera rascunho → dono aprova na aba Posts → então executa.
+- **Histórico:** conversas salvas em `agent_messages` por empresa.
+- **Rate limiting:** planejado — X mensagens/mês por plano para controlar custo de API.
+
+### 2. Revenue Opportunities *(a implementar)*
+Varre os canais e lista oportunidades com valor estimado, ex.:
+- "3 leads sem resposta há +24h"
+- "7 avaliações negativas sem resposta"
+- "5 consultas/reservas não confirmadas"
+
+Cada item tem uma ação sugerida. O botão **"Resolver tudo"** faz o agente montar a
+fila de ações e apresentá-la para **aprovação em lote**.
+
+### 3. Dashboard
+Métricas (receita recuperada, leads respondidos, posts publicados, reputação) +
+timeline do que o agente fez e o que está pendente de aprovação.
+
+## Modelo de dados (atual)
 
 ```
-restaurants (id, name, google_place_id, address, lat, lng, plan, locale, created_at)
-users (id, restaurant_id, role, email)
-reviews (id, restaurant_id, source, author, rating, text, review_date, sentiment, themes[])
-competitors (id, restaurant_id, google_place_id, name, rating, review_count, distance_m)
-competitor_prices (id, competitor_id, item_name, price, collected_at, source)
-menu_items (id, restaurant_id, item_name, price, category)
-surveys (id, restaurant_id, qr_slug, active)
-survey_responses (id, survey_id, age_range, discovery_channel, frequency, nps, created_at)
-reports (id, restaurant_id, period, pdf_url, health_score, created_at)
-actions (id, report_id, title, description, priority, status)
+companies (id, user_id, business_name, business_type, city, website_url, instagram_url, goal, plan, created_at)
+user_roles (user_id, role)  -- 'owner' | 'client'
+posts (id, company_id, content, platform, status, image_suggestion, best_time, created_at)
+  -- status: 'rascunho' | 'aprovado' | 'publicado'
+agent_messages (id, company_id, role, content, created_at)
+  -- role: 'user' | 'assistant'
+diagnostics (id, company_id, url, score, data, created_at)
 ```
 
----
+## Público-alvo
 
-## 5. Roadmap de Desenvolvimento
+Qualquer dono de pequeno/médio estabelecimento no Brasil — varejo, serviços,
+beleza, saúde, food, franquias — que quer crescer **sem precisar virar
+especialista em marketing**.
 
-### Sprint 1 — Fundação (semana 1)
-- [ ] Setup do repo, Supabase, Cloudflare Workers, CI básico
-- [ ] Schema inicial + RLS + auth (Google OAuth, mesmo fluxo do SqS)
-- [ ] Cadastro de restaurante: busca via Google Places, salva place_id
-- [ ] Importação de reviews do Google (Edge Function + Places API)
+- Fase 1: Brasil (foco Rio de Janeiro) + brasileiros nos EUA
+- Ticket: R$397–697/mês (BR) ou $197–397/mês (US)
+- Decisor: o próprio dono, decisão rápida
 
-### Sprint 2 — Motor de análise (semana 2)
-- [ ] Edge Function: análise de reviews via Claude API (sentimento + temas + insights)
-- [ ] Mapeamento de concorrentes (Places API: nearby search por tipo "restaurant")
-- [ ] Tela admin para inserir preços de concorrentes (colar cardápio → IA estrutura)
+## Diferenciais competitivos
 
-### Sprint 3 — O relatório (semana 3)
-- [ ] Geração do relatório mensal em PDF (pdf-lib) com as 5 seções
-- [ ] Dashboard web do dono: score, principais insights, ações do mês
-- [ ] Envio por email via Resend
+1. **Conhece o cliente com dados reais da internet (Apify)** — varre reviews,
+   redes e Maps para montar o perfil real do cliente. Esses dados alimentam o agente.
+2. **Diagnóstico de site grátis** — porta de entrada / isca de lead qualificado.
+3. **Um agente que EXECUTA, não só mostra relatório** — em PT-BR, preço em R$
+   (concorrentes como Birdeye, Malou, Bloom focam EUA/premium).
+4. **Ninguém faz:** comparação de preços + cruzamento com reviews + plano de ação concreto.
 
-### Sprint 4 — Comercialização (semana 4)
-- [ ] Stripe: planos mensais BRL/USD
-- [ ] Landing page (PT/EN) com exemplo de relatório
-- [ ] Onboarding self-service: dono cadastra restaurante → relatório demo em 24h
+## Modelo de cobrança — **A DECIDIR**
 
-### v2 (após 5+ clientes pagantes)
-- [ ] QR code + pesquisa interna (Pilar 3)
-- [ ] Resposta automática a reviews
-- [ ] Recuperação de clientes sumidos (WhatsApp)
-- [ ] Alertas em tempo real (review 1 estrela)
-- [ ] Benchmark anônimo entre clientes (quando houver 20+ no mesmo nicho)
+Três hipóteses em aberto:
+- **(a)** Assinatura mensal fixa (ex. R$197–R$397/mês). Previsível, fácil de comunicar.
+- **(b)** Mensal menor + % da receita recuperada. Alinha incentivos.
+- **(c)** Por uso / créditos de ação do agente. Flexível, porém imprevisível.
 
----
+Custo de API por cliente: ~$0,20–$0,80/mês (Claude Sonnet). Absorver no preço é viável.
 
-## 6. Princípios do Projeto
+## Estado atual do código
 
-1. **O relatório é o produto.** O dashboard é secundário. Todo esforço vai para a qualidade dos insights e do plano de ação.
-2. **Insight > dado.** Nunca mostrar "você tem 47 reviews negativas". Sempre: "73% das reclamações são sobre tempo de espera no sábado — contrate um extra ou ajuste o fluxo da cozinha".
-3. **Manual antes de automático.** Se uma feature pode ser feita manualmente pelo operador (admin) com ajuda de IA, fazer assim primeiro. Automatizar só o que provar valor.
-4. **Começar com dados públicos e legais.** Google Places API oficial. Scraping de iFood/Instagram fica para depois, com avaliação de risco.
-5. **Bilíngue por padrão.** Todo texto via i18n. Mercado = Brasil + brasileiros nos EUA.
+- Landing page completa com hero, diagnóstico gratuito, pricing.
+- Auth com roles `owner`/`client`: `/login`, `/owner`, `/dashboard` + proteção de rota.
+- Dashboard com sidebar: Visão Geral, Diagnóstico, Insights, Integrações, Posts, Agente, Concorrentes, Relatório, Configurações.
+- Edge functions deployadas: `agent-chat`, `generate-posts`, `run-diagnosis`, `analyze-reviews`, `import-reviews`, `map-competitors`, `find-place`, `generate-report`, `gsc-metrics`, `gsc-oauth-callback`, `claim-diagnostic`.
+- Supabase migrations em `supabase/migrations/`.
+- i18n via `src/i18n.ts`.
 
-## 7. Concorrentes (referência de posicionamento)
+## Roadmap
 
-- **Birdeye / ReviewTrackers / Podium** (US): caros, genéricos, só dashboard de reviews
-- **Falaê** (BR): pesquisa de satisfação + CRM para restaurantes — concorrente mais próximo, mas não faz inteligência competitiva de preços
+- [x] Agente-chat MVP (`agent-chat` edge function + `AgentePage`)
+- [ ] **Fase 2:** Rate limiting por plano na edge function `agent-chat`
+- [ ] **Fase 3:** Revenue Opportunities — detector de leads sem resposta + avaliações negativas
+- [ ] **Fase 4:** Integrações de canal reais (Instagram → WhatsApp → Google → E-mail)
+- [ ] **Fase 5:** Botão "Resolver tudo" (fila de ações em lote com aprovação)
+- [ ] Stripe — planos mensais BRL/USD + controle de acesso por plano
+- [ ] Onboarding self-service com relatório demo em 24h
+- [ ] Definir e instrumentar modelo de cobrança
+
+## Concorrentes (referência)
+
+- **Birdeye / ReviewTrackers / Podium** (US): caros, genéricos, só dashboard
+- **Falaê** (BR): pesquisa de satisfação + CRM — não faz inteligência de preços
 - **Zenchef / Gastroranking** (EU): gestão de reviews atrelada a reservas
-- **Ninguém faz:** comparação de preços + cruzamento com reviews + plano de ação. Esse é o nosso território.
+- **Diferencial:** ninguém cruza preços + reviews + plano de ação + agente que executa
 
-## 8. Métricas de Sucesso
+## Variáveis de ambiente
 
-- MVP validado: 3 restaurantes pagando R$300+/mês por 2 meses consecutivos
-- North star: % de clientes que renovam após o 3º relatório
-- Qualidade: dono consegue citar 1 ação que tomou por causa do relatório
+```
+# Frontend (.env.local)
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
+VITE_GOOGLE_OAUTH_CLIENT_ID=
+
+# Supabase Edge Functions (secrets)
+SUPABASE_SERVICE_ROLE_KEY=
+ANTHROPIC_API_KEY=
+PAGESPEED_API_KEY=
+APIFY_TOKEN=
+RESEND_API_KEY=
+STRIPE_SECRET_KEY=
+```
