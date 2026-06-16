@@ -124,23 +124,25 @@ Custo de API por cliente: ~$0,20–$0,80/mês (Claude Sonnet). Absorver no preç
 
 ## Estado atual do código
 
+- Site publicado: https://sales-boost-restaurants.luancontasecundaria22.workers.dev/ (Cloudflare Workers, deploy automático via Git em push para `main`).
 - Landing page completa com hero, diagnóstico gratuito, pricing.
 - Auth com roles `owner`/`client`: `/login`, `/owner`, `/dashboard` + proteção de rota.
-- Dashboard com sidebar: Visão Geral, Diagnóstico, Insights, Integrações, Posts, Agente, Concorrentes, Relatório, Configurações.
-- Edge functions deployadas: `agent-chat`, `generate-posts`, `run-diagnosis`, `analyze-reviews`, `import-reviews`, `map-competitors`, `find-place`, `generate-report`, `gsc-metrics`, `gsc-oauth-callback`, `claim-diagnostic`.
+- Dashboard com sidebar: Visão Geral, Diagnóstico, Insights, Integrações, Posts, Agente, Oportunidades, Concorrentes, Relatório, Configurações.
+- Edge functions deployadas: `agent-chat`, `generate-posts`, `run-diagnosis`, `site-diagnosis`, `analyze-reviews`, `import-reviews`, `apify-sync`, `detect-opportunities`, `draft-reply`, `map-competitors`, `find-place`, `generate-report`, `gsc-metrics`, `gsc-oauth-callback`, `gbp-oauth-callback`, `reply-google-review`, `claim-diagnostic`, `create-checkout`, `stripe-webhook`.
 - Supabase migrations em `supabase/migrations/`.
 - i18n via `src/i18n.ts`.
 
 ## Roadmap
 
 - [x] Agente-chat MVP (`agent-chat` edge function + `AgentePage`)
-- [ ] **Fase 2:** Rate limiting por plano na edge function `agent-chat`
-- [ ] **Fase 3:** Revenue Opportunities — detector de leads sem resposta + avaliações negativas
-- [ ] **Fase 4:** Integrações de canal reais (Instagram → WhatsApp → Google → E-mail)
+- [x] **Fase 2:** Rate limiting por plano na edge function `agent-chat`
+- [x] **Fase 3:** Revenue Opportunities — detector de leads sem resposta + avaliações negativas (`detect-opportunities`, `draft-reply`, página Oportunidades)
+- [ ] **Fase 4:** Integrações de canal reais — Google Business Profile (OAuth + resposta a reviews) e Instagram (sync via Apify) já funcionam; falta WhatsApp e E-mail
 - [ ] **Fase 5:** Botão "Resolver tudo" (fila de ações em lote com aprovação)
-- [ ] Stripe — planos mensais BRL/USD + controle de acesso por plano
+- [x] Stripe — checkout + webhook (`create-checkout`, `stripe-webhook`); falta validar fluxo ponta a ponta em produção
 - [ ] Onboarding self-service com relatório demo em 24h
-- [ ] Definir e instrumentar modelo de cobrança
+- [ ] Definir e instrumentar modelo de cobrança final (a/b/c)
+- [ ] Trocar Pletor por apitemplate.io para geração de imagens/PDF (ver seção de Stack)
 
 ## Concorrentes (referência)
 
