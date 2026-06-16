@@ -17,6 +17,7 @@ import SettingsPage from './pages/dashboard/SettingsPage.tsx'
 import PostsPage from './pages/dashboard/PostsPage.tsx'
 import CompetitorsPage from './pages/dashboard/CompetitorsPage.tsx'
 import AgentePage from './pages/dashboard/AgentePage.tsx'
+import OpportunitiesPage from './pages/dashboard/OpportunitiesPage.tsx'
 import ReportPage from './pages/dashboard/ReportPage.tsx'
 import OwnerPage from './pages/owner/OwnerPage.tsx'
 import OnboardingPage from './pages/onboarding/OnboardingPage.tsx'
@@ -71,6 +72,7 @@ function RouterRoot() {
         <Route path="integrations" element={<IntegrationsPage />} />
         <Route path="posts" element={<PostsPage />} />
         <Route path="agente" element={<AgentePage />} />
+        <Route path="oportunidades" element={<OpportunitiesPage />} />
         <Route path="concorrentes" element={<CompetitorsPage />} />
         <Route path="relatorio" element={<ReportPage />} />
         <Route path="settings" element={<SettingsPage />} />
