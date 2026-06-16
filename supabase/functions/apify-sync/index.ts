@@ -25,10 +25,12 @@ interface ApifyProfile {
 }
 
 interface ApifyReview {
+  reviewId?: string
   name?: string
   stars?: number
   text?: string
   publishedAtDate?: string
+  responseFromOwnerText?: string
 }
 
 async function runApifyActor(
@@ -149,21 +151,25 @@ Deno.serve(async (req) => {
         ) as ApifyReview[]
 
         if (items.length > 0) {
-          // Upsert reviews — dedup by (company_id, author, review_date)
-          const reviewRows = items.map((r: ApifyReview) => ({
-            company_id: company.id,
-            source: 'google',
-            author: r.name ?? 'Anônimo',
-            rating: r.stars ?? null,
-            text: r.text ?? null,
-            review_date: r.publishedAtDate ? new Date(r.publishedAtDate).toISOString() : null,
-          }))
+          const reviewRows = items
+            .filter((r: ApifyReview) => r.reviewId)
+            .map((r: ApifyReview) => ({
+              company_id: company.id,
+              source: 'google',
+              google_review_id: r.reviewId!,
+              author: r.name ?? 'Anônimo',
+              rating: r.stars ?? null,
+              text: r.text ?? null,
+              review_date: r.publishedAtDate ? r.publishedAtDate.slice(0, 10) : null,
+              owner_reply: r.responseFromOwnerText ?? null,
+            }))
 
-          // Insert ignoring duplicates (requires unique constraint or use upsert)
-          await admin.from('reviews').upsert(reviewRows, {
-            onConflict: 'company_id,source,author,review_date',
-            ignoreDuplicates: true,
-          })
+          if (reviewRows.length > 0) {
+            await admin.from('reviews').upsert(reviewRows, {
+              onConflict: 'company_id,google_review_id',
+              ignoreDuplicates: false,
+            })
+          }
 
           results.reviews = { synced: reviewRows.length }
         }

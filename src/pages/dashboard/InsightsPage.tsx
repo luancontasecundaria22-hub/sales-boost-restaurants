@@ -18,6 +18,8 @@ interface Review {
   review_date: string | null
   sentiment: string | null
   themes: string[] | null
+  google_review_id: string | null
+  owner_reply: string | null
 }
 
 const SENTIMENT_COLORS: Record<string, { bg: string; color: string }> = {
@@ -45,6 +47,11 @@ export default function InsightsPage() {
   const [actionMsg, setActionMsg] = useState('')
   const [actionErr, setActionErr] = useState('')
   const [sentimentFilter, setSentimentFilter] = useState<string>('all')
+  const [gbpConnected, setGbpConnected] = useState(false)
+  const [replyingId, setReplyingId] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState<Record<string, string>>({})
+  const [replySending, setReplySending] = useState<string | null>(null)
+  const [replyMsg, setReplyMsg] = useState<Record<string, string>>({})
 
   const loadReviews = async () => {
     if (!user) return
@@ -58,14 +65,23 @@ export default function InsightsPage() {
     if (!company) { setLoading(false); return }
     setCompanyId(company.id)
 
-    const { data } = await supabase
-      .from('reviews')
-      .select('id, source, author, rating, text, review_date, sentiment, themes')
-      .eq('company_id', company.id)
-      .order('review_date', { ascending: false })
-      .limit(200)
+    const [{ data }, { data: gbpInteg }] = await Promise.all([
+      supabase
+        .from('reviews')
+        .select('id, source, author, rating, text, review_date, sentiment, themes, google_review_id, owner_reply')
+        .eq('company_id', company.id)
+        .order('review_date', { ascending: false })
+        .limit(200),
+      supabase
+        .from('company_integrations')
+        .select('id')
+        .eq('company_id', company.id)
+        .eq('type', 'google_business_profile')
+        .maybeSingle(),
+    ])
 
     setReviews((data ?? []) as Review[])
+    setGbpConnected(!!gbpInteg)
     setLoading(false)
   }
 
@@ -112,6 +128,27 @@ export default function InsightsPage() {
       setActionErr(e instanceof Error ? e.message : String(e))
     }
     setter(false)
+  }
+
+  const sendReply = async (reviewId: string) => {
+    const text = replyText[reviewId]?.trim()
+    if (!text || !session) return
+    setReplySending(reviewId)
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/reply-google-review`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_id: reviewId, reply_text: text }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Erro ao enviar resposta')
+      setReplyMsg(prev => ({ ...prev, [reviewId]: '✓ Resposta publicada no Google!' }))
+      setReplyingId(null)
+      setReviews(prev => prev.map(r => r.id === reviewId ? { ...r, owner_reply: text } : r))
+    } catch (e: unknown) {
+      setReplyMsg(prev => ({ ...prev, [reviewId]: `Erro: ${e instanceof Error ? e.message : String(e)}` }))
+    }
+    setReplySending(null)
   }
 
   // Derived stats
@@ -255,6 +292,57 @@ export default function InsightsPage() {
                         ))}
                       </div>
                     )}
+                    {/* Owner reply or reply button */}
+                    {r.owner_reply ? (
+                      <div style={{ marginTop: '8px', padding: '10px 14px', background: 'rgba(74,222,128,0.06)', borderRadius: '8px', border: '1px solid rgba(74,222,128,0.15)' }}>
+                        <div style={{ fontSize: '11px', color: '#4ade80', fontWeight: 600, marginBottom: '4px' }}>✓ Respondido pelo proprietário</div>
+                        <p style={{ fontSize: '12px', color: MUTED, margin: 0, lineHeight: 1.6 }}>{r.owner_reply}</p>
+                      </div>
+                    ) : gbpConnected && r.google_review_id ? (
+                      <div style={{ marginTop: '8px' }}>
+                        {replyingId !== r.id ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button
+                              onClick={() => setReplyingId(r.id)}
+                              style={{ padding: '5px 12px', background: 'rgba(255,109,41,0.12)', color: ORANGE, fontWeight: 600, fontSize: '11px', borderRadius: '7px', border: '1px solid rgba(255,109,41,0.25)', cursor: 'pointer' }}
+                            >
+                              Responder no Google →
+                            </button>
+                            {replyMsg[r.id] && (
+                              <span style={{ fontSize: '11px', color: replyMsg[r.id].startsWith('Erro') ? '#f87171' : '#4ade80' }}>{replyMsg[r.id]}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <div style={{ marginTop: '4px' }}>
+                            <textarea
+                              value={replyText[r.id] ?? ''}
+                              onChange={e => setReplyText(prev => ({ ...prev, [r.id]: e.target.value }))}
+                              placeholder="Escreva sua resposta pública..."
+                              rows={3}
+                              style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'white', fontSize: '12px', lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                            />
+                            <div style={{ display: 'flex', gap: '8px', marginTop: '6px', alignItems: 'center' }}>
+                              <button
+                                onClick={() => sendReply(r.id)}
+                                disabled={replySending === r.id || !replyText[r.id]?.trim()}
+                                style={{ padding: '6px 14px', background: replySending === r.id ? 'rgba(255,109,41,0.3)' : ORANGE, color: '#000', fontWeight: 700, fontSize: '11px', borderRadius: '7px', border: 'none', cursor: replySending === r.id ? 'not-allowed' : 'pointer' }}
+                              >
+                                {replySending === r.id ? 'Publicando...' : 'Publicar resposta'}
+                              </button>
+                              <button
+                                onClick={() => setReplyingId(null)}
+                                style={{ padding: '6px 12px', background: 'transparent', color: MUTED, fontWeight: 600, fontSize: '11px', borderRadius: '7px', border: `1px solid ${BORDER}`, cursor: 'pointer' }}
+                              >
+                                Cancelar
+                              </button>
+                              {replyMsg[r.id] && (
+                                <span style={{ fontSize: '11px', color: replyMsg[r.id].startsWith('Erro') ? '#f87171' : '#4ade80' }}>{replyMsg[r.id]}</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               ))}

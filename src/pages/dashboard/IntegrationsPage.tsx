@@ -3,6 +3,19 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 
+function buildGbpAuthUrl(companyId: string): string {
+  const params = new URLSearchParams({
+    client_id: import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID as string,
+    redirect_uri: `${window.location.origin}/auth/gbp/callback`,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/business.manage',
+    access_type: 'offline',
+    prompt: 'consent',
+    state: companyId,
+  })
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
+}
+
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
 const MUTED = '#BABABA'
@@ -60,6 +73,7 @@ export default function IntegrationsPage() {
   const [syncError, setSyncError] = useState('')
   const [syncSuccess, setSyncSuccess] = useState(false)
   const [integration, setIntegration] = useState<Integration | null>(null)
+  const [gbpIntegration, setGbpIntegration] = useState<Integration | null>(null)
   const [metrics, setMetrics] = useState<GscMetrics | null>(null)
   const [loading, setLoading] = useState(true)
   const [metricsLoading, setMetricsLoading] = useState(false)
@@ -93,7 +107,15 @@ export default function IntegrationsPage() {
       .eq('type', 'google_search_console')
       .maybeSingle()
 
+    const { data: gbpInteg } = await supabase
+      .from('company_integrations')
+      .select('id, type, domain, connected_at')
+      .eq('company_id', company.id)
+      .eq('type', 'google_business_profile')
+      .maybeSingle()
+
     setIntegration(integ ?? null)
+    setGbpIntegration(gbpInteg ?? null)
     setLoading(false)
   }
 
@@ -345,16 +367,43 @@ export default function IntegrationsPage() {
           )}
         </div>
 
-        {/* Google Meu Negócio — em breve */}
-        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '20px 24px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', opacity: 0.5 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⭐</div>
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Google Meu Negócio</div>
-              <div style={{ fontSize: '12px', color: MUTED }}>Responda avaliações diretamente pelo painel.</div>
+        {/* Google Business Profile card */}
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
+          <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⭐</div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Google Business Profile</div>
+                <div style={{ fontSize: '12px', color: gbpIntegration ? '#4ade80' : MUTED }}>
+                  {gbpIntegration
+                    ? `✓ Conectado${gbpIntegration.domain ? ` · ${gbpIntegration.domain}` : ''}`
+                    : 'Responda avaliações do Google direto pelo painel'}
+                </div>
+              </div>
             </div>
+            {companyId && (import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID as string) && (
+              <a
+                href={buildGbpAuthUrl(companyId)}
+                style={{ padding: '8px 16px', background: gbpIntegration ? 'rgba(255,255,255,0.04)' : ORANGE, color: gbpIntegration ? MUTED : '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: gbpIntegration ? `1px solid ${BORDER}` : 'none', textDecoration: 'none', display: 'inline-block', cursor: 'pointer' }}
+              >
+                {gbpIntegration ? 'Reconectar' : 'Conectar →'}
+              </a>
+            )}
           </div>
-          <span style={{ fontSize: '11px', padding: '4px 10px', borderRadius: '99px', background: 'rgba(255,255,255,0.06)', color: MUTED }}>Em breve</span>
+          {!gbpIntegration && (
+            <div style={{ padding: '0 24px 20px' }}>
+              <div style={{ fontSize: '13px', color: MUTED, lineHeight: 1.6 }}>
+                Conecte seu Google Business Profile para responder avaliações diretamente pelo Sales Boost. As respostas aparecem publicamente no Google Maps.
+              </div>
+            </div>
+          )}
+          {gbpIntegration && (
+            <div style={{ padding: '12px 24px', background: 'rgba(74,222,128,0.04)', borderTop: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: '12px', color: MUTED }}>
+                ✓ Botão "Responder no Google" ativo em <strong style={{ color: 'white' }}>Avaliações</strong>. Conectado em {new Date(gbpIntegration.connected_at!).toLocaleDateString('pt-BR')}.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

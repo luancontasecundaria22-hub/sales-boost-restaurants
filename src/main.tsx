@@ -8,6 +8,7 @@ import { useAuth } from './contexts/AuthContext.tsx'
 import LoginPage from './pages/auth/LoginPage.tsx'
 import SignupPage from './pages/auth/SignupPage.tsx'
 import GscCallbackPage from './pages/auth/GscCallbackPage.tsx'
+import GbpCallbackPage from './pages/auth/GbpCallbackPage.tsx'
 import DashboardLayout from './pages/dashboard/DashboardLayout.tsx'
 import OverviewPage from './pages/dashboard/OverviewPage.tsx'
 import DiagnosticsPage from './pages/dashboard/DiagnosticsPage.tsx'
@@ -53,6 +54,7 @@ function RouterRoot() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/auth/gsc/callback" element={<GscCallbackPage />} />
+      <Route path="/auth/gbp/callback" element={<GbpCallbackPage />} />
 
       {/* Owner-only */}
       <Route path="/owner" element={<OwnerRoute><OwnerPage /></OwnerRoute>} />
