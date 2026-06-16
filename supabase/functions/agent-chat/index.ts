@@ -5,6 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const PLAN_LIMITS: Record<string, number> = {
+  free: 30,
+  basic: 150,
+  pro: Infinity,
+}
+
 const tools = [
   {
     name: 'create_post',
@@ -88,12 +94,41 @@ Deno.serve(async (req) => {
 
     const { data: company } = await admin
       .from('companies')
-      .select('id, business_name, business_type, city, website_url, instagram_url, goal')
+      .select('id, business_name, business_type, city, website_url, instagram_url, goal, plan, agent_messages_used, agent_messages_reset_at')
       .eq('user_id', user.id)
       .maybeSingle()
 
     if (!company) {
       return json({ error: 'Empresa não encontrada. Complete o onboarding primeiro.' }, 404)
+    }
+
+    // Reset counter if we're in a new month
+    const resetAt = new Date(company.agent_messages_reset_at)
+    const now = new Date()
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    let usedThisMonth = company.agent_messages_used
+    if (resetAt < currentMonthStart) {
+      await admin
+        .from('companies')
+        .update({ agent_messages_used: 0, agent_messages_reset_at: currentMonthStart.toISOString() })
+        .eq('id', company.id)
+      usedThisMonth = 0
+    }
+
+    // Check rate limit
+    const plan = company.plan ?? 'free'
+    const limit = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
+    const remaining = limit - usedThisMonth
+
+    if (remaining <= 0) {
+      return json({
+        error: 'rate_limit',
+        plan,
+        limit,
+        used: usedThisMonth,
+        remaining: 0,
+      }, 429)
     }
 
     const systemPrompt = `Você é o agente pessoal de crescimento do negócio "${company.business_name}".
@@ -185,12 +220,24 @@ REGRAS:
         ? `Criei ${postsCreated} rascunho(s) para sua aprovação na aba Posts.`
         : 'Feito!')
 
-    await admin.from('agent_messages').insert([
-      { company_id: company.id, role: 'user', content: message },
-      { company_id: company.id, role: 'assistant', content: reply },
+    // Increment usage counter and save messages
+    await Promise.all([
+      admin
+        .from('companies')
+        .update({ agent_messages_used: usedThisMonth + 1 })
+        .eq('id', company.id),
+      admin.from('agent_messages').insert([
+        { company_id: company.id, role: 'user', content: message },
+        { company_id: company.id, role: 'assistant', content: reply },
+      ]),
     ])
 
-    return json({ ok: true, reply, postsCreated })
+    return json({
+      ok: true,
+      reply,
+      postsCreated,
+      usage: { used: usedThisMonth + 1, limit, remaining: remaining - 1 },
+    })
   } catch (err) {
     return json({ error: String(err) }, 500)
   }

@@ -27,6 +27,7 @@ export default function AgentePage() {
   const [loading, setLoading] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(true)
   const [noCompany, setNoCompany] = useState(false)
+  const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const WELCOME: Message = {
@@ -95,6 +96,14 @@ export default function AgentePage() {
 
       const data = await res.json()
 
+      if (res.status === 429) {
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `⚠️ Você atingiu o limite de ${data.limit} mensagens do plano ${data.plan === 'free' ? 'gratuito' : data.plan} este mês. O limite é renovado no início do próximo mês.\n\nPara continuar usando o agente sem limites, faça upgrade para o plano Pro.`,
+        }])
+        return
+      }
+
       if (!res.ok) {
         setMessages(prev => [...prev, {
           role: 'assistant',
@@ -104,6 +113,7 @@ export default function AgentePage() {
       }
 
       setMessages(prev => [...prev, { role: 'assistant', content: data.reply }])
+      if (data.usage) setUsage({ used: data.usage.used, limit: data.usage.limit })
 
       if (data.postsCreated > 0) {
         setTimeout(() => {
@@ -168,12 +178,34 @@ export default function AgentePage() {
             </h1>
             <p style={{ color: MUTED, fontSize: '13px' }}>Seu assistente pessoal de crescimento</p>
           </div>
-          <button
-            onClick={() => navigate('/dashboard/posts')}
-            style={{ padding: '8px 16px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.25)', borderRadius: '9px', color: ORANGE, fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
-          >
-            Ver Posts →
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {usage && (
+              <div style={{
+                fontSize: '11px', color: MUTED, background: 'rgba(255,255,255,0.04)',
+                border: `1px solid ${BORDER}`, borderRadius: '8px', padding: '5px 10px',
+                display: 'flex', alignItems: 'center', gap: '6px',
+              }}>
+                <div style={{
+                  width: '48px', height: '4px', borderRadius: '99px',
+                  background: 'rgba(255,255,255,0.08)', overflow: 'hidden',
+                }}>
+                  <div style={{
+                    height: '100%', borderRadius: '99px',
+                    width: `${Math.min(100, (usage.used / usage.limit) * 100)}%`,
+                    background: usage.used >= usage.limit ? '#ef4444' : ORANGE,
+                    transition: 'width 0.3s',
+                  }} />
+                </div>
+                {usage.used}/{usage.limit === Infinity ? '∞' : usage.limit} msg
+              </div>
+            )}
+            <button
+              onClick={() => navigate('/dashboard/posts')}
+              style={{ padding: '8px 16px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.25)', borderRadius: '9px', color: ORANGE, fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Ver Posts →
+            </button>
+          </div>
         </div>
       </div>
 
