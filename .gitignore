@@ -22,4 +22,11 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-node_modules/\ndist/\n.env
+.env
+
+# Claude Code local state
+.agents/
+.claude/
+
+# stray nested clone, not part of this project
+/sales-boost-restaurants/
