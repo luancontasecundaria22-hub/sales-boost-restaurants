@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
 
     const { data: company } = await admin
       .from('companies')
-      .select('id, website_url, business_name, business_type, city')
+      .select('id, website_url, business_name, business_type, city, contact_email, goal')
       .eq('user_id', user.id)
       .maybeSingle()
 
@@ -46,6 +46,8 @@ Deno.serve(async (req) => {
         business_type: company.business_type,
         city: company.city,
         website_url: websiteUrl,
+        contact_email: company.contact_email ?? '',
+        goal: company.goal ?? '',
         status: 'processing',
       })
       .select('id')
