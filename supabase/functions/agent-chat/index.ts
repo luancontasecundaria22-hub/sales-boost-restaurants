@@ -94,7 +94,7 @@ Deno.serve(async (req) => {
 
     const { data: company } = await admin
       .from('companies')
-      .select('id, business_name, business_type, city, website_url, instagram_url, goal, plan, agent_messages_used, agent_messages_reset_at')
+      .select('id, business_name, business_type, city, website_url, instagram_url, goal, plan, agent_messages_used, agent_messages_reset_at, social_data, social_scraped_at')
       .eq('user_id', user.id)
       .maybeSingle()
 
@@ -131,6 +131,19 @@ Deno.serve(async (req) => {
       }, 429)
     }
 
+    // Build Instagram context from real Apify data
+    const ig = company.social_data?.instagram
+    const igContext = ig
+      ? `\n\nDados reais do Instagram (sincronizados em ${company.social_scraped_at ? new Date(company.social_scraped_at).toLocaleDateString('pt-BR') : 'data desconhecida'}):
+- Seguidores: ${ig.followers?.toLocaleString('pt-BR') ?? '?'}
+- Seguindo: ${ig.following?.toLocaleString('pt-BR') ?? '?'}
+- Total de posts: ${ig.posts_count ?? '?'}
+- Média de curtidas por post: ${ig.avg_likes ?? '?'}
+- Média de comentários por post: ${ig.avg_comments ?? '?'}
+- Taxa de engajamento: ${ig.engagement_rate ?? '?'}%
+${ig.recent_posts?.length ? `- Posts recentes (últimos ${ig.recent_posts.length}): ${ig.recent_posts.map((p: { likes: number; comments: number; caption?: string }) => `"${p.caption?.slice(0, 60) ?? '(sem legenda)'}..." (${p.likes} ❤️ ${p.comments} 💬)`).join(' | ')}` : ''}`
+      : ''
+
     const systemPrompt = `Você é o agente pessoal de crescimento do negócio "${company.business_name}".
 
 Contexto:
@@ -138,7 +151,7 @@ Contexto:
 - Cidade: ${company.city ?? 'não informada'}
 - Site: ${company.website_url ?? 'não informado'}
 - Instagram: ${company.instagram_url ?? 'não informado'}
-- Objetivo: ${company.goal ?? 'não informado'}
+- Objetivo: ${company.goal ?? 'não informado'}${igContext}
 
 REGRAS:
 - NUNCA publique nada diretamente — sempre crie rascunhos via ferramentas.
