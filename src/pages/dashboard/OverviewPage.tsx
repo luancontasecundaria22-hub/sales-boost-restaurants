@@ -35,6 +35,23 @@ interface ReviewStats {
   unanalyzed: number
 }
 
+interface Opportunity {
+  id: string
+  type: string
+  title: string
+  estimated_impact: string | null
+  estimated_value: number | null
+  created_at: string
+}
+
+const TYPE_ICON: Record<string, string> = {
+  negative_review: '⭐',
+  unanswered_review: '💬',
+  stale_draft: '📝',
+  no_content: '📅',
+  low_engagement: '📉',
+}
+
 function scoreColor(s: number) {
   return s >= 75 ? '#4ade80' : s >= 50 ? '#FBBF24' : '#f87171'
 }
@@ -73,6 +90,7 @@ export default function OverviewPage() {
   const [company, setCompany] = useState<Company | null>(null)
   const [diag, setDiag] = useState<Diagnostic | null>(null)
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null)
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [noCompany, setNoCompany] = useState(false)
 
@@ -94,7 +112,7 @@ export default function OverviewPage() {
     if (!co) { setNoCompany(true); setLoading(false); return }
     setCompany(co as Company)
 
-    const [diagRes, reviewsRes] = await Promise.all([
+    const [diagRes, reviewsRes, oppsRes] = await Promise.all([
       supabase.from('diagnostics')
         .select('id, status, created_at, pagespeed_mobile, pagespeed_desktop')
         .eq('company_id', co.id)
@@ -105,6 +123,11 @@ export default function OverviewPage() {
       supabase.from('reviews')
         .select('id, sentiment')
         .eq('company_id', co.id),
+      supabase.from('opportunities')
+        .select('id, type, title, estimated_impact, estimated_value, created_at')
+        .eq('company_id', co.id)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false }),
     ])
 
     setDiag(diagRes.data ?? null)
@@ -116,6 +139,8 @@ export default function OverviewPage() {
       negative: revs.filter(r => r.sentiment === 'negative').length,
       unanalyzed: revs.filter(r => !r.sentiment).length,
     })
+
+    setOpportunities((oppsRes.data ?? []) as Opportunity[])
 
     setLoading(false)
   }
@@ -162,6 +187,9 @@ export default function OverviewPage() {
   const healthScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null
   const healthColor = healthScore != null ? scoreColor(healthScore) : MUTED
 
+  const totalOppValue = opportunities.reduce((sum, o) => sum + (o.estimated_value ?? 0), 0)
+  const topOpportunities = opportunities.slice(0, 3)
+
   return (
     <div>
       <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}` }}>
@@ -172,6 +200,62 @@ export default function OverviewPage() {
       </div>
 
       <div style={{ padding: '28px 32px' }}>
+
+        {/* Oportunidades + Projeção de receita — o principal ponto do produto */}
+        <div style={{ background: CARD, border: `1px solid rgba(255,109,41,0.25)`, borderRadius: '16px', overflow: 'hidden', marginBottom: '20px' }}>
+          <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>💰 Oportunidades de receita</span>
+            <span style={{ fontSize: '11px', color: MUTED }}>{opportunities.length} em aberto</span>
+          </div>
+
+          {opportunities.length === 0 ? (
+            <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
+              Nenhuma oportunidade detectada agora. O Sales Boost está de olho — volte aqui sempre.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 0 }}>
+              {/* Projeção total */}
+              <div style={{ padding: '24px', borderRight: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
+                <div style={{ fontSize: '11px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>
+                  Receita recuperável
+                </div>
+                <div style={{ fontFamily: D, fontSize: '2rem', fontWeight: 900, color: ORANGE, lineHeight: 1, letterSpacing: '-0.02em' }}>
+                  {totalOppValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+                </div>
+                <div style={{ fontSize: '11px', color: MUTED, marginTop: '6px' }}>se resolver tudo agora</div>
+              </div>
+
+              {/* Lista das principais oportunidades */}
+              <div style={{ padding: '12px 24px' }}>
+                {topOpportunities.map(o => (
+                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: `1px solid ${BORDER}` }}>
+                    <span style={{ fontSize: '16px' }}>{TYPE_ICON[o.type] ?? '💡'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', color: 'white', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {o.title}
+                      </div>
+                      {o.estimated_impact && (
+                        <div style={{ fontSize: '11px', color: MUTED, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {o.estimated_impact}
+                        </div>
+                      )}
+                    </div>
+                    {o.estimated_value != null && (
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: ORANGE, flexShrink: 0 }}>
+                        + {o.estimated_value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <button onClick={() => navigate('/dashboard/oportunidades')}
+                  style={{ marginTop: '14px', padding: '10px 18px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
+                  Resolver agora →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
 
           {/* LEFT — Health Score Card */}

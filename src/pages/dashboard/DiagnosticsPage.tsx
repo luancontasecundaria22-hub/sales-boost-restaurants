@@ -22,6 +22,14 @@ interface PagespeedData {
   opportunities?: Array<{ id: string; title: string; displayValue: string }>
 }
 
+interface FrontendReview {
+  score?: number
+  summary?: string
+  strengths?: string[]
+  improvements?: string[]
+  screenshot_url?: string
+}
+
 interface Diagnostic {
   id: string
   status: string | null
@@ -29,6 +37,7 @@ interface Diagnostic {
   website_url: string
   pagespeed_mobile: PagespeedData | null
   pagespeed_desktop: PagespeedData | null
+  frontend_review: FrontendReview | null
 }
 
 interface SocialProfile {
@@ -66,6 +75,9 @@ interface Company {
   google_place_id: string | null
   google_rating: number | null
   google_review_count: number | null
+  tripadvisor_url: string | null
+  reclame_aqui_url: string | null
+  ifood_url: string | null
   social_data: Record<string, SocialProfile> | null
   social_scraped_at: string | null
 }
@@ -108,18 +120,20 @@ function ScoreCard({ label, score }: { label: string; score: number | undefined 
 // ── Presença Digital ──────────────────────────────────────────────────────────
 
 interface PlatformConfig {
-  key: 'google_place_id' | 'website_url' | 'instagram_url' | 'tiktok_url' | 'facebook_url'
+  key: 'google_place_id' | 'website_url' | 'instagram_url' | 'tiktok_url' | 'facebook_url' | 'tripadvisor_url' | 'reclame_aqui_url' | 'ifood_url'
   socialKey?: 'instagram' | 'tiktok' | 'facebook'
   name: string
   icon: string
   scrapable: boolean
+  connectedNote?: string
   getReach: (bt: string) => string
   getTip: (bt: string) => string
 }
 
 const PLATFORMS: PlatformConfig[] = [
   {
-    key: 'google_place_id', name: 'Google Meu Negócio', icon: '🔍', scrapable: false,
+    key: 'google_place_id', name: 'Google Meu Negócio', icon: '🔍', scrapable: true,
+    connectedNote: 'Avaliações importadas alimentam Insights e Revenue Opportunities.',
     getReach: () => '',
     getTip: () => 'Negócios verificados no Google recebem 7× mais cliques do que os não verificados.',
   },
@@ -142,6 +156,24 @@ const PLATFORMS: PlatformConfig[] = [
     key: 'facebook_url', socialKey: 'facebook', name: 'Facebook', icon: '👥', scrapable: true,
     getReach: (bt) => bt.includes('Restaurante') || bt.includes('Food') ? '2.000–15.000 alcance/mês (público 35+)' : '1.000–8.000 alcance/mês (público 35+)',
     getTip: () => 'Facebook ainda domina para o público acima de 35 anos. Grupos locais e eventos têm alcance orgânico expressivo sem custo de anúncio.',
+  },
+  {
+    key: 'tripadvisor_url', name: 'TripAdvisor', icon: '🦉', scrapable: true,
+    connectedNote: 'Avaliações importadas alimentam Insights e Revenue Opportunities.',
+    getReach: (bt) => bt.includes('Restaurante') || bt.includes('Food') ? 'Decisivo para turistas e visitantes de fora da cidade' : 'Relevante se seu negócio recebe turistas',
+    getTip: () => 'TripAdvisor é a primeira parada de quem pesquisa antes de visitar uma cidade. Responder avaliações lá aumenta a confiança de quem ainda não te conhece.',
+  },
+  {
+    key: 'reclame_aqui_url', name: 'Reclame Aqui', icon: '📢', scrapable: true,
+    connectedNote: 'Reclamações importadas alimentam Insights e Revenue Opportunities.',
+    getReach: () => '',
+    getTip: () => 'Empresas que respondem reclamações no Reclame Aqui em até 24h recuperam a confiança de até 70% dos clientes insatisfeitos.',
+  },
+  {
+    key: 'ifood_url', name: 'iFood', icon: '🛵', scrapable: true,
+    connectedNote: 'Avaliações importadas alimentam Insights e Revenue Opportunities.',
+    getReach: () => 'Canal decisivo para delivery e take-away',
+    getTip: () => 'Notas baixas no iFood reduzem diretamente a visibilidade da loja no app. Responder avaliações negativas rapidamente ajuda a manter o ranking.',
   },
 ]
 
@@ -262,8 +294,11 @@ function PresencaDigital({
                     {p.key === 'website_url' && (
                       <span style={{ fontSize: '11px', color: MUTED }}>Ver scores acima ↑</span>
                     )}
-                    {p.scrapable && !hasData && !profile?.error && (
+                    {p.socialKey && p.scrapable && !hasData && !profile?.error && (
                       <span style={{ fontSize: '11px', color: MUTED }}>Clique em "Analisar" para ver métricas</span>
+                    )}
+                    {!p.socialKey && p.key !== 'google_place_id' && p.key !== 'website_url' && p.connectedNote && (
+                      <span style={{ fontSize: '11px', color: MUTED }}>{p.connectedNote}</span>
                     )}
                   </div>
                   {profile && <SocialStats profile={profile} platform={p} />}
@@ -330,7 +365,7 @@ export default function DiagnosticsPage() {
 
     const { data: co } = await supabase
       .from('companies')
-      .select('id, business_name, business_type, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, google_place_id, google_rating, google_review_count, social_data, social_scraped_at')
+      .select('id, business_name, business_type, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, google_place_id, google_rating, google_review_count, tripadvisor_url, reclame_aqui_url, ifood_url, social_data, social_scraped_at')
       .eq('user_id', user.id)
       .maybeSingle()
 
@@ -340,7 +375,7 @@ export default function DiagnosticsPage() {
     if (co) {
       const { data } = await supabase
         .from('diagnostics')
-        .select('id, status, created_at, website_url, pagespeed_mobile, pagespeed_desktop')
+        .select('id, status, created_at, website_url, pagespeed_mobile, pagespeed_desktop, frontend_review')
         .eq('company_id', co.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -373,7 +408,7 @@ export default function DiagnosticsPage() {
       // Fetch the newly created diagnostic by id
       const { data: newDiag } = await supabase
         .from('diagnostics')
-        .select('id, status, created_at, website_url, pagespeed_mobile, pagespeed_desktop')
+        .select('id, status, created_at, website_url, pagespeed_mobile, pagespeed_desktop, frontend_review')
         .eq('id', data.id)
         .single()
       if (newDiag) setDiag(newDiag)
@@ -537,6 +572,50 @@ export default function DiagnosticsPage() {
               </div>
             )}
           </>
+        )}
+
+        {/* Crítica visual/UX (IA) */}
+        {!running && diag?.frontend_review && (
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', marginTop: ps ? '24px' : 0, marginBottom: '24px', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 22px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <span style={{ color: 'white', fontWeight: 600, fontSize: '14px' }}>Crítica visual/UX (IA)</span>
+              {diag.frontend_review.score != null && (
+                <span style={{ fontFamily: D, fontSize: '1.4rem', fontWeight: 900, color: scoreColor(diag.frontend_review.score) }}>{diag.frontend_review.score}</span>
+              )}
+            </div>
+            <div style={{ padding: '20px 22px', display: 'grid', gridTemplateColumns: diag.frontend_review.screenshot_url ? '220px 1fr' : '1fr', gap: '20px' }}>
+              {diag.frontend_review.screenshot_url && (
+                <img src={diag.frontend_review.screenshot_url} alt="Screenshot do site" style={{ width: '100%', borderRadius: '10px', border: `1px solid ${BORDER}`, display: 'block' }} />
+              )}
+              <div>
+                {diag.frontend_review.summary && (
+                  <p style={{ fontSize: '13px', color: 'white', lineHeight: 1.7, marginBottom: '14px' }}>{diag.frontend_review.summary}</p>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  {diag.frontend_review.strengths && diag.frontend_review.strengths.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: '#4ade80', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>Pontos fortes</div>
+                      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {diag.frontend_review.strengths.map((s, i) => (
+                          <li key={i} style={{ fontSize: '12px', color: MUTED, lineHeight: 1.6, display: 'flex', gap: '6px' }}><span style={{ color: '#4ade80', flexShrink: 0 }}>✓</span>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {diag.frontend_review.improvements && diag.frontend_review.improvements.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: ORANGE, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>Melhorias sugeridas</div>
+                      <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {diag.frontend_review.improvements.map((s, i) => (
+                          <li key={i} style={{ fontSize: '12px', color: MUTED, lineHeight: 1.6, display: 'flex', gap: '6px' }}><span style={{ color: ORANGE, flexShrink: 0 }}>→</span>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Presença Digital — always visible */}

@@ -25,13 +25,13 @@ Deno.serve(async (req) => {
     const { data: { user }, error: userErr } = await userClient.auth.getUser()
     if (userErr || !user) return json({ error: 'Unauthorized' }, 401)
 
-    const { data: restaurant, error: restErr } = await userClient
-      .from('restaurants')
+    const { data: company, error: companyErr } = await userClient
+      .from('companies')
       .select('id')
-      .eq('owner_id', user.id)
+      .eq('user_id', user.id)
       .single()
 
-    if (restErr || !restaurant) return json({ error: `Restaurante não encontrado: ${restErr?.message}` }, 404)
+    if (companyErr || !company) return json({ error: `Empresa não encontrada: ${companyErr?.message}` }, 404)
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -39,7 +39,7 @@ Deno.serve(async (req) => {
     const { data: reviews } = await supabase
       .from('reviews')
       .select('id, text, rating')
-      .eq('restaurant_id', restaurant.id)
+      .eq('company_id', company.id)
       .is('sentiment', null)
       .not('text', 'is', null)
       .limit(50)

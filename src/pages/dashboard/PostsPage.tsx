@@ -209,6 +209,7 @@ export default function PostsPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Erro ao gerar posts')
+      if (!data.generated) throw new Error(data.message ?? data.errors?.[0] ?? 'Não foi possível gerar posts agora. Tente novamente.')
       await loadPosts()
     } catch (e: unknown) {
       setGenError(e instanceof Error ? e.message : String(e))

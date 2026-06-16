@@ -124,6 +124,9 @@ export default function SettingsPage() {
   const [facebookUrl, setFacebookUrl] = useState('')
   const [tiktokUrl, setTiktokUrl] = useState('')
   const [googleMapsUrl, setGoogleMapsUrl] = useState('')
+  const [tripadvisorUrl, setTripadvisorUrl] = useState('')
+  const [reclameAquiUrl, setReclameAquiUrl] = useState('')
+  const [ifoodUrl, setIfoodUrl] = useState('')
   const [googlePlaceId, setGooglePlaceId] = useState<string | null>(null)
   const [googleRating, setGoogleRating] = useState<number | null>(null)
   const [googleReviewCount, setGoogleReviewCount] = useState<number | null>(null)
@@ -143,7 +146,7 @@ export default function SettingsPage() {
     if (!user) return
     supabase
       .from('companies')
-      .select('id, business_name, business_type, city, phone, contact_email, goal, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, google_place_id, google_rating, google_review_count, plan, agent_messages_used')
+      .select('id, business_name, business_type, city, phone, contact_email, goal, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, tripadvisor_url, reclame_aqui_url, ifood_url, google_place_id, google_rating, google_review_count, plan, agent_messages_used')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -160,6 +163,9 @@ export default function SettingsPage() {
           setFacebookUrl(data.facebook_url ?? '')
           setTiktokUrl(data.tiktok_url ?? '')
           setGoogleMapsUrl(data.google_maps_url ?? '')
+          setTripadvisorUrl(data.tripadvisor_url ?? '')
+          setReclameAquiUrl(data.reclame_aqui_url ?? '')
+          setIfoodUrl(data.ifood_url ?? '')
           setGooglePlaceId(data.google_place_id ?? null)
           setGoogleRating(data.google_rating ?? null)
           setGoogleReviewCount(data.google_review_count ?? null)
@@ -265,6 +271,9 @@ export default function SettingsPage() {
         facebook_url: facebookUrl || null,
         tiktok_url: tiktokUrl || null,
         google_maps_url: googleMapsUrl || null,
+        tripadvisor_url: tripadvisorUrl || null,
+        reclame_aqui_url: reclameAquiUrl || null,
+        ifood_url: ifoodUrl || null,
         google_place_id: googlePlaceId || null,
         updated_at: new Date().toISOString(),
       }
@@ -369,6 +378,9 @@ export default function SettingsPage() {
           <Field label="Facebook" value={facebookUrl} onChange={setFacebookUrl} placeholder="https://facebook.com/suapagina" />
           <Field label="TikTok" value={tiktokUrl} onChange={setTiktokUrl} placeholder="https://tiktok.com/@seuperfil" />
           <Field label="Google Maps" value={googleMapsUrl} onChange={setGoogleMapsUrl} placeholder="Link do seu negócio no Google Maps" hint="Coletamos suas avaliações e nota" />
+          <Field label="TripAdvisor" value={tripadvisorUrl} onChange={setTripadvisorUrl} placeholder="Link da página do seu negócio no TripAdvisor" />
+          <Field label="Reclame Aqui" value={reclameAquiUrl} onChange={setReclameAquiUrl} placeholder="Link da página do seu negócio no Reclame Aqui" />
+          <Field label="iFood" value={ifoodUrl} onChange={setIfoodUrl} placeholder="Link da sua loja no iFood" />
 
           {saveError && (
             <div style={{ fontSize: '12px', color: '#f87171', marginBottom: '12px', padding: '10px 14px', background: 'rgba(248,113,113,0.08)', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.2)' }}>
