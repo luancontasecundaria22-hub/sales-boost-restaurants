@@ -20,6 +20,7 @@ import CompetitorsPage from './pages/dashboard/CompetitorsPage.tsx'
 import AgentePage from './pages/dashboard/AgentePage.tsx'
 import OpportunitiesPage from './pages/dashboard/OpportunitiesPage.tsx'
 import ReportPage from './pages/dashboard/ReportPage.tsx'
+import JarvisPage from './pages/jarvis/JarvisPage.tsx'
 import OwnerPage from './pages/owner/OwnerPage.tsx'
 import OnboardingPage from './pages/onboarding/OnboardingPage.tsx'
 import DiagnosticoPage from './pages/diagnostico/DiagnosticoPage.tsx'
@@ -80,6 +81,7 @@ function RouterRoot() {
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 
+      <Route path="/jarvis" element={<ClientRoute><JarvisPage /></ClientRoute>} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/diagnostico/:id" element={<DiagnosticoPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

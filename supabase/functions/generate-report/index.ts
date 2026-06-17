@@ -5,6 +5,123 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const ORANGE = '#FF6D29'
+const CARD = '#150E08'
+const BG = '#0E0B0A'
+const MUTED = '#BABABA'
+
+function scoreColor(s: number): string {
+  return s >= 75 ? '#4ade80' : s >= 50 ? '#FBBF24' : '#f87171'
+}
+
+function escapeHtml(s: string | undefined | null): string {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function buildReportHtml(businessName: string, periodLabel: string, data: ReportData): string {
+  const hsColor = scoreColor(data.health_score)
+
+  const strengthsHtml = data.strengths.map((s, i) => `
+    <div style="display:flex;gap:14px;margin-bottom:14px;">
+      <div style="width:26px;height:26px;border-radius:8px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#4ade80;">${i + 1}</div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:white;margin-bottom:3px;">✓ ${escapeHtml(s.title)}</div>
+        <div style="font-size:12px;color:${MUTED};">↳ ${escapeHtml(s.action)}</div>
+      </div>
+    </div>`).join('')
+
+  const complaintsHtml = data.complaints.map((c) => `
+    <div style="display:flex;gap:14px;margin-bottom:14px;">
+      <span style="padding:3px 8px;border-radius:6px;background:${c.urgency === 'high' ? 'rgba(248,113,113,0.15)' : 'rgba(251,191,36,0.12)'};font-size:10px;font-weight:700;color:${c.urgency === 'high' ? '#f87171' : '#FBBF24'};white-space:nowrap;">${c.urgency === 'high' ? 'Urgente' : c.urgency === 'medium' ? 'Médio' : 'Baixo'}</span>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:white;margin-bottom:3px;">${escapeHtml(c.title)}</div>
+        <div style="font-size:12px;color:${MUTED};">↳ ${escapeHtml(c.action)}</div>
+      </div>
+    </div>`).join('')
+
+  const actionsHtml = data.actions.map((a) => `
+    <div style="padding:16px 0;border-bottom:1px solid rgba(255,255,255,0.08);display:flex;gap:16px;">
+      <div style="width:32px;height:32px;border-radius:9px;background:rgba(255,109,41,0.12);border:1px solid rgba(255,109,41,0.3);display:flex;align-items:center;justify-content:center;font-weight:900;color:${ORANGE};flex-shrink:0;">${String(a.priority).padStart(2, '0')}</div>
+      <div>
+        <div style="font-size:14px;font-weight:700;color:white;margin-bottom:4px;">${escapeHtml(a.title)} <span style="font-size:10px;padding:2px 8px;border-radius:99px;background:rgba(255,109,41,0.12);color:${ORANGE};font-weight:700;">Impacto ${escapeHtml(a.impact)}</span></div>
+        <div style="font-size:12px;color:${MUTED};">${escapeHtml(a.description)}</div>
+      </div>
+    </div>`).join('')
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:40px;background:${BG};font-family:'Helvetica Neue',Arial,sans-serif;color:white;">
+  <div style="margin-bottom:28px;">
+    <div style="font-size:11px;color:${ORANGE};font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Sales Boost · Relatório Mensal</div>
+    <div style="font-size:24px;font-weight:800;margin-top:6px;">${escapeHtml(businessName)}</div>
+    <div style="font-size:13px;color:${MUTED};margin-top:2px;">${escapeHtml(periodLabel)}</div>
+  </div>
+
+  <div style="background:${CARD};border-radius:16px;padding:28px;margin-bottom:18px;display:flex;gap:32px;">
+    <div style="text-align:center;flex-shrink:0;">
+      <div style="font-size:56px;font-weight:900;color:${hsColor};">${data.health_score}</div>
+      <div style="font-size:11px;color:${MUTED};margin-top:2px;">Score de saúde</div>
+    </div>
+    <div style="flex:1;">
+      <div style="font-size:11px;color:${MUTED};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Resumo executivo</div>
+      <div style="font-size:13px;line-height:1.7;">${escapeHtml(data.executive_summary)}</div>
+    </div>
+  </div>
+
+  <div style="background:${CARD};border-radius:14px;padding:22px;margin-bottom:18px;">
+    <div style="font-size:14px;font-weight:700;margin-bottom:14px;">✦ O que amam em você</div>
+    ${strengthsHtml || `<div style="font-size:12px;color:${MUTED};">Sem dados suficientes ainda.</div>`}
+  </div>
+
+  <div style="background:${CARD};border-radius:14px;padding:22px;margin-bottom:18px;">
+    <div style="font-size:14px;font-weight:700;margin-bottom:14px;">⚠ O que afasta clientes</div>
+    ${complaintsHtml || `<div style="font-size:12px;color:${MUTED};">Nenhuma reclamação relevante.</div>`}
+  </div>
+
+  <div style="background:${CARD};border-radius:14px;padding:22px;margin-bottom:18px;">
+    <div style="font-size:14px;font-weight:700;margin-bottom:10px;">💰 Posicionamento de preço</div>
+    <div style="font-size:12px;color:${MUTED};line-height:1.7;">${escapeHtml(data.pricing_recommendation)}</div>
+  </div>
+
+  <div style="background:${CARD};border-radius:14px;padding:22px;">
+    <div style="font-size:14px;font-weight:700;margin-bottom:6px;">🎯 3 Ações do Mês</div>
+    ${actionsHtml}
+  </div>
+
+  <div style="text-align:right;font-size:10px;color:rgba(255,255,255,0.3);margin-top:20px;">Gerado por IA (Claude) · Sales Boost</div>
+</body></html>`
+}
+
+async function generatePdf(html: string, apiKey: string): Promise<string | null> {
+  try {
+    const res = await fetch('https://rest.apitemplate.io/v2/create-pdf-from-html', {
+      method: 'POST',
+      headers: { 'X-API-KEY': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        body: html,
+        settings: {
+          paper_size: 'A4',
+          orientation: '1',
+          margin_top: '0',
+          margin_right: '0',
+          margin_bottom: '0',
+          margin_left: '0',
+          print_background: '1',
+        },
+      }),
+    })
+    if (!res.ok) {
+      console.error('apitemplate.io error:', await res.text())
+      return null
+    }
+    const data = await res.json()
+    return data.download_url ?? null
+  } catch (e) {
+    console.error('apitemplate.io exception:', e)
+    return null
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -23,13 +140,13 @@ Deno.serve(async (req) => {
     const { data: { user }, error: userErr } = await userClient.auth.getUser()
     if (userErr || !user) return json({ error: 'Unauthorized' }, 401)
 
-    const { data: restaurant, error: restErr } = await userClient
-      .from('restaurants')
-      .select('id, name')
-      .eq('owner_id', user.id)
+    const { data: company, error: companyErr } = await userClient
+      .from('companies')
+      .select('id, business_name')
+      .eq('user_id', user.id)
       .single()
 
-    if (restErr || !restaurant) return json({ error: `Restaurante não encontrado: ${restErr?.message}` }, 404)
+    if (companyErr || !company) return json({ error: `Empresa não encontrada: ${companyErr?.message}` }, 404)
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -44,27 +161,27 @@ Deno.serve(async (req) => {
     // Idempotency: return existing report if already generated this month
     const { data: existing } = await supabase
       .from('reports')
-      .select('id, health_score')
-      .eq('restaurant_id', restaurant.id)
+      .select('id, health_score, pdf_url')
+      .eq('company_id', company.id)
       .eq('period', period)
       .single()
 
     if (existing) {
-      return json({ report_id: existing.id, period, health_score: existing.health_score, cached: true })
+      return json({ report_id: existing.id, period, health_score: existing.health_score, pdf_url: existing.pdf_url, cached: true })
     }
 
-    // Gather all data for this restaurant
+    // Gather all data for this company
     const [reviewsRes, competitorsRes] = await Promise.all([
       supabase
         .from('reviews')
         .select('rating, sentiment, themes, text, author, review_date')
-        .eq('restaurant_id', restaurant.id)
+        .eq('company_id', company.id)
         .order('review_date', { ascending: false })
         .limit(100),
       supabase
         .from('competitors')
         .select('name, rating, review_count, distance_m, price_level')
-        .eq('restaurant_id', restaurant.id)
+        .eq('company_id', company.id)
         .order('distance_m', { ascending: true })
         .limit(10),
     ])
@@ -109,7 +226,7 @@ Deno.serve(async (req) => {
       .join('\n')
 
     // Call Claude to generate insights
-    const prompt = `Você é um consultor especialista em restaurantes. Analise os dados abaixo e gere um relatório mensal completo para o restaurante "${restaurant.name}".
+    const prompt = `Você é um consultor especialista em pequenos negócios. Analise os dados abaixo e gere um relatório mensal completo para "${company.business_name}".
 
 ## Dados do período (${periodLabel})
 
@@ -177,14 +294,23 @@ Responda SOMENTE com o JSON, sem texto adicional. As ações devem ser específi
       return json({ error: 'Claude retornou JSON inválido', raw: rawText }, 500)
     }
 
+    // Generate PDF via apitemplate.io (best-effort — não bloqueia o relatório se falhar)
+    let pdfUrl: string | null = null
+    const apitemplateKey = Deno.env.get('APITEMPLATE_API_KEY')
+    if (apitemplateKey) {
+      const html = buildReportHtml(company.business_name, periodLabel, reportData)
+      pdfUrl = await generatePdf(html, apitemplateKey)
+    }
+
     // Save report to database
     const { data: reportRow, error: reportErr } = await supabase
       .from('reports')
       .insert({
-        restaurant_id: restaurant.id,
+        company_id: company.id,
         period,
         health_score: reportData.health_score,
         summary_json: reportData,
+        pdf_url: pdfUrl,
       })
       .select('id')
       .single()
@@ -206,6 +332,7 @@ Responda SOMENTE com o JSON, sem texto adicional. As ações devem ser específi
       report_id: reportRow.id,
       period,
       health_score: reportData.health_score,
+      pdf_url: pdfUrl,
       data: reportData,
     })
 
