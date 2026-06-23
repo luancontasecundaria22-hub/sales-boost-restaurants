@@ -1,0 +1,9 @@
+{
+  "name": "vendas-bot",
+  "main": "index.ts",
+  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2025-06-01",
+  "vars": {
+    "BOT_TYPE": "vendas"
+  }
+}
