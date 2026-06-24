@@ -5,6 +5,48 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const MARKETING_NOTIFY_URL = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
+const VENDAS_NOTIFY_URL = Deno.env.get('VENDAS_BOT_NOTIFY_URL')
+const TELEGRAM_WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
+
+async function notifyMarketing(adminDb: ReturnType<typeof createClient>, companyId: string, event: string, data?: Record<string, unknown>) {
+  if (!MARKETING_NOTIFY_URL || !TELEGRAM_WEBHOOK_SECRET) return
+  const { data: chat } = await adminDb
+    .from('telegram_conversations')
+    .select('telegram_chat_id')
+    .eq('customer_id', companyId)
+    .eq('bot_type', 'marketing')
+    .limit(1)
+    .maybeSingle()
+  if (!chat?.telegram_chat_id) return
+  try {
+    await fetch(MARKETING_NOTIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-webhook-secret': TELEGRAM_WEBHOOK_SECRET },
+      body: JSON.stringify({ event, bot_type: 'marketing', chat_id: chat.telegram_chat_id, company_id: companyId, data }),
+    })
+  } catch { /* fire-and-forget */ }
+}
+
+async function notifyVendas(adminDb: ReturnType<typeof createClient>, companyId: string, event: string, data?: Record<string, unknown>) {
+  if (!VENDAS_NOTIFY_URL || !TELEGRAM_WEBHOOK_SECRET) return
+  const { data: chat } = await adminDb
+    .from('telegram_conversations')
+    .select('telegram_chat_id')
+    .eq('customer_id', companyId)
+    .eq('bot_type', 'vendas')
+    .limit(1)
+    .maybeSingle()
+  if (!chat?.telegram_chat_id) return
+  try {
+    await fetch(VENDAS_NOTIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-webhook-secret': TELEGRAM_WEBHOOK_SECRET },
+      body: JSON.stringify({ event, bot_type: 'vendas', chat_id: chat.telegram_chat_id, company_id: companyId, data }),
+    })
+  } catch { /* fire-and-forget */ }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -168,9 +210,27 @@ Deno.serve(async (req) => {
       .order('created_at', { ascending: false })
 
     const priorityOrder = ['negative_review', 'unanswered_review', 'stale_draft', 'low_engagement', 'no_content']
-    const sorted = (allOpen ?? []).sort((a, b) =>
+    const sorted = (allOpen ?? []).sort((a: { type: string }, b: { type: string }) =>
       priorityOrder.indexOf(a.type) - priorityOrder.indexOf(b.type)
     )
+
+    if (sorted.length > 0) {
+      notifyMarketing(admin, company.id, 'OPPORTUNITY_DETECTED', {
+        description: `${sorted.length} oportunidades detectadas`,
+        opportunities: sorted.map(o => ({ type: o.type, title: o.title })),
+      })
+
+      const negativeTypes = new Set(['negative_review', 'unanswered_review'])
+      for (const o of sorted) {
+        if (negativeTypes.has(o.type)) {
+          notifyMarketing(admin, company.id, 'NEGATIVE_REVIEW', {
+            rating: o.ref_type === 'review' ? 'nova' : undefined,
+            source: o.ref_type,
+            excerpt: o.title,
+          })
+        }
+      }
+    }
 
     return json({ ok: true, opportunities: sorted, total: sorted.length })
   } catch (err) {

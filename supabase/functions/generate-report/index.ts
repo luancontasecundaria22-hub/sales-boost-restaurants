@@ -10,6 +10,28 @@ const CARD = '#150E08'
 const BG = '#0E0B0A'
 const MUTED = '#BABABA'
 
+const MARKETING_NOTIFY_URL = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
+const TELEGRAM_WEBHOOK_SECRET=Deno.e...
+
+async function notifyMarketing(adminDb: ReturnType<typeof createClient>, companyId: string, event: string, data?: Record<string, unknown>) {
+  if (!MARKETING_NOTIFY_URL || !TELEGRAM_WEBHOOK_SECRET) return
+  const { data: chat } = await adminDb
+    .from('telegram_conversations')
+    .select('telegram_chat_id')
+    .eq('customer_id', companyId)
+    .eq('bot_type', 'marketing')
+    .limit(1)
+    .maybeSingle()
+  if (!chat?.telegram_chat_id) return
+  try {
+    await fetch(MARKETING_NOTIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-webhook-secret': TELEGRAM_WEBHOOK_SECRET },
+      body: JSON.stringify({ event, bot_type: 'marketing', chat_id: chat.telegram_chat_id, company_id: companyId, data }),
+    })
+  } catch { /* fire-and-forget */ }
+}
+
 function scoreColor(s: number): string {
   return s >= 75 ? '#4ade80' : s >= 50 ? '#FBBF24' : '#f87171'
 }
@@ -327,6 +349,13 @@ Responda SOMENTE com o JSON, sem texto adicional. As ações devem ser específi
     }))
 
     await supabase.from('actions').insert(actionRows)
+
+    const supabaseForNotify = createClient(supabaseUrl, supabaseServiceKey)
+    notifyMarketing(supabaseForNotify, company.id, 'REPORT_READY', {
+      period,
+      health_score: reportData.health_score,
+      pdf_url: pdfUrl ?? undefined,
+    })
 
     return json({
       report_id: reportRow.id,

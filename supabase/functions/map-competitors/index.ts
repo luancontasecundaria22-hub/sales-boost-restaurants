@@ -13,6 +13,28 @@ const BT_TO_TYPE: Record<string, string> = {
   'Serviços': 'establishment',
 }
 
+const MARKETING_NOTIFY_URL = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
+const TELEGRAM_WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
+
+async function notifyMarketing(adminDb: ReturnType<typeof createClient>, companyId: string, event: string, data?: Record<string, unknown>) {
+  if (!MARKETING_NOTIFY_URL || !TELEGRAM_WEBHOOK_SECRET) return
+  const { data: chat } = await adminDb
+    .from('telegram_conversations')
+    .select('telegram_chat_id')
+    .eq('customer_id', companyId)
+    .eq('bot_type', 'marketing')
+    .limit(1)
+    .maybeSingle()
+  if (!chat?.telegram_chat_id) return
+  try {
+    await fetch(MARKETING_NOTIFY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-webhook-secret': TELEGRAM_WEBHOOK_SECRET },
+      body: JSON.stringify({ event, bot_type: 'marketing', chat_id: chat.telegram_chat_id, company_id: companyId, data }),
+    })
+  } catch { /* fire-and-forget */ }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -86,6 +108,13 @@ Deno.serve(async (req) => {
     // Replace all: delete then insert fresh
     await admin.from('competitors').delete().eq('company_id', company.id)
     await admin.from('competitors').insert(rows)
+
+    if (rows.length > 0) {
+      notifyMarketing(admin, company.id, 'NEW_COMPETITOR', {
+        count: rows.length,
+        competitors: rows.map((r: { name: string }) => r.name),
+      })
+    }
 
     return json({ mapped: rows.length })
 

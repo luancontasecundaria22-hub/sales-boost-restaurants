@@ -58,8 +58,31 @@ async function generateForCompany(
   db: ReturnType<typeof createClient>,
   companyId: string,
   aiProfile: string,
-  anthropicKey: string
+  anthropicKey: string,
+  supabaseUrl: string,
 ): Promise<number> {
+
+  const MARKETING_NOTIFY_URL = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
+  const TELEGRAM_WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
+
+  async function notifyMarketing(event: string, data?: Record<string, unknown>) {
+    if (!MARKETING_NOTIFY_URL || !TELEGRAM_WEBHOOK_SECRET) return
+    const { data: chat } = await db
+      .from('telegram_conversations')
+      .select('telegram_chat_id')
+      .eq('customer_id', companyId)
+      .eq('bot_type', 'marketing')
+      .limit(1)
+      .maybeSingle()
+    if (!chat?.telegram_chat_id) return
+    try {
+      await fetch(MARKETING_NOTIFY_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-webhook-secret': TELEGRAM_WEBHOOK_SECRET },
+        body: JSON.stringify({ event, bot_type: 'marketing', chat_id: chat.telegram_chat_id, company_id: companyId, data }),
+      })
+    } catch { /* fire-and-forget */ }
+  }
 
   const prompt = `Você é um especialista em marketing digital para pequenos negócios brasileiros.
 
@@ -133,6 +156,11 @@ Regras obrigatórias:
   const { error } = await db.from('posts').insert(rows)
   if (error) throw error
 
+  notifyMarketing(db, companyId, 'POST_APPROVED', {
+    title: `${rows.length} novo(s) post(s) gerado(s)`,
+    count: rows.length,
+  })
+
   return rows.length
 }
 
@@ -191,7 +219,7 @@ Deno.serve(async (req) => {
           errors.push(`${cid}: perfil vazio após atualização`)
           continue
         }
-        const count = await generateForCompany(db, cid, co.ai_profile, anthropicKey)
+        const count = await generateForCompany(db, cid, co.ai_profile, anthropicKey, supabaseUrl)
         totalGenerated += count
       } catch (e) {
         console.error(`generate-posts: falha para empresa ${cid}:`, e)
