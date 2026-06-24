@@ -51,8 +51,9 @@ Deno.serve(async (req) => {
 
     if (!ttsRes.ok) {
       const err = await ttsRes.text()
-      console.error('ElevenLabs error:', err)
-      return json({ error: `ElevenLabs error (${ttsRes.status})` }, 502)
+      console.error('ElevenLabs error:', ttsRes.status, err)
+      // Graceful fallback: client switches to text-only mode
+      return json({ ok: false, audio: null, reason: `ElevenLabs error (${ttsRes.status})` })
     }
 
     const audioBuffer = await ttsRes.arrayBuffer()

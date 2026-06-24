@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import { useCompany, type CompanyData } from '../../contexts/CompanyContext'
+import { useLang } from '../../contexts/LanguageContext'
+import { d } from '../../i18n-dash'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
@@ -23,21 +26,27 @@ interface Opportunity {
   created_at: string
 }
 
-const TYPE_META: Record<string, { label: string; color: string; bg: string; icon: string }> = {
-  negative_review:   { label: 'Review negativa',   color: '#f87171', bg: 'rgba(248,113,113,0.1)',  icon: '⭐' },
-  unanswered_review: { label: 'Sem resposta',       color: '#FBBF24', bg: 'rgba(251,191,36,0.1)',  icon: '💬' },
-  stale_draft:       { label: 'Rascunho parado',    color: '#A78BFA', bg: 'rgba(167,139,250,0.1)', icon: '📝' },
-  no_content:        { label: 'Sem conteúdo',       color: MUTED,     bg: 'rgba(255,255,255,0.05)', icon: '📅' },
-  low_engagement:    { label: 'Baixo engajamento',  color: '#60a5fa', bg: 'rgba(96,165,250,0.1)',  icon: '📉' },
+const CHANNELS: Array<{ key: string; icon: string; check: (c: CompanyData) => boolean; href: string }> = [
+  { key: 'google',    icon: '⭐', check: c => !!c.google_place_id, href: '/dashboard/settings?section=google' },
+  { key: 'instagram', icon: '📸', check: c => !!c.instagram_url,   href: '/dashboard/settings?section=presenca' },
+  { key: 'whatsapp',  icon: '💬', check: c => !!c.phone,            href: '/dashboard/settings?section=negocio' },
+  { key: 'facebook',  icon: '👍', check: c => !!c.facebook_url,     href: '/dashboard/settings?section=presenca' },
+]
+
+const TYPE_COLORS: Record<string, { color: string; bg: string; icon: string }> = {
+  negative_review:   { color: '#f87171', bg: 'rgba(248,113,113,0.1)',  icon: '⭐' },
+  unanswered_review: { color: '#FBBF24', bg: 'rgba(251,191,36,0.1)',  icon: '💬' },
+  stale_draft:       { color: '#A78BFA', bg: 'rgba(167,139,250,0.1)', icon: '📝' },
+  no_content:        { color: MUTED,     bg: 'rgba(255,255,255,0.05)', icon: '📅' },
+  low_engagement:    { color: '#60a5fa', bg: 'rgba(96,165,250,0.1)',  icon: '📉' },
 }
 
 function OppCard({
-  opp, session, onResolve, onDismiss,
+  opp, session, onResolve, onDismiss, T,
 }: {
-  opp: Opportunity
-  session: { access_token: string } | null
-  onResolve: (id: string) => void
-  onDismiss: (id: string) => void
+  opp: Opportunity; session: { access_token: string } | null
+  onResolve: (id: string) => void; onDismiss: (id: string) => void
+  T: typeof d['pt']['opportunities']
 }) {
   const navigate = useNavigate()
   const [expanded, setExpanded] = useState(false)
@@ -46,7 +55,8 @@ function OppCard({
   const [copied, setCopied] = useState(false)
   const [resolving, setResolving] = useState(false)
 
-  const meta = TYPE_META[opp.type] ?? TYPE_META.no_content
+  const typeMeta = TYPE_COLORS[opp.type] ?? TYPE_COLORS.no_content
+  const meta = { ...typeMeta, label: T.typeLabels[opp.type as keyof typeof T.typeLabels] ?? opp.type }
 
   const fetchDraft = async () => {
     if (draft || !session) return
@@ -144,7 +154,7 @@ function OppCard({
         <div style={{ padding: '0 20px 16px' }}>
           <div style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '10px', padding: '14px' }}>
             <div style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>
-              {loadingDraft ? 'Gerando sugestão...' : 'Sugestão gerada por IA'}
+              {loadingDraft ? T.generatingSuggestion : T.aiSuggestion}
             </div>
             {loadingDraft ? (
               <div style={{ display: 'flex', gap: '5px', padding: '8px 0' }}>
@@ -174,92 +184,48 @@ function OppCard({
       {/* Actions */}
       <div style={{ padding: '12px 20px', borderTop: `1px solid ${BORDER}`, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
         {isReviewType && (
-          <button
-            onClick={handleExpand}
-            style={{
-              padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer',
-              background: expanded ? 'rgba(255,109,41,0.1)' : 'rgba(255,255,255,0.04)',
-              color: expanded ? ORANGE : MUTED,
-              border: `1px solid ${expanded ? 'rgba(255,109,41,0.25)' : BORDER}`,
-            }}
-          >
-            {expanded ? 'Fechar' : '✨ Ver resposta sugerida'}
+          <button onClick={handleExpand}
+            style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer', background: expanded ? 'rgba(255,109,41,0.1)' : 'rgba(255,255,255,0.04)', color: expanded ? ORANGE : MUTED, border: `1px solid ${expanded ? 'rgba(255,109,41,0.25)' : BORDER}` }}>
+            {expanded ? T.close : T.seeReply}
           </button>
         )}
 
         {opp.type === 'low_engagement' && (
-          <button
-            onClick={handleExpand}
-            style={{
-              padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer',
-              background: expanded ? 'rgba(255,109,41,0.1)' : 'rgba(255,255,255,0.04)',
-              color: expanded ? ORANGE : MUTED,
-              border: `1px solid ${expanded ? 'rgba(255,109,41,0.25)' : BORDER}`,
-            }}
-          >
-            {expanded ? 'Fechar' : '✨ Ver sugestões de melhoria'}
+          <button onClick={handleExpand}
+            style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer', background: expanded ? 'rgba(255,109,41,0.1)' : 'rgba(255,255,255,0.04)', color: expanded ? ORANGE : MUTED, border: `1px solid ${expanded ? 'rgba(255,109,41,0.25)' : BORDER}` }}>
+            {expanded ? T.close : T.seeSuggestions}
           </button>
         )}
 
         {expanded && draft && !loadingDraft && (
-          <button
-            onClick={handleCopy}
-            style={{
-              padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer',
-              background: copied ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.04)',
-              color: copied ? '#4ade80' : MUTED,
-              border: `1px solid ${copied ? 'rgba(74,222,128,0.25)' : BORDER}`,
-              transition: 'all 0.2s',
-            }}
-          >
-            {copied ? '✓ Copiado!' : '📋 Copiar'}
+          <button onClick={handleCopy}
+            style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer', background: copied ? 'rgba(74,222,128,0.1)' : 'rgba(255,255,255,0.04)', color: copied ? '#4ade80' : MUTED, border: `1px solid ${copied ? 'rgba(74,222,128,0.25)' : BORDER}`, transition: 'all 0.2s' }}>
+            {copied ? T.copied : T.copy}
           </button>
         )}
 
         {isPostType && (
-          <button
-            onClick={() => navigate('/dashboard/posts')}
-            style={{
-              padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer',
-              background: 'rgba(255,109,41,0.1)', color: ORANGE, border: '1px solid rgba(255,109,41,0.25)',
-            }}
-          >
-            Ver Posts →
+          <button onClick={() => navigate('/dashboard/posts')}
+            style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer', background: 'rgba(255,109,41,0.1)', color: ORANGE, border: '1px solid rgba(255,109,41,0.25)' }}>
+            {T.seePosts}
           </button>
         )}
 
         {opp.type === 'no_content' && (
-          <button
-            onClick={() => navigate('/dashboard/agente')}
-            style={{
-              padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer',
-              background: 'rgba(255,109,41,0.1)', color: ORANGE, border: '1px solid rgba(255,109,41,0.25)',
-            }}
-          >
-            Pedir posts ao Agente →
+          <button onClick={() => navigate('/dashboard/agente')}
+            style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer', background: 'rgba(255,109,41,0.1)', color: ORANGE, border: '1px solid rgba(255,109,41,0.25)' }}>
+            {T.askAgent}
           </button>
         )}
 
-        <button
-          onClick={handleResolve}
-          disabled={resolving}
-          style={{
-            padding: '7px 14px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', cursor: resolving ? 'not-allowed' : 'pointer',
-            background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.25)',
-            opacity: resolving ? 0.6 : 1,
-          }}
-        >
-          {resolving ? 'Resolvendo...' : '✓ Marcar como resolvido'}
+        <button onClick={handleResolve} disabled={resolving}
+          style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', cursor: resolving ? 'not-allowed' : 'pointer', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.25)', opacity: resolving ? 0.6 : 1 }}>
+          {resolving ? T.resolving : T.resolve}
         </button>
 
-        <button
-          onClick={handleDismiss}
-          style={{
-            padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer',
-            background: 'transparent', color: 'rgba(255,255,255,0.2)', border: `1px solid ${BORDER}`,
-          }}
-        >
-          Dispensar
+        <button onClick={handleDismiss}
+          style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,0.2)', border: `1px solid ${BORDER}` }}>
+          {T.dismiss}
         </button>
       </div>
     </div>
@@ -268,10 +234,16 @@ function OppCard({
 
 export default function OpportunitiesPage() {
   const { session } = useAuth()
+  const { company } = useCompany()
+  const navigate = useNavigate()
+  const { lang } = useLang()
+  const T = d[lang].opportunities
+  const CH = d[lang].channels
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [scanning, setScanning] = useState(false)
   const [lastScan, setLastScan] = useState<Date | null>(null)
+  const [activeTab, setActiveTab] = useState('oportunidades')
 
   useEffect(() => { scan() }, [])
 
@@ -314,58 +286,77 @@ export default function OpportunitiesPage() {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}` }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
           <div>
-            <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>
-              Oportunidades
-            </h1>
+            <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
             <p style={{ color: MUTED, fontSize: '13px' }}>
-              {loading ? 'Escaneando...' : opportunities.length === 0
-                ? 'Nenhuma oportunidade aberta. Tudo em dia! ✓'
-                : `${opportunities.length} oportunidade(s) detectada(s) · ${lastScan ? `Atualizado ${lastScan.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` : ''}`}
+              {activeTab === 'oportunidades'
+                ? (loading ? T.scanning : opportunities.length === 0
+                  ? T.noOpps
+                  : `${opportunities.length} ${T.detected} · ${lastScan ? `${T.updated} ${lastScan.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}`)
+                : T.pipeline}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {opportunities.length > 0 && (
-              <button
-                onClick={resolveAll}
-                disabled={scanning}
-                style={{ padding: '9px 18px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', fontWeight: 700, fontSize: '13px', borderRadius: '10px', border: '1px solid rgba(74,222,128,0.25)', cursor: scanning ? 'not-allowed' : 'pointer' }}
-              >
-                ✓ Resolver tudo
+              <button onClick={resolveAll} disabled={scanning}
+                style={{ padding: '9px 18px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', fontWeight: 700, fontSize: '13px', borderRadius: '10px', border: '1px solid rgba(74,222,128,0.25)', cursor: scanning ? 'not-allowed' : 'pointer' }}>
+                {T.resolveAll}
               </button>
             )}
-            <button
-              onClick={scan}
-              disabled={scanning}
-              style={{ padding: '9px 18px', background: scanning ? 'rgba(255,109,41,0.3)' : ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '10px', border: 'none', cursor: scanning ? 'not-allowed' : 'pointer' }}
-            >
-              {scanning ? 'Escaneando...' : '🔍 Escanear agora'}
+            <button onClick={scan} disabled={scanning}
+              style={{ padding: '9px 18px', background: scanning ? 'rgba(255,109,41,0.3)' : ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '10px', border: 'none', cursor: scanning ? 'not-allowed' : 'pointer' }}>
+              {scanning ? T.scanning : T.scanNow}
             </button>
           </div>
         </div>
 
-        {/* Stats pills */}
         {!loading && opportunities.length > 0 && (
           <div style={{ display: 'flex', gap: '8px', marginTop: '16px', flexWrap: 'wrap' }}>
             {negativeCount > 0 && (
               <div style={{ padding: '5px 12px', borderRadius: '99px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', fontSize: '12px', color: '#f87171', fontWeight: 600 }}>
-                {negativeCount} review{negativeCount > 1 ? 's' : ''} negativa{negativeCount > 1 ? 's' : ''}
+                {negativeCount} {T.negReviews}
               </div>
             )}
             {unansweredCount > 0 && (
               <div style={{ padding: '5px 12px', borderRadius: '99px', background: 'rgba(251,191,36,0.1)', border: '1px solid rgba(251,191,36,0.2)', fontSize: '12px', color: '#FBBF24', fontWeight: 600 }}>
-                {unansweredCount} sem resposta
+                {unansweredCount} {T.unanswered}
               </div>
             )}
           </div>
         )}
       </div>
 
-      <div style={{ padding: '24px 32px' }}>
-        {loading ? (
+      <div style={{ borderBottom: `1px solid ${BORDER}`, padding: '0 32px' }}>
+        <div style={{ display: 'flex' }}>
+          {T.tabs.map((label, i) => {
+            const id = T.tabIds[i]
+            return (
+              <button key={id} onClick={() => setActiveTab(id)} style={{ padding: '13px 18px', background: 'transparent', border: 'none', borderBottom: activeTab === id ? `2px solid ${ORANGE}` : '2px solid transparent', color: activeTab === id ? 'white' : MUTED, fontSize: '13.5px', fontWeight: activeTab === id ? 600 : 400, cursor: 'pointer', fontFamily: D, transition: 'all 0.15s', marginBottom: '-1px' }}>{label}</button>
+            )
+          })}
+        </div>
+      </div>
+
+      {activeTab === 'oportunidades' && <div style={{ padding: '24px 32px' }}>
+        {company && !company.google_place_id && !company.instagram_url ? (
+          <div style={{ background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '14px', padding: '48px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '14px' }}>🔗</div>
+            <div style={{ fontFamily: D, fontSize: '1.2rem', fontWeight: 800, color: 'white', marginBottom: '10px' }}>{T.noChannels}</div>
+            <div style={{ fontSize: '14px', color: MUTED, maxWidth: '420px', margin: '0 auto 24px', lineHeight: 1.7 }}>{T.noChannelsDesc}</div>
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => navigate('/dashboard/settings?section=google')}
+                style={{ padding: '10px 22px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
+                {T.linkGoogle}
+              </button>
+              <button onClick={() => setActiveTab('canais')}
+                style={{ padding: '10px 22px', background: 'rgba(255,255,255,0.05)', color: MUTED, fontWeight: 600, fontSize: '13px', borderRadius: '9px', border: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                {T.seePending}
+              </button>
+            </div>
+          </div>
+        ) : loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {[1, 2, 3].map(i => (
               <div key={i} style={{ height: '100px', background: CARD, borderRadius: '14px', border: `1px solid ${BORDER}`, opacity: 0.5, animation: 'pulse 1.5s ease-in-out infinite' }} />
@@ -374,12 +365,8 @@ export default function OpportunitiesPage() {
         ) : opportunities.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '80px 0' }}>
             <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🎉</div>
-            <div style={{ fontFamily: D, fontSize: '1.3rem', fontWeight: 800, color: 'white', marginBottom: '8px' }}>
-              Nenhuma oportunidade aberta!
-            </div>
-            <div style={{ color: MUTED, fontSize: '13px', maxWidth: '360px', margin: '0 auto', lineHeight: 1.7 }}>
-              Todas as avaliações foram respondidas, seus posts estão em dia e o engajamento está saudável. Continue assim!
-            </div>
+            <div style={{ fontFamily: D, fontSize: '1.3rem', fontWeight: 800, color: 'white', marginBottom: '8px' }}>{T.allResolved}</div>
+            <div style={{ color: MUTED, fontSize: '13px', maxWidth: '360px', margin: '0 auto', lineHeight: 1.7 }}>{T.allResolvedDesc}</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -390,11 +377,74 @@ export default function OpportunitiesPage() {
                 session={session}
                 onResolve={handleResolve}
                 onDismiss={handleDismiss}
+                T={T}
               />
             ))}
           </div>
         )}
-      </div>
+      </div>}
+
+      {activeTab === 'canais' && (
+        <div style={{ padding: '24px 32px' }}>
+          <p style={{ fontSize: '13px', color: MUTED, marginBottom: '20px', lineHeight: 1.6 }}>{T.channelsDesc}</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {CHANNELS.map(ch => {
+              const ok = company ? ch.check(company) : false
+              const chT = CH[ch.key as keyof typeof CH]
+              return (
+                <div key={ch.key} style={{ background: CARD, border: `1px solid ${ok ? 'rgba(74,222,128,0.2)' : 'rgba(255,109,41,0.2)'}`, borderRadius: '14px', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: ok ? 'rgba(74,222,128,0.08)' : 'rgba(255,109,41,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', flexShrink: 0 }}>
+                    {ch.icon}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'white', marginBottom: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {chT.name}
+                      <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: ok ? 'rgba(74,222,128,0.1)' : 'rgba(255,109,41,0.1)', color: ok ? '#4ade80' : ORANGE }}>
+                        {ok ? T.configured : T.pending}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: MUTED }}>{chT.desc}</div>
+                  </div>
+                  {!ok && (
+                    <button onClick={() => navigate(ch.href)}
+                      style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+                      {chT.btn} →
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'leads' && (
+        <div style={{ padding: '24px 32px' }}>
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '60px', textAlign: 'center' }}>
+            <div style={{ fontFamily: D, fontSize: '1.2rem', fontWeight: 700, color: 'white', marginBottom: '8px' }}>{T.leadsTitle}</div>
+            <p style={{ color: MUTED, fontSize: '13px', maxWidth: '400px', margin: '0 auto 20px', lineHeight: 1.7 }}>{T.leadsDesc}</p>
+            <span style={{ display: 'inline-block', padding: '5px 14px', borderRadius: '99px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.25)', color: ORANGE, fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em' }}>{d[lang].common.soon}</span>
+          </div>
+        </div>
+      )}
+      {activeTab === 'conversao' && (
+        <div style={{ padding: '24px 32px' }}>
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '60px', textAlign: 'center' }}>
+            <div style={{ fontFamily: D, fontSize: '1.2rem', fontWeight: 700, color: 'white', marginBottom: '8px' }}>{T.convTitle}</div>
+            <p style={{ color: MUTED, fontSize: '13px', maxWidth: '400px', margin: '0 auto 20px', lineHeight: 1.7 }}>{T.convDesc}</p>
+            <span style={{ display: 'inline-block', padding: '5px 14px', borderRadius: '99px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.25)', color: ORANGE, fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em' }}>{d[lang].common.soon}</span>
+          </div>
+        </div>
+      )}
+      {activeTab === 'followups' && (
+        <div style={{ padding: '24px 32px' }}>
+          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '60px', textAlign: 'center' }}>
+            <div style={{ fontFamily: D, fontSize: '1.2rem', fontWeight: 700, color: 'white', marginBottom: '8px' }}>{T.followTitle}</div>
+            <p style={{ color: MUTED, fontSize: '13px', maxWidth: '400px', margin: '0 auto 20px', lineHeight: 1.7 }}>{T.followDesc}</p>
+            <span style={{ display: 'inline-block', padding: '5px 14px', borderRadius: '99px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.25)', color: ORANGE, fontSize: '11px', fontWeight: 700, letterSpacing: '0.05em' }}>{d[lang].common.soon}</span>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes bounce { 0%, 100% { transform: translateY(0); opacity: 0.4; } 50% { transform: translateY(-4px); opacity: 1; } }

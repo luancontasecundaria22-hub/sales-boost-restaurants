@@ -686,22 +686,22 @@ function PricingSection({ lang }: { lang: Lang }) {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
           {plans.map((plan, i) => {
             const isUltra = plan.name === 'Ultra'
-            const cardBg   = plan.popular ? '#1E1008' : isUltra ? '#0E0E18' : CARD
+            const cardBg   = plan.popular ? '#1E1008' : isUltra ? '#1A0C04' : CARD
             const cardBorder = plan.popular
               ? '2px solid rgba(255,109,41,0.45)'
               : isUltra
-              ? '2px solid rgba(160,120,255,0.35)'
+              ? '2px solid rgba(255,109,41,0.6)'
               : '1px solid rgba(255,255,255,0.05)'
             const cardShadow = plan.popular
               ? '0 0 40px rgba(255,109,41,0.1)'
               : isUltra
-              ? '0 0 40px rgba(120,80,255,0.08)'
+              ? '0 0 40px rgba(255,109,41,0.15)'
               : 'none'
-            const checkColor = isUltra ? '#A78BFA' : ORANGE
+            const checkColor = ORANGE
             const btnStyle = plan.popular
               ? { background: ORANGE, color: '#000', boxShadow: '0 8px 24px rgba(255,109,41,0.25)' } as React.CSSProperties
               : isUltra
-              ? { background: 'rgba(160,120,255,0.15)', color: '#C4B5FD', border: '1px solid rgba(160,120,255,0.35)' } as React.CSSProperties
+              ? { background: ORANGE, color: '#000', boxShadow: '0 8px 24px rgba(255,109,41,0.3)' } as React.CSSProperties
               : { background: 'rgba(255,255,255,0.06)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' } as React.CSSProperties
             return (
             <div key={i} className="pricing-card relative rounded-2xl p-8" style={{ background: cardBg, border: cardBorder, boxShadow: cardShadow }}>
@@ -714,11 +714,11 @@ function PricingSection({ lang }: { lang: Lang }) {
                 </>
               )}
               {isUltra && (
-                <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{ background: 'rgba(120,80,255,0.03)' }} />
+                <div className="absolute inset-0 rounded-2xl pointer-events-none" style={{ background: 'rgba(255,109,41,0.04)' }} />
               )}
               <div className="relative">
                 <div className="mb-7">
-                  <h3 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: isUltra ? '#A78BFA' : MUTED }}>{plan.name}</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: isUltra ? ORANGE : MUTED }}>{plan.name}</h3>
                   <div className="flex items-baseline gap-1">
                     <span className="text-white leading-none" style={{ fontFamily: D, fontSize: '3.2rem', fontWeight: 900 }}>{plan.price}</span>
                     <span className="text-sm ml-1" style={{ color: MUTED }}>{plan.period}</span>

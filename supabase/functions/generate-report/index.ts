@@ -144,6 +144,18 @@ async function generatePdf(html: string, apiKey: string): Promise<string | null>
   }
 }
 
+async function notifyMarketing(chatId: number | null | undefined, event: string, data?: Record<string, unknown>) {
+  if (!chatId) return
+  const url = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
+  const secret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
+  if (!url) return
+  fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-webhook-secret': secret ?? '' },
+    body: JSON.stringify({ event, chat_id: chatId, data }),
+  }).catch(() => {})
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -164,7 +176,7 @@ Deno.serve(async (req) => {
 
     const { data: company, error: companyErr } = await userClient
       .from('companies')
-      .select('id, business_name')
+      .select('id, business_name, telegram_chat_id')
       .eq('user_id', user.id)
       .single()
 
@@ -350,11 +362,9 @@ Responda SOMENTE com o JSON, sem texto adicional. As ações devem ser específi
 
     await supabase.from('actions').insert(actionRows)
 
-    const supabaseForNotify = createClient(supabaseUrl, supabaseServiceKey)
-    notifyMarketing(supabaseForNotify, company.id, 'REPORT_READY', {
-      period,
+    notifyMarketing((company as Record<string, unknown>).telegram_chat_id as number | null, 'REPORT_READY', {
+      period: periodLabel,
       health_score: reportData.health_score,
-      pdf_url: pdfUrl ?? undefined,
     })
 
     return json({

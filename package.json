@@ -10,9 +10,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-three/fiber": "^9.6.1",
     "@supabase/supabase-js": "^2.108.1",
     "@types/three": "^0.184.1",
+    "framer-motion": "^12.40.0",
     "gsap": "^3.15.0",
+    "hermes": "^0.4.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.17.0",

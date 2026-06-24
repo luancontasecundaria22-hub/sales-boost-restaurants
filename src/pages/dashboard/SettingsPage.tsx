@@ -7,6 +7,7 @@ import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+const MARKETING_BOT_USERNAME = 'SalesBoostContentBot'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
@@ -155,7 +156,6 @@ export default function SettingsPage() {
   const [telegramGroupLink, setTelegramGroupLink] = useState('')
   const [telegramCode, setTelegramCode] = useState('')
   const [telegramGenerating, setTelegramGenerating] = useState(false)
-  const [telegramCopied, setTelegramCopied] = useState(false)
 
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -536,24 +536,17 @@ export default function SettingsPage() {
           )}
 
           {telegramCode ? (
-            <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '12px' }}>
-              <div style={{ fontSize: '11px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '10px' }}>Seu código de conexão</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <span style={{ fontFamily: 'monospace', fontSize: '26px', fontWeight: 800, color: ORANGE, letterSpacing: '0.12em' }}>{telegramCode}</span>
-                <button onClick={() => { navigator.clipboard.writeText(telegramCode); setTelegramCopied(true); setTimeout(() => setTelegramCopied(false), 2000) }}
-                  style={{ padding: '6px 14px', background: telegramCopied ? 'rgba(74,222,128,0.15)' : 'rgba(255,109,41,0.12)', border: `1px solid ${telegramCopied ? 'rgba(74,222,128,0.3)' : 'rgba(255,109,41,0.3)'}`, borderRadius: '8px', color: telegramCopied ? '#4ade80' : ORANGE, fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
-                  {telegramCopied ? '✓ Copiado!' : 'Copiar'}
-                </button>
-              </div>
-              <div style={{ marginTop: '12px', fontSize: '12px', color: MUTED, lineHeight: 1.7 }}>
-                Abra o Telegram, encontre o bot <strong style={{ color: 'white' }}>@SalesBoostContentBot</strong> e envie:<br />
-                <span style={{ fontFamily: 'monospace', color: ORANGE }}>/conectar {telegramCode}</span>
-              </div>
-            </div>
+            <a
+              href={`https://t.me/${MARKETING_BOT_USERNAME}?start=${telegramCode}`}
+              target="_blank"
+              rel="noreferrer"
+              style={{ display: 'block', padding: '14px 20px', background: ORANGE, borderRadius: '12px', color: '#000', fontSize: '15px', fontWeight: 800, textAlign: 'center', textDecoration: 'none', letterSpacing: '-0.01em' }}>
+              Abrir Sales Boost no Telegram →
+            </a>
           ) : (
             <button onClick={generateTelegramCode} disabled={telegramGenerating || !companyId}
               style={{ padding: '10px 20px', background: 'rgba(255,109,41,0.12)', border: '1px solid rgba(255,109,41,0.3)', borderRadius: '10px', color: ORANGE, fontSize: '13px', fontWeight: 700, cursor: telegramGenerating || !companyId ? 'not-allowed' : 'pointer', opacity: telegramGenerating ? 0.7 : 1 }}>
-              {telegramGenerating ? 'Gerando...' : telegramChatId ? 'Gerar novo código' : 'Conectar Telegram'}
+              {telegramGenerating ? 'Gerando...' : telegramChatId ? 'Reconectar Telegram' : 'Conectar Telegram'}
             </button>
           )}
         </SectionCard>

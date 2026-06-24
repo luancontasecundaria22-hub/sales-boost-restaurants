@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import { useLang } from '../../contexts/LanguageContext'
+import { d } from '../../i18n-dash'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
@@ -18,6 +20,11 @@ interface Company {
   google_rating: number | null
   google_review_count: number | null
   google_place_id: string | null
+}
+
+interface EnzoReport {
+  content: string
+  created_at: string
 }
 
 interface Diagnostic {
@@ -41,6 +48,14 @@ interface Opportunity {
   title: string
   estimated_impact: string | null
   estimated_value: number | null
+  created_at: string
+}
+
+interface BotNotification {
+  id: string
+  bot_name: string
+  event_type: string
+  message: string
   created_at: string
 }
 
@@ -87,14 +102,19 @@ function HealthRow({ label, value, color, sub }: { label: string; value: string 
 export default function OverviewPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { lang } = useLang()
+  const T = d[lang].overview
   const [company, setCompany] = useState<Company | null>(null)
   const [diag, setDiag] = useState<Diagnostic | null>(null)
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null)
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
+  const [enzoReport, setEnzoReport] = useState<EnzoReport | null>(null)
+  const [generatingReport, setGeneratingReport] = useState(false)
   const [loading, setLoading] = useState(true)
   const [noCompany, setNoCompany] = useState(false)
+  const [botNotifications, setBotNotifications] = useState<BotNotification[]>([])
 
-  const userName = user?.email?.split('@')[0] ?? 'usuário'
+  const userName = user?.email?.split('@')[0] ?? T.user
 
   useEffect(() => {
     if (!user) return
@@ -112,7 +132,7 @@ export default function OverviewPage() {
     if (!co) { setNoCompany(true); setLoading(false); return }
     setCompany(co as Company)
 
-    const [diagRes, reviewsRes, oppsRes] = await Promise.all([
+    const [diagRes, reviewsRes, oppsRes, enzoRes, botNotifsRes] = await Promise.all([
       supabase.from('diagnostics')
         .select('id, status, created_at, pagespeed_mobile, pagespeed_desktop')
         .eq('company_id', co.id)
@@ -128,6 +148,17 @@ export default function OverviewPage() {
         .eq('company_id', co.id)
         .eq('status', 'open')
         .order('created_at', { ascending: false }),
+      supabase.from('agent_messages')
+        .select('content, created_at')
+        .eq('company_id', co.id)
+        .eq('agent_role', 'ceo')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase.from('bot_notifications')
+        .select('id, bot_name, event_type, message, created_at')
+        .order('created_at', { ascending: false })
+        .limit(15),
     ])
 
     setDiag(diagRes.data ?? null)
@@ -141,39 +172,57 @@ export default function OverviewPage() {
     })
 
     setOpportunities((oppsRes.data ?? []) as Opportunity[])
+    setEnzoReport(enzoRes.data as EnzoReport | null)
+    setBotNotifications((botNotifsRes.data ?? []) as BotNotification[])
 
     setLoading(false)
   }
 
-  if (loading) return <div style={{ padding: '28px 32px', color: MUTED, fontSize: '14px' }}>Carregando...</div>
+  const requestEnzoReport = async () => {
+    if (!company || generatingReport) return
+    setGeneratingReport(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enzo-daily-report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ company_id: company.id }),
+      })
+      await loadAll()
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
+
+  if (loading) return <div style={{ padding: '28px 32px', color: MUTED, fontSize: '14px' }}>{d[lang].common.loading}</div>
   if (!company) return null
 
   if (noCompany) return (
     <div>
       <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}` }}>
-        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>Visão Geral</h1>
-        <p style={{ color: MUTED, fontSize: '13px' }}>Bem-vindo, {userName}</p>
+        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
+        <p style={{ color: MUTED, fontSize: '13px' }}>{T.welcome}, {userName}</p>
       </div>
       <div style={{ padding: '28px 32px' }}>
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '48px 32px', textAlign: 'center' }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🚀</div>
-          <div style={{ fontFamily: D, fontSize: '1.2rem', fontWeight: 800, color: 'white', marginBottom: '8px' }}>Comece com um diagnóstico gratuito</div>
+          <div style={{ fontFamily: D, fontSize: '1.2rem', fontWeight: 800, color: 'white', marginBottom: '8px' }}>{T.startDiag}</div>
           <div style={{ fontSize: '14px', color: MUTED, maxWidth: '380px', margin: '0 auto 24px', lineHeight: 1.6 }}>
-            Analise seu site, veja sua reputação online e descubra onde estão as oportunidades de crescimento.
+            {T.startDiagDesc}
           </div>
           <button onClick={() => navigate('/onboarding')}
             style={{ padding: '11px 24px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '14px', borderRadius: '10px', border: 'none', cursor: 'pointer' }}>
-            Fazer diagnóstico gratuito →
+            {T.startDiagBtn}
           </button>
         </div>
       </div>
     </div>
   )
 
-  // Build health metrics
   const mob = diag?.pagespeed_mobile
   const desk = diag?.pagespeed_desktop
-  const diagDate = diag?.created_at ? new Date(diag.created_at).toLocaleDateString('pt-BR') : null
+  const locale = lang === 'en' ? 'en-US' : 'pt-BR'
+  const diagDate = diag?.created_at ? new Date(diag.created_at).toLocaleDateString(locale) : null
 
   // Compute health score 0–100
   const scores: number[] = []
@@ -193,63 +242,88 @@ export default function OverviewPage() {
   return (
     <div>
       <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}` }}>
-        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>
-          Visão Geral
-        </h1>
+        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
         <p style={{ color: MUTED, fontSize: '13px' }}>{company.business_name} · {userName}</p>
       </div>
 
       <div style={{ padding: '28px 32px' }}>
 
-        {/* Oportunidades + Projeção de receita — o principal ponto do produto */}
+        {/* Daily Report */}
+        <div style={{ background: CARD, border: `1px solid rgba(255,109,41,0.18)`, borderRadius: '16px', overflow: 'hidden', marginBottom: '20px' }}>
+          <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>{T.dailyReport}</span>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              {enzoReport && (
+                <span style={{ fontSize: '11px', color: MUTED }}>
+                  {new Date(enzoReport.created_at).toLocaleDateString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              <button onClick={requestEnzoReport} disabled={generatingReport}
+                style={{ padding: '6px 14px', background: generatingReport ? 'rgba(255,255,255,0.05)' : 'rgba(255,109,41,0.12)', border: `1px solid rgba(255,109,41,0.25)`, borderRadius: '8px', color: generatingReport ? MUTED : ORANGE, fontSize: '12px', fontWeight: 600, cursor: generatingReport ? 'not-allowed' : 'pointer' }}>
+                {generatingReport ? T.generating : T.generateNow}
+              </button>
+            </div>
+          </div>
+          {enzoReport ? (
+            <div style={{ padding: '20px 24px' }}>
+              {enzoReport.content.split('\n').filter(l => l.trim()).map((line, i) => (
+                <p key={i} style={{ fontSize: '13px', color: line.startsWith('[') ? MUTED : 'rgba(255,255,255,0.85)', lineHeight: 1.7, margin: '0 0 8px', fontStyle: line.startsWith('[') ? 'italic' : 'normal' }}>
+                  {line}
+                </p>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: '28px 24px', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
+              {T.reportAuto}<br />
+              {d[lang].common.loading === 'Loading...' ? (
+                <>Click <strong style={{ color: 'white' }}>{T.reportAutoCta}</strong> {T.reportAutoCtaDesc}</>
+              ) : (
+                <>Clique em <strong style={{ color: 'white' }}>{T.reportAutoCta}</strong> {T.reportAutoCtaDesc}</>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Revenue Opportunities */}
         <div style={{ background: CARD, border: `1px solid rgba(255,109,41,0.25)`, borderRadius: '16px', overflow: 'hidden', marginBottom: '20px' }}>
           <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>💰 Oportunidades de receita</span>
-            <span style={{ fontSize: '11px', color: MUTED }}>{opportunities.length} em aberto</span>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>{T.revenueOpp}</span>
+            <span style={{ fontSize: '11px', color: MUTED }}>{opportunities.length} {T.open}</span>
           </div>
 
           {opportunities.length === 0 ? (
             <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
-              Nenhuma oportunidade detectada agora. O Sales Boost está de olho — volte aqui sempre.
+              {T.noOpps}
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 0 }}>
-              {/* Projeção total */}
               <div style={{ padding: '24px', borderRight: `1px solid ${BORDER}`, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
                 <div style={{ fontSize: '11px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>
-                  Receita recuperável
+                  {T.recoverable}
                 </div>
                 <div style={{ fontFamily: D, fontSize: '2rem', fontWeight: 900, color: ORANGE, lineHeight: 1, letterSpacing: '-0.02em' }}>
-                  {totalOppValue.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+                  {totalOppValue.toLocaleString(locale, { style: 'currency', currency: lang === 'en' ? 'USD' : 'BRL', maximumFractionDigits: 0 })}
                 </div>
-                <div style={{ fontSize: '11px', color: MUTED, marginTop: '6px' }}>se resolver tudo agora</div>
+                <div style={{ fontSize: '11px', color: MUTED, marginTop: '6px' }}>{T.ifResolveAll}</div>
               </div>
-
-              {/* Lista das principais oportunidades */}
               <div style={{ padding: '12px 24px' }}>
                 {topOpportunities.map(o => (
                   <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: `1px solid ${BORDER}` }}>
                     <span style={{ fontSize: '16px' }}>{TYPE_ICON[o.type] ?? '💡'}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', color: 'white', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {o.title}
-                      </div>
-                      {o.estimated_impact && (
-                        <div style={{ fontSize: '11px', color: MUTED, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {o.estimated_impact}
-                        </div>
-                      )}
+                      <div style={{ fontSize: '13px', color: 'white', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title}</div>
+                      {o.estimated_impact && <div style={{ fontSize: '11px', color: MUTED, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.estimated_impact}</div>}
                     </div>
                     {o.estimated_value != null && (
                       <div style={{ fontSize: '13px', fontWeight: 700, color: ORANGE, flexShrink: 0 }}>
-                        + {o.estimated_value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 })}
+                        + {o.estimated_value.toLocaleString(locale, { style: 'currency', currency: lang === 'en' ? 'USD' : 'BRL', maximumFractionDigits: 0 })}
                       </div>
                     )}
                   </div>
                 ))}
                 <button onClick={() => navigate('/dashboard/oportunidades')}
                   style={{ marginTop: '14px', padding: '10px 18px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
-                  Resolver agora →
+                  {T.resolveNow}
                 </button>
               </div>
             </div>
@@ -257,98 +331,136 @@ export default function OverviewPage() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-
-          {/* LEFT — Health Score Card */}
           <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', overflow: 'hidden' }}>
             <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>Score de Saúde</span>
-              <span style={{ fontSize: '11px', color: MUTED }}>Atualizado hoje</span>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>{T.healthScore}</span>
+              <span style={{ fontSize: '11px', color: MUTED }}>{T.updatedToday}</span>
             </div>
             <div style={{ padding: '28px 24px', textAlign: 'center' }}>
               {healthScore != null ? (
                 <>
-                  <div style={{ fontFamily: D, fontSize: '5rem', fontWeight: 900, color: healthColor, lineHeight: 1, letterSpacing: '-0.04em' }}>
-                    {healthScore}
-                  </div>
-                  <div style={{ fontSize: '13px', color: MUTED, marginTop: '8px', marginBottom: '24px' }}>de 100 pontos possíveis</div>
+                  <div style={{ fontFamily: D, fontSize: '5rem', fontWeight: 900, color: healthColor, lineHeight: 1, letterSpacing: '-0.04em' }}>{healthScore}</div>
+                  <div style={{ fontSize: '13px', color: MUTED, marginTop: '8px', marginBottom: '24px' }}>{T.outOf100}</div>
                   <div style={{ height: '8px', borderRadius: '99px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
                     <div style={{ width: `${healthScore}%`, height: '100%', background: `linear-gradient(90deg, ${healthColor}, ${healthColor}99)`, transition: 'width 0.8s ease' }} />
                   </div>
                   <div style={{ fontSize: '11px', color: MUTED, marginTop: '10px' }}>
-                    {healthScore >= 75 ? '✓ Negócio saudável' : healthScore >= 50 ? '⚠ Há espaço para melhorar' : '↑ Atenção necessária'}
+                    {healthScore >= 75 ? T.healthy : healthScore >= 50 ? T.improve : T.attention}
                   </div>
                 </>
               ) : (
                 <div>
                   <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>📊</div>
-                  <div style={{ fontSize: '14px', color: MUTED, lineHeight: 1.6, marginBottom: '20px' }}>
-                    Faça um diagnóstico e importe suas avaliações para ver o score de saúde.
-                  </div>
+                  <div style={{ fontSize: '14px', color: MUTED, lineHeight: 1.6, marginBottom: '20px' }}>{T.noDiagData}</div>
                   <button onClick={() => navigate('/onboarding')}
                     style={{ padding: '9px 20px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
-                    Fazer diagnóstico →
+                    {T.doDiag}
                   </button>
                 </div>
               )}
             </div>
           </div>
 
-          {/* RIGHT — Health Table */}
           <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', overflow: 'hidden' }}>
             <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}` }}>
-              <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>Indicadores do negócio</span>
+              <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>{T.indicators}</span>
             </div>
             <div style={{ padding: '8px 24px 20px' }}>
-              {mob?.performance != null && (
-                <HealthRow label="Performance mobile" value={mob.performance as number} color={scoreColor(mob.performance as number)} sub={`Diagnóstico de ${diagDate}`} />
-              )}
-              {desk?.performance != null && (
-                <HealthRow label="Performance desktop" value={desk.performance as number} color={scoreColor(desk.performance as number)} />
-              )}
-              {mob?.seo != null && (
-                <HealthRow label="SEO" value={mob.seo as number} color={scoreColor(mob.seo as number)} />
-              )}
-              {mob?.accessibility != null && (
-                <HealthRow label="Acessibilidade" value={mob.accessibility as number} color={scoreColor(mob.accessibility as number)} />
-              )}
+              {mob?.performance != null && <HealthRow label={T.mobPerf} value={mob.performance as number} color={scoreColor(mob.performance as number)} sub={`${T.diagDate} ${diagDate}`} />}
+              {desk?.performance != null && <HealthRow label={T.deskPerf} value={desk.performance as number} color={scoreColor(desk.performance as number)} />}
+              {mob?.seo != null && <HealthRow label={T.seo} value={mob.seo as number} color={scoreColor(mob.seo as number)} />}
+              {mob?.accessibility != null && <HealthRow label={T.accessibility} value={mob.accessibility as number} color={scoreColor(mob.accessibility as number)} />}
               {company.google_rating != null && (
                 <HealthRow
-                  label="Nota no Google"
+                  label={T.googleRating}
                   value={`${company.google_rating}★`}
                   color={company.google_rating >= 4 ? '#4ade80' : company.google_rating >= 3 ? '#FBBF24' : '#f87171'}
-                  sub={company.google_review_count ? `${company.google_review_count} avaliações` : undefined}
+                  sub={company.google_review_count ? `${company.google_review_count} ${T.reviews}` : undefined}
                 />
               )}
               {reviewStats && reviewStats.total > 0 && (
                 <HealthRow
-                  label="Sentimento das avaliações"
+                  label={T.reviewSentiment}
                   value={`${Math.round((reviewStats.positive / reviewStats.total) * 100)}%`}
                   color={scoreColor(Math.round((reviewStats.positive / reviewStats.total) * 100))}
-                  sub={`${reviewStats.total} analisadas · ${reviewStats.positive} positivas · ${reviewStats.negative} negativas`}
+                  sub={`${reviewStats.total} ${T.analyzed} · ${reviewStats.positive} ${T.positive} · ${reviewStats.negative} ${T.negative}`}
                 />
               )}
               {(!mob && !company.google_rating && (!reviewStats || reviewStats.total === 0)) && (
                 <div style={{ padding: '30px 0', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
-                  Nenhum dado ainda.<br />
-                  Faça um diagnóstico e importe suas avaliações.
+                  {T.noData.split('\n').map((line, i) => <span key={i}>{line}{i === 0 ? <br /> : ''}</span>)}
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Quick actions */}
+        {/* Bot Activity Feed */}
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', overflow: 'hidden', marginTop: '20px' }}>
+          <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>
+              🤖 {lang === 'en' ? 'Bot Activity' : 'Atividade dos Bots'}
+            </span>
+            <span style={{ fontSize: '11px', color: MUTED }}>
+              {lang === 'en' ? 'Telegram · live' : 'Telegram · ao vivo'}
+            </span>
+          </div>
+          {botNotifications.length === 0 ? (
+            <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
+              {lang === 'en'
+                ? 'No bot activity yet. Send /start to @SalesBoostContentBot or @SalesBoostVendassBot on Telegram.'
+                : 'Nenhuma atividade ainda. Mande /start para @SalesBoostContentBot ou @SalesBoostVendassBot no Telegram.'}
+            </div>
+          ) : (
+            <div style={{ padding: '8px 0' }}>
+              {botNotifications.map((notif, i) => {
+                const isMarketing = notif.bot_name === 'marketing'
+                const botColor = isMarketing ? '#60a5fa' : '#4ade80'
+                const botLabel = isMarketing
+                  ? (lang === 'en' ? '📣 Marketing' : '📣 Marketing')
+                  : (lang === 'en' ? '💼 Sales' : '💼 Vendas')
+                const timeAgo = new Date(notif.created_at).toLocaleString(
+                  lang === 'en' ? 'en-US' : 'pt-BR',
+                  { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
+                )
+                return (
+                  <div key={notif.id} style={{
+                    display: 'flex', gap: '14px', padding: '12px 24px',
+                    borderBottom: i < botNotifications.length - 1 ? `1px solid ${BORDER}` : 'none',
+                    alignItems: 'flex-start',
+                  }}>
+                    <div style={{
+                      width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0,
+                      background: isMarketing ? 'rgba(96,165,250,0.1)' : 'rgba(74,222,128,0.1)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
+                    }}>
+                      {isMarketing ? '📣' : '💼'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
+                        <span style={{ fontSize: '10px', fontWeight: 700, color: botColor, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          {botLabel}
+                        </span>
+                        <span style={{ fontSize: '10px', color: MUTED }}>{timeAgo}</span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
+                        {notif.message}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '20px' }}>
-          {[
-            { label: '📊 Ver diagnóstico completo', to: '/dashboard/diagnostico' },
-            { label: '⭐ Ver avaliações e insights', to: '/dashboard/insights' },
-            { label: '✨ Gerar posts da semana', to: '/dashboard/posts' },
-          ].map(a => (
-            <button key={a.to} onClick={() => navigate(a.to)}
+          {T.quickActions.map((label, i) => (
+            <button key={i} onClick={() => navigate(T.quickLinks[i])}
               style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '12px', color: MUTED, fontSize: '13px', fontWeight: 500, cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,109,41,0.25)'; e.currentTarget.style.color = 'white' }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED }}>
-              {a.label}
+              {label}
             </button>
           ))}
         </div>

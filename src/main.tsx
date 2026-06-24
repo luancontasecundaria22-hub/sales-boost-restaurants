@@ -5,6 +5,7 @@ import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './contexts/AuthContext.tsx'
 import { useAuth } from './contexts/AuthContext.tsx'
+import { CompanyProvider } from './contexts/CompanyContext.tsx'
 import LoginPage from './pages/auth/LoginPage.tsx'
 import SignupPage from './pages/auth/SignupPage.tsx'
 import GscCallbackPage from './pages/auth/GscCallbackPage.tsx'
@@ -93,7 +94,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <RouterRoot />
+        <CompanyProvider>
+          <RouterRoot />
+        </CompanyProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

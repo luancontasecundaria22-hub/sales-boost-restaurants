@@ -23,14 +23,14 @@ Deno.serve(async (req) => {
     const { data: { user }, error: userErr } = await userClient.auth.getUser()
     if (userErr || !user) return json({ error: 'Unauthorized' }, 401)
 
-    const { data: restaurant, error: restErr } = await userClient
-      .from('restaurants')
-      .select('id, name, address, ifood_url, tripadvisor_url')
-      .eq('owner_id', user.id)
+    const { data: company, error: companyErr } = await userClient
+      .from('companies')
+      .select('id, business_name, city, ifood_url, tripadvisor_url')
+      .eq('user_id', user.id)
       .single()
 
-    if (restErr || !restaurant) return json({ error: 'Restaurante não encontrado. Configure o nome nas configurações primeiro.' }, 404)
-    if (!restaurant.name) return json({ error: 'Preencha o nome do restaurante nas configurações.' }, 400)
+    if (companyErr || !company) return json({ error: 'Empresa não encontrada. Configure o perfil nas configurações primeiro.' }, 404)
+    if (!company.business_name) return json({ error: 'Preencha o nome do negócio nas configurações.' }, 400)
 
     const apifyToken = Deno.env.get('APIFY_TOKEN')
     if (!apifyToken) return json({ error: 'APIFY_TOKEN não configurado nos secrets do Supabase.' }, 500)
@@ -40,9 +40,9 @@ Deno.serve(async (req) => {
     const allReviews: ReviewRow[] = []
 
     // ── 1. Google Maps reviews (via Apify) ──────────────────────────────────
-    const googleQuery = restaurant.address
-      ? `${restaurant.name}, ${restaurant.address}`
-      : `${restaurant.name} Rio de Janeiro`
+    const googleQuery = company.city
+      ? `${company.business_name}, ${company.city}`
+      : company.business_name
 
     const googleRes = await fetch(
       `https://api.apify.com/v2/acts/compass~google-maps-reviews-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`,
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
       for (const r of reviews) {
         if (r.text?.trim()) {
           allReviews.push({
-            restaurant_id: restaurant.id,
+            company_id: company.id,
             source: 'google',
             author: r.name ?? 'Anônimo',
             rating: r.stars ?? null,
@@ -79,14 +79,14 @@ Deno.serve(async (req) => {
     }
 
     // ── 2. iFood reviews (se URL configurada) ────────────────────────────────
-    if (restaurant.ifood_url) {
+    if (company.ifood_url) {
       const ifoodRes = await fetch(
         `https://api.apify.com/v2/acts/epctex~ifood-scraper/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            startUrls: [{ url: restaurant.ifood_url }],
+            startUrls: [{ url: company.ifood_url }],
             maxReviews: 50,
           }),
         }
@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
         for (const r of reviews) {
           if (r.text?.trim()) {
             allReviews.push({
-              restaurant_id: restaurant.id,
+              company_id: company.id,
               source: 'ifood',
               author: r.userName ?? 'Anônimo',
               rating: r.rating ?? null,
@@ -111,14 +111,14 @@ Deno.serve(async (req) => {
     }
 
     // ── 3. TripAdvisor reviews (se URL configurada) ──────────────────────────
-    if (restaurant.tripadvisor_url) {
+    if (company.tripadvisor_url) {
       const taRes = await fetch(
         `https://api.apify.com/v2/acts/maxcopell~tripadvisor/run-sync-get-dataset-items?token=${apifyToken}&timeout=120`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            startUrls: [{ url: restaurant.tripadvisor_url }],
+            startUrls: [{ url: company.tripadvisor_url }],
             maxReviews: 50,
           }),
         }
@@ -129,7 +129,7 @@ Deno.serve(async (req) => {
         for (const r of reviews) {
           if (r.text?.trim()) {
             allReviews.push({
-              restaurant_id: restaurant.id,
+              company_id: company.id,
               source: 'tripadvisor',
               author: r.username ?? 'Anônimo',
               rating: r.rating ?? null,
@@ -143,14 +143,14 @@ Deno.serve(async (req) => {
     }
 
     if (allReviews.length === 0) {
-      return json({ error: 'Nenhuma review encontrada. Verifique o nome do restaurante e tente novamente.' }, 404)
+      return json({ error: 'Nenhuma review encontrada. Verifique o nome do negócio nas configurações e tente novamente.' }, 404)
     }
 
     // Deduplicate against existing reviews
     const { data: existing } = await serviceClient
       .from('reviews')
       .select('author, review_date, source')
-      .eq('restaurant_id', restaurant.id)
+      .eq('company_id', company.id)
 
     const existingKeys = new Set(
       (existing ?? []).map((e: { author: string; review_date: string; source: string }) => `${e.source}|${e.author}|${e.review_date}`)
@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
 })
 
 interface ReviewRow {
-  restaurant_id: string
+  company_id: string
   source: string
   author: string
   rating: number | null

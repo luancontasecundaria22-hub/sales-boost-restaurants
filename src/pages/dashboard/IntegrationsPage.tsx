@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLang } from '../../contexts/LanguageContext'
+import { d } from '../../i18n-dash'
 
 function buildGbpAuthUrl(companyId: string): string {
   const params = new URLSearchParams({
@@ -65,6 +67,9 @@ interface IgData {
 export default function IntegrationsPage() {
   const { user, session } = useAuth()
   const navigate = useNavigate()
+  const { lang } = useLang()
+  const T = d[lang].integrations
+  const [searchParams] = useSearchParams()
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [instagramUrl, setInstagramUrl] = useState<string | null>(null)
   const [igData, setIgData] = useState<IgData | null>(null)
@@ -78,6 +83,13 @@ export default function IntegrationsPage() {
   const [loading, setLoading] = useState(true)
   const [metricsLoading, setMetricsLoading] = useState(false)
   const [metricsError, setMetricsError] = useState('')
+  // Instagram auto-post state
+  const [igConnected, setIgConnected] = useState(false)
+  const [igAutoPost, setIgAutoPost] = useState(false)
+  const [igFrequency, setIgFrequency] = useState('daily')
+  const [igTogglingAuto, setIgTogglingAuto] = useState(false)
+  const igOauthError = searchParams.get('error')
+  const igOauthSuccess = searchParams.get('instagram') === 'connected'
 
   useEffect(() => {
     if (!user) return
@@ -88,7 +100,7 @@ export default function IntegrationsPage() {
     setLoading(true)
     const { data: company } = await supabase
       .from('companies')
-      .select('id, instagram_url, social_data, social_scraped_at')
+      .select('id, instagram_url, social_data, social_scraped_at, instagram_user_id, instagram_auto_post, instagram_post_frequency')
       .eq('user_id', user!.id)
       .single()
 
@@ -99,6 +111,9 @@ export default function IntegrationsPage() {
     if (company.social_data?.instagram) {
       setIgData(company.social_data.instagram as IgData)
     }
+    setIgConnected(!!company.instagram_user_id)
+    setIgAutoPost(company.instagram_auto_post ?? false)
+    setIgFrequency(company.instagram_post_frequency ?? 'daily')
 
     const { data: integ } = await supabase
       .from('company_integrations')
@@ -166,6 +181,20 @@ export default function IntegrationsPage() {
     setMetricsLoading(false)
   }
 
+  const toggleAutoPost = async (enabled: boolean) => {
+    if (!companyId) return
+    setIgTogglingAuto(true)
+    await supabase.from('companies').update({ instagram_auto_post: enabled }).eq('id', companyId)
+    setIgAutoPost(enabled)
+    setIgTogglingAuto(false)
+  }
+
+  const updateFrequency = async (freq: string) => {
+    if (!companyId) return
+    setIgFrequency(freq)
+    await supabase.from('companies').update({ instagram_post_frequency: freq }).eq('id', companyId)
+  }
+
   if (loading) {
     return (
       <div style={{ padding: '28px 32px' }}>
@@ -177,8 +206,8 @@ export default function IntegrationsPage() {
   return (
     <div>
       <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}` }}>
-        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>Integrações</h1>
-        <p style={{ color: MUTED, fontSize: '13px' }}>Conecte suas ferramentas para enriquecer os insights.</p>
+        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
+        <p style={{ color: MUTED, fontSize: '13px' }}>{T.subtitle}</p>
       </div>
 
       <div style={{ padding: '28px 32px' }}>
@@ -308,7 +337,7 @@ export default function IntegrationsPage() {
             <div style={{ display: 'flex', gap: '8px' }}>
               {!instagramUrl ? (
                 <button
-                  onClick={() => navigate('/dashboard/settings')}
+                  onClick={() => navigate('/dashboard/settings?section=presenca')}
                   style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}
                 >
                   Configurar →
@@ -362,6 +391,76 @@ export default function IntegrationsPage() {
             <div style={{ padding: '16px 24px' }}>
               <div style={{ fontSize: '13px', color: MUTED, lineHeight: 1.6 }}>
                 Adicione a URL do seu Instagram em Configurações para sincronizar seguidores, engajamento e posts recentes. O Agente usará esses dados para criar conteúdo personalizado.
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Instagram Auto-post (agente 24/7) */}
+        <div style={{ background: CARD, border: `1px solid ${igConnected ? 'rgba(255,109,41,0.25)' : BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
+          <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+              <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: igConnected ? 'rgba(255,109,41,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🤖</div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Instagram Auto-post <span style={{ fontSize: '10px', background: 'rgba(255,109,41,0.15)', color: ORANGE, padding: '2px 8px', borderRadius: 99, marginLeft: 6, verticalAlign: 'middle' }}>NOVO</span></div>
+                <div style={{ fontSize: '12px', color: igConnected ? '#4ade80' : MUTED }}>
+                  {igConnected
+                    ? igAutoPost ? '● Agente publicando automaticamente' : '○ Conectado · auto-post pausado'
+                    : 'Conecte para o Agente de Marketing publicar sozinho 24/7'}
+                </div>
+              </div>
+            </div>
+            {companyId && !igConnected && (
+              <a
+                href={`${SUPABASE_URL}/functions/v1/instagram-oauth-start?company_id=${companyId}`}
+                style={{ padding: '8px 18px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', textDecoration: 'none', display: 'inline-block', cursor: 'pointer' }}>
+                Conectar Instagram →
+              </a>
+            )}
+            {igConnected && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: '12px', color: igAutoPost ? ORANGE : MUTED }}>{igAutoPost ? 'Ativo' : 'Pausado'}</span>
+                <div onClick={() => !igTogglingAuto && toggleAutoPost(!igAutoPost)}
+                  style={{ width: 42, height: 22, borderRadius: 99, cursor: igTogglingAuto ? 'wait' : 'pointer', background: igAutoPost ? ORANGE : 'rgba(255,255,255,0.1)', position: 'relative', transition: 'all 0.2s' }}>
+                  <div style={{ position: 'absolute', top: 3, left: igAutoPost ? 21 : 3, width: 16, height: 16, borderRadius: '50%', background: igAutoPost ? '#000' : 'rgba(255,255,255,0.4)', transition: 'left 0.2s' }} />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {(igOauthSuccess || igOauthError) && (
+            <div style={{ padding: '12px 24px', background: igOauthSuccess ? 'rgba(74,222,128,0.06)' : 'rgba(239,68,68,0.08)', fontSize: '12px', color: igOauthSuccess ? '#4ade80' : '#f87171' }}>
+              {igOauthSuccess ? '✓ Instagram conectado! O agente já pode publicar automaticamente.' : `Erro: ${igOauthError}`}
+            </div>
+          )}
+
+          {igConnected && (
+            <div style={{ padding: '20px 24px' }}>
+              <div style={{ fontSize: '12px', color: MUTED, marginBottom: 12 }}>Frequência de publicação</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[['daily', 'Diário'], ['3x_week', '3x por semana'], ['weekly', 'Semanal']].map(([val, label]) => (
+                  <button key={val} onClick={() => updateFrequency(val)}
+                    style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${igFrequency === val ? ORANGE : BORDER}`, background: igFrequency === val ? 'rgba(255,109,41,0.1)' : 'transparent', color: igFrequency === val ? ORANGE : MUTED, fontSize: '12px', fontWeight: igFrequency === val ? 700 : 400, cursor: 'pointer' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ marginTop: 14, fontSize: '12px', color: MUTED, lineHeight: 1.6 }}>
+                O Agente de Marketing vai criar conteúdo com IA, gerar uma imagem e publicar direto no Instagram, todos os dias às 10h. Você pode pausar a qualquer momento.
+              </div>
+              {companyId && (
+                <a href={`${SUPABASE_URL}/functions/v1/instagram-oauth-start?company_id=${companyId}`}
+                  style={{ display: 'inline-block', marginTop: 12, fontSize: '11px', color: 'rgba(255,109,41,0.5)', textDecoration: 'none' }}>
+                  Reconectar Instagram
+                </a>
+              )}
+            </div>
+          )}
+
+          {!igConnected && (
+            <div style={{ padding: '16px 24px' }}>
+              <div style={{ fontSize: '13px', color: MUTED, lineHeight: 1.7 }}>
+                O Agente de Marketing vai criar posts com IA, gerar imagem e publicar direto no seu Instagram todos os dias — sem você precisar fazer nada. Requer conta Instagram Business conectada a uma Página do Facebook.
               </div>
             </div>
           )}

@@ -5,13 +5,20 @@ const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const PLAN_LIMITS: Record<string, number> = {
+  free: 5, basic: 15, pro: 35, ultra: 50,
+}
+
 interface PostDraft {
-  legenda: string
-  hashtags: string
-  image_suggestion: string
-  best_time: string
-  platform: string
-  type: string
+  legenda: string; hashtags: string; image_suggestion: string
+  best_time: string; platform: string; type: string; reasoning: string
+}
+
+interface ImageResult {
+  post_id: string
+  step: string
+  error: string | null
+  url: string | null
 }
 
 async function buildProfile(db: ReturnType<typeof createClient>, authHeader: string, supabaseUrl: string): Promise<void> {
@@ -26,142 +33,193 @@ async function callClaude(prompt: string, anthropicKey: string): Promise<string>
   for (let attempt = 1; attempt <= 3; attempt++) {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'x-api-key': anthropicKey,
-        'anthropic-version': '2023-06-01',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 6000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+      headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 6000, messages: [{ role: 'user', content: prompt }] }),
     })
-
     if (res.ok) {
       const data = await res.json()
       return (data.content?.[0]?.text ?? '').replace(/```(?:json)?\n?/g, '').trim()
     }
-
     lastError = await res.text()
-    // 5xx (overload/bad gateway) e 429 (rate limit) são transitórios — vale tentar de novo
     const retryable = res.status >= 500 || res.status === 429
-    if (!retryable || attempt === 3) {
-      throw new Error(`Claude API (${res.status}): ${lastError}`)
-    }
+    if (!retryable || attempt === 3) throw new Error(`Claude API (${res.status}): ${lastError}`)
     await new Promise(r => setTimeout(r, attempt * 800))
   }
   throw new Error(`Claude API: ${lastError}`)
 }
 
-async function generateForCompany(
+async function generateAndStoreImage(
+  imageSuggestion: string,
+  openaiKey: string,
+  supabaseUrl: string,
+  serviceKey: string
+): Promise<{ url: string | null; step: string; error: string | null }> {
+  try {
+    const dallePrompt = [
+      'Professional Instagram marketing photo for a Brazilian small business.',
+      'Commercial photography style, high quality, warm lighting, vibrant colors, clean composition.',
+      'Absolutely NO people, NO faces, NO children in the image.',
+      'Focus only on objects, props, scenery, and atmosphere that evoke:', imageSuggestion,
+      'No text overlays. No logos. Square format.',
+    ].join(' ')
+
+    const dalleRes = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'dall-e-3', prompt: dallePrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' }),
+    })
+    if (!dalleRes.ok) {
+      const errText = await dalleRes.text()
+      console.error('DALL-E error:', dalleRes.status, errText)
+      return { url: null, step: 'dalle_call', error: `DALL-E ${dalleRes.status}: ${errText.slice(0, 300)}` }
+    }
+
+    const dalleData = await dalleRes.json()
+    const tempUrl = dalleData.data?.[0]?.url
+    if (!tempUrl) {
+      console.error('DALL-E: no URL in response', JSON.stringify(dalleData).slice(0, 200))
+      return { url: null, step: 'dalle_parse', error: 'No URL in DALL-E response' }
+    }
+
+    const imgRes = await fetch(tempUrl)
+    if (!imgRes.ok) {
+      console.error('Image download failed:', imgRes.status)
+      return { url: null, step: 'img_download', error: `Download failed: ${imgRes.status}` }
+    }
+    const imgBuffer = await imgRes.arrayBuffer()
+
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.png`
+    const uploadUrl = `${supabaseUrl}/storage/v1/object/post-images/${fileName}`
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'image/png',
+        'x-upsert': 'true',
+      },
+      body: imgBuffer,
+    })
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text()
+      console.error('Storage upload error:', uploadRes.status, errText)
+      return { url: null, step: 'storage_upload', error: `Storage ${uploadRes.status}: ${errText.slice(0, 300)}` }
+    }
+
+    const publicUrl = `${supabaseUrl}/storage/v1/object/public/post-images/${fileName}`
+    return { url: publicUrl, step: 'done', error: null }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error('generateAndStoreImage exception:', msg)
+    return { url: null, step: 'exception', error: msg.slice(0, 300) }
+  }
+}
+
+async function countMonthlyPosts(db: ReturnType<typeof createClient>, companyId: string): Promise<number> {
+  const now = new Date()
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+  const { count } = await db.from('posts').select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId).gte('created_at', start)
+  return count ?? 0
+}
+
+async function runForCompany(
   db: ReturnType<typeof createClient>,
   companyId: string,
-  aiProfile: string,
   anthropicKey: string,
+  openaiKey: string | null,
   supabaseUrl: string,
-): Promise<number> {
+  serviceKey: string
+): Promise<{ generated: number; quota_reached: boolean; monthly_count: number; limit: number; image_results?: ImageResult[] }> {
+  const { data: co } = await db.from('companies').select('ai_profile, plan').eq('id', companyId).single()
+  if (!co?.ai_profile) throw new Error('Perfil vazio')
 
-  const MARKETING_NOTIFY_URL = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
-  const TELEGRAM_WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
+  const plan = (co.plan ?? 'free') as string
+  const limit = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
+  const monthlyCount = await countMonthlyPosts(db, companyId)
+  const remaining = Math.max(0, limit - monthlyCount)
 
-  async function notifyMarketing(event: string, data?: Record<string, unknown>) {
-    if (!MARKETING_NOTIFY_URL || !TELEGRAM_WEBHOOK_SECRET) return
-    const { data: chat } = await db
-      .from('telegram_conversations')
-      .select('telegram_chat_id')
-      .eq('customer_id', companyId)
-      .eq('bot_type', 'marketing')
-      .limit(1)
-      .maybeSingle()
-    if (!chat?.telegram_chat_id) return
-    try {
-      await fetch(MARKETING_NOTIFY_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-webhook-secret': TELEGRAM_WEBHOOK_SECRET },
-        body: JSON.stringify({ event, bot_type: 'marketing', chat_id: chat.telegram_chat_id, company_id: companyId, data }),
-      })
-    } catch { /* fire-and-forget */ }
-  }
+  if (remaining === 0) return { generated: 0, quota_reached: true, monthly_count: monthlyCount, limit }
 
-  const prompt = `Você é um especialista em marketing digital para pequenos negócios brasileiros.
+  const toGenerate = Math.min(4, remaining)
+
+  const prompt = `Você é o Agente de Marketing especialista em marketing digital para pequenos negócios brasileiros.
 
 Abaixo está o perfil completo da empresa. Use TODOS os dados disponíveis para criar conteúdo específico e personalizado — nunca genérico.
 
 ---
-${aiProfile}
+${co.ai_profile}
 ---
 
-Crie exatamente 4 posts para Instagram com legendas completas e prontas para copiar e publicar.
+Crie exatamente ${toGenerate} post${toGenerate > 1 ? 's' : ''} para Instagram com legendas completas e prontas para copiar e publicar.
 
-Retorne APENAS um array JSON válido, sem markdown, sem explicação:
+Retorne APENAS um array JSON válido, sem markdown:
 [
   {
     "type": "educativo",
-    "legenda": "legenda completa com emojis e quebras de linha naturais, pronta para publicar",
-    "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5 #tag6",
-    "image_suggestion": "descrição concreta e específica da foto ou vídeo ideal (ex: foto do [prato X] em close, fundo desfocado, luz natural da tarde)",
-    "best_time": "ex: Segunda-feira às 19h",
-    "platform": "instagram"
-  },
-  {
-    "type": "bastidores",
-    ...
-  },
-  {
-    "type": "promocional",
-    ...
-  },
-  {
-    "type": "engajamento",
-    ...
+    "legenda": "legenda completa com emojis, pronta para publicar",
+    "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5",
+    "image_suggestion": "image description in English, ONLY objects and scenery, NO people or children",
+    "best_time": "Segunda-feira às 19h",
+    "platform": "instagram",
+    "reasoning": "por que este post é estratégico"
   }
 ]
-
-Regras obrigatórias:
-1. LEGENDA pronta — quem leu pode copiar e publicar agora. Não escreva templates com [colchetes].
-2. Use informações reais do perfil: nome do negócio, cidade, pontos fortes, objetivo.
-3. Se tiver dados de avaliações, cite temas que os clientes amam (nunca os negativos).
-4. Varie o tipo: 1 educativo (dica do seu segmento), 1 bastidores (humaniza a marca), 1 promocional (oferta ou diferencial), 1 engajamento (pergunta que gera comentário).
-5. Tom natural para o segmento. Sem clichês.
-6. CTA em cada post alinhado ao objetivo da empresa.
-7. Máximo 2.200 caracteres por legenda. Mínimo 5, máximo 8 hashtags específicas.`
+Regras: legenda pronta (sem colchetes), dados reais, tom natural, CTA alinhado, image_suggestion SEMPRE em inglês e NUNCA com pessoas.`
 
   let posts: PostDraft[] | undefined
-  let parseError = ''
   for (let attempt = 1; attempt <= 2 && !posts; attempt++) {
     const raw = await callClaude(prompt, anthropicKey)
-    try {
-      posts = JSON.parse(raw)
-    } catch {
+    try { posts = JSON.parse(raw) } catch {
       const match = raw.match(/\[\s*\{[\s\S]*?\}\s*\]/)
-      if (match) {
-        try { posts = JSON.parse(match[0]) } catch { /* try again below */ }
-      }
+      if (match) try { posts = JSON.parse(match[0]) } catch { /* retry */ }
     }
-    if (!posts) parseError = `Claude retornou JSON inválido (tentativa ${attempt})`
   }
-
-  if (!posts || !Array.isArray(posts) || posts.length === 0) throw new Error(parseError || 'Nenhum post gerado')
+  if (!posts || !Array.isArray(posts) || posts.length === 0) throw new Error('Claude não gerou posts')
+  posts = posts.slice(0, toGenerate)
 
   const rows = posts.map((p: PostDraft) => ({
     company_id: companyId,
     content: `${p.legenda}\n\n${p.hashtags}`.trim(),
     image_suggestion: p.image_suggestion ?? null,
+    image_url: null,
     best_time: p.best_time ?? null,
     platform: p.platform ?? 'instagram',
     status: 'rascunho',
+    agent_notes: p.reasoning ?? null,
   }))
 
-  const { error } = await db.from('posts').insert(rows)
-  if (error) throw error
+  const { data: inserted, error: insertError } = await db.from('posts').insert(rows).select('id, image_suggestion')
+  if (insertError) throw new Error(`DB: ${insertError.message}`)
 
-  notifyMarketing(db, companyId, 'POST_APPROVED', {
-    title: `${rows.length} novo(s) post(s) gerado(s)`,
-    count: rows.length,
-  })
+  const imageResults: ImageResult[] = []
 
-  return rows.length
+  if (openaiKey && inserted && inserted.length > 0) {
+    const settled = await Promise.allSettled(
+      inserted.map(async (row: { id: string; image_suggestion: string | null }) => {
+        if (!row.image_suggestion) {
+          imageResults.push({ post_id: row.id, step: 'skipped', error: 'no image_suggestion', url: null })
+          return
+        }
+        const result = await generateAndStoreImage(row.image_suggestion, openaiKey, supabaseUrl, serviceKey)
+        imageResults.push({ post_id: row.id, ...result })
+        if (!result.url) return
+        const { error: updErr } = await db.from('posts').update({ image_url: result.url }).eq('id', row.id)
+        if (updErr) {
+          console.error('update image_url:', updErr.message)
+          imageResults[imageResults.length - 1].error = `DB update: ${updErr.message}`
+        }
+      })
+    )
+    settled.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        imageResults[i] = imageResults[i] ?? { post_id: inserted[i]?.id, step: 'promise_rejected', error: String(r.reason), url: null }
+      }
+    })
+  } else if (!openaiKey) {
+    imageResults.push({ post_id: '', step: 'skipped', error: 'OPENAI_API_KEY not set', url: null })
+  }
+
+  return { generated: rows.length, quota_reached: false, monthly_count: monthlyCount + rows.length, limit, image_results: imageResults }
 }
 
 Deno.serve(async (req) => {
@@ -172,74 +230,62 @@ Deno.serve(async (req) => {
     const anonKey    = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
-    if (!anthropicKey) return json({ error: 'ANTHROPIC_API_KEY não configurada' }, 500)
+    const openaiKey = Deno.env.get('OPENAI_API_KEY') ?? null
+    const cronSecretEnv = Deno.env.get('CRON_SECRET')
 
-    const authHeader = req.headers.get('Authorization')
+    if (!anthropicKey) return json({ error: 'Serviço indisponível.', generated: 0 }, 200)
+
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {}
-    const cronSecret = (body as Record<string,string>)?.cron_secret
-    const isCron = cronSecret && cronSecret === Deno.env.get('CRON_SECRET')
+    const isCron = cronSecretEnv && (body as Record<string, string>)?.cron_secret === cronSecretEnv
 
     const db = createClient(supabaseUrl, serviceKey)
-    let companyIds: string[] = []
 
     if (isCron) {
-      const { data: companies } = await db
-        .from('companies')
-        .select('id')
-        .not('ai_profile', 'is', null)
-      companyIds = (companies ?? []).map((c: { id: string }) => c.id)
-    } else {
-      if (!authHeader) return json({ error: 'Unauthorized' }, 401)
-      const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
-      const { data: { user }, error: authErr } = await userClient.auth.getUser()
-      if (authErr || !user) return json({ error: 'Unauthorized' }, 401)
-
-      const { data: company } = await db
-        .from('companies')
-        .select('id')
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (!company) return json({ error: 'Empresa não encontrada' }, 404)
-
-      // Sempre reconstrói o perfil antes de gerar posts
-      await buildProfile(db, authHeader, supabaseUrl)
-
-      companyIds = [company.id]
-    }
-
-    if (companyIds.length === 0) return json({ generated: 0, message: 'Nenhuma empresa encontrada' })
-
-    let totalGenerated = 0
-    const errors: string[] = []
-
-    for (const cid of companyIds) {
-      try {
-        const { data: co } = await db.from('companies').select('ai_profile').eq('id', cid).single()
-        if (!co?.ai_profile) {
-          errors.push(`${cid}: perfil vazio após atualização`)
-          continue
-        }
-        const count = await generateForCompany(db, cid, co.ai_profile, anthropicKey, supabaseUrl)
-        totalGenerated += count
-      } catch (e) {
-        console.error(`generate-posts: falha para empresa ${cid}:`, e)
-        errors.push(`${cid}: ${String(e)}`)
+      const { data: companies } = await db.from('companies').select('id').not('ai_profile', 'is', null)
+      let total = 0, skipped = 0
+      for (const c of (companies ?? [])) {
+        try {
+          const r = await runForCompany(db, c.id, anthropicKey, openaiKey, supabaseUrl, serviceKey)
+          total += r.generated
+          if (r.quota_reached) skipped++
+        } catch (e) { console.error('cron company error:', e) }
       }
+      return json({ generated: total, quota_reached_count: skipped })
     }
 
-    return json({
-      generated: totalGenerated,
-      companies: companyIds.length,
-      errors: errors.length > 0 ? errors : undefined,
-      message: totalGenerated === 0 ? (errors[0] ?? 'Não foi possível gerar posts.') : undefined,
-    })
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) return json({ error: 'Não autorizado', generated: 0 }, 401)
+    const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } })
+    const { data: { user }, error: authErr } = await userClient.auth.getUser()
+    if (authErr || !user) return json({ error: 'Não autorizado', generated: 0 }, 401)
+
+    const { data: company } = await db.from('companies').select('id, ai_profile, plan').eq('user_id', user.id).maybeSingle()
+    if (!company) return json({ error: 'Empresa não encontrada', generated: 0 }, 404)
+
+    if (!company.ai_profile) {
+      await buildProfile(db, authHeader, supabaseUrl)
+      const { data: co2 } = await db.from('companies').select('ai_profile').eq('id', company.id).single()
+      if (!co2?.ai_profile) return json({ generated: 0, message: 'Perfil incompleto. Preencha as Configurações.' })
+    } else {
+      buildProfile(db, authHeader, supabaseUrl)
+    }
+
+    const result = await runForCompany(db, company.id, anthropicKey, openaiKey, supabaseUrl, serviceKey)
+    return json({ ...result, openai_configured: openaiKey !== null })
 
   } catch (err) {
-    console.error('generate-posts error:', err)
-    return json({ error: String(err) }, 500)
+    console.error('top-level error:', err)
+    return json({ error: friendlyError(err), generated: 0 }, 200)
   }
 })
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+}
+
+function friendlyError(e: unknown): string {
+  const msg = (e instanceof Error ? e.message : String(e)).toLowerCase()
+  if (msg.includes('credit') || msg.includes('balance')) return 'Agente de Marketing temporariamente indisponível. Tente novamente.'
+  if (msg.includes('rate') || msg.includes('429') || msg.includes('overload')) return 'Agente de Marketing muito ocupado. Tente em alguns minutos.'
+  return 'Agente de Marketing não conseguiu gerar posts agora. Tente novamente.'
 }

@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import { useLang } from '../../contexts/LanguageContext'
+import { d } from '../../i18n-dash'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
@@ -34,10 +36,13 @@ const sentimentBg = (s: string | null) =>
 export default function ReviewsPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const { lang } = useLang()
+  const T = d[lang].reviews
   const [reviews, setReviews] = useState<Review[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'positive' | 'negative' | 'neutral'>('all')
   const [themeStats, setThemeStats] = useState<ThemeStat[]>([])
+  const [hasGoogle, setHasGoogle] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -46,18 +51,20 @@ export default function ReviewsPage() {
 
   const loadReviews = async () => {
     setLoading(true)
-    const { data: restaurant } = await supabase
-      .from('restaurants')
-      .select('id')
-      .eq('owner_id', user!.id)
+    const { data: company } = await supabase
+      .from('companies')
+      .select('id, google_place_id')
+      .eq('user_id', user!.id)
       .single()
 
-    if (!restaurant) { setLoading(false); return }
+    if (!company) { setLoading(false); return }
+
+    setHasGoogle(!!company.google_place_id)
 
     const { data } = await supabase
       .from('reviews')
       .select('id, author, rating, text, review_date, sentiment, themes')
-      .eq('restaurant_id', restaurant.id)
+      .eq('company_id', company.id)
       .order('review_date', { ascending: false })
       .limit(100)
 
@@ -87,33 +94,52 @@ export default function ReviewsPage() {
 
   const isEmpty = !loading && reviews.length === 0
 
+  const filterLabels = {
+    all: `${T.filterAll} (${reviews.length})`,
+    positive: `${T.filterPositive} (${reviews.filter(r => r.sentiment === 'positive').length})`,
+    negative: `${T.filterNegative} (${reviews.filter(r => r.sentiment === 'negative').length})`,
+    neutral: `${T.filterNeutral} (${reviews.filter(r => r.sentiment === 'neutral').length})`,
+  }
+
   return (
     <div>
       <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}` }}>
-        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>Reviews</h1>
+        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
         <p style={{ color: MUTED, fontSize: '13px' }}>
-          {loading ? 'Carregando...' : `${reviews.length} avaliações coletadas`}
+          {loading ? d[lang].common.loading : `${reviews.length} ${T.collected}`}
         </p>
       </div>
 
       <div style={{ padding: '28px 32px' }}>
-
-        {isEmpty ? (
+        {hasGoogle === false ? (
+          <div style={{ background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '14px', padding: '48px 32px', textAlign: 'center' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '14px' }}>🔗</div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'white', marginBottom: '10px' }}>{T.connectGoogle}</div>
+            <div style={{ fontSize: '14px', color: MUTED, maxWidth: '420px', margin: '0 auto 24px', lineHeight: 1.7 }}>
+              {T.connectGoogleDesc} <strong style={{ color: 'white' }}>{d[lang].common.settings}</strong>.
+              <br /><br />
+              {T.connectGoogleDesc2}
+            </div>
+            <button onClick={() => navigate('/dashboard/settings?section=google')}
+              style={{ padding: '12px 26px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '14px', borderRadius: '10px', border: 'none', cursor: 'pointer' }}>
+              {T.connectNow}
+            </button>
+          </div>
+        ) : isEmpty ? (
           <div style={{ background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '14px', padding: '40px 32px', textAlign: 'center' }}>
             <div style={{ fontSize: '2rem', marginBottom: '12px' }}>📭</div>
-            <div style={{ fontSize: '16px', fontWeight: 600, color: 'white', marginBottom: '8px' }}>Nenhuma review importada ainda</div>
-            <div style={{ fontSize: '13px', color: MUTED, marginBottom: '20px' }}>Configure seu Google Place ID e importe as reviews nas Configurações.</div>
-            <button onClick={() => navigate('/dashboard/settings')}
+            <div style={{ fontSize: '16px', fontWeight: 600, color: 'white', marginBottom: '8px' }}>{T.noReviews}</div>
+            <div style={{ fontSize: '13px', color: MUTED, marginBottom: '20px' }}>{T.noReviewsDesc}</div>
+            <button onClick={() => navigate('/dashboard/settings?section=google')}
               style={{ padding: '10px 22px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
-              Ir para Configurações →
+              {T.goToSettings}
             </button>
           </div>
         ) : (
           <>
-            {/* Theme analysis */}
             {themeStats.length > 0 && (
               <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '20px 24px', marginBottom: '24px' }}>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: 'white', marginBottom: '16px' }}>Temas mais citados</div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'white', marginBottom: '16px' }}>{T.themes}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {themeStats.map(t => (
                     <div key={t.theme} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -131,17 +157,15 @@ export default function ReviewsPage() {
               </div>
             )}
 
-            {/* Filter tabs */}
             <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               {(['all', 'positive', 'negative', 'neutral'] as const).map(f => (
                 <button key={f} onClick={() => setFilter(f)}
                   style={{ padding: '7px 16px', borderRadius: '99px', border: `1px solid ${filter === f ? 'rgba(255,109,41,0.4)' : BORDER}`, background: filter === f ? 'rgba(255,109,41,0.1)' : 'transparent', color: filter === f ? ORANGE : MUTED, fontSize: '12px', fontWeight: filter === f ? 600 : 400, cursor: 'pointer', transition: 'all 0.15s' }}>
-                  {{ all: `Todas (${reviews.length})`, positive: `Positivas (${reviews.filter(r => r.sentiment === 'positive').length})`, negative: `Negativas (${reviews.filter(r => r.sentiment === 'negative').length})`, neutral: `Neutras (${reviews.filter(r => r.sentiment === 'neutral').length})` }[f]}
+                  {filterLabels[f]}
                 </button>
               ))}
             </div>
 
-            {/* Reviews list */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {filtered.map(r => (
                 <div key={r.id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '16px 20px', display: 'flex', gap: '14px' }}>
@@ -151,7 +175,7 @@ export default function ReviewsPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
                       <div>
-                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'white', marginRight: '10px' }}>{r.author ?? 'Anônimo'}</span>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'white', marginRight: '10px' }}>{r.author ?? T.anonymous}</span>
                         <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '99px', background: sentimentBg(r.sentiment), color: sentimentColor(r.sentiment), fontWeight: 700 }}>
                           {'★'.repeat(r.rating ?? 0)}{'☆'.repeat(5 - (r.rating ?? 0))}
                         </span>
@@ -162,9 +186,7 @@ export default function ReviewsPage() {
                     {(r.themes ?? []).length > 0 && (
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                         {(r.themes ?? []).map(th => (
-                          <span key={th} style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '99px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${BORDER}`, color: MUTED, textTransform: 'capitalize' }}>
-                            {th}
-                          </span>
+                          <span key={th} style={{ fontSize: '10px', padding: '2px 8px', borderRadius: '99px', background: 'rgba(255,255,255,0.05)', border: `1px solid ${BORDER}`, color: MUTED, textTransform: 'capitalize' }}>{th}</span>
                         ))}
                       </div>
                     )}
