@@ -38,15 +38,21 @@ async function logEvent(env: Record<string, string>, chatId: number, eventType: 
   } catch { /* logging never blocks the bot */ }
 }
 
-async function handleStart(chatId: number, _text: string, env: Record<string, string>) {
+async function handleStart(chatId: number, args: string, env: Record<string, string>) {
+  // Deep link connection: /start CODE (8-char alphanumeric)
+  const codeMatch = args.trim().match(/^[A-Z2-9]{8}$/i);
+  if (codeMatch) {
+    await handleConectar(chatId, args.trim(), env);
+    return;
+  }
+
   const greeting =
-    'Olá! Eu sou o SalesBoostContentBot 🚀\n\n' +
+    'Olá! Eu sou o assistente Sales Boost 🚀\n\n' +
     'Comandos disponíveis:\n' +
-    '/conectar CÓDIGO — vincular sua conta Sales Boost\n' +
     '/diagnostico — diagnóstico do site\n' +
     '/concorrentes — análise de concorrentes\n' +
     '/relatorio — relatório mensal\n\n' +
-    'Após conectar, você pode me fazer perguntas livres sobre marketing e vendas!';
+    'Para conectar sua conta, acesse o dashboard e clique em "Conectar Telegram".';
 
   await sendMessage(env, chatId, greeting);
   await logEvent(env, chatId, 'start', '👋 Novo usuário iniciou o bot de marketing');
@@ -175,7 +181,6 @@ async function handleRelatorio(chatId: number, _text: string, env: Record<string
 
 const COMMANDS = new Map<string, (chatId: number, text: string, env: Record<string, string>) => Promise<void>>([
   ['/start', handleStart],
-  ['/conectar', handleConectar],
   ['/diagnostico', handleDiagnostico],
   ['/diagnostico_site', handleDiagnostico],
   ['/concorrentes', handleConcorrentes],
