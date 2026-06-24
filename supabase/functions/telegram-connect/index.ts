@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
 
     if (!code || !chat_id) return json({ error: 'code e chat_id são obrigatórios' }, 400)
 
-    // Find unused code + fetch group invite link
+    // Find unused code
     const { data: row, error: findErr } = await admin.from('telegram_connect_codes')
       .select('id, company_id')
       .eq('code', code.toUpperCase().trim())
@@ -37,9 +37,9 @@ Deno.serve(async (req) => {
 
     if (findErr || !row) return json({ error: 'Código inválido ou já utilizado' }, 404)
 
-    // Get group invite link from company
+    // Get company info
     const { data: company } = await admin.from('companies')
-      .select('telegram_group_invite_link')
+      .select('business_name, telegram_group_invite_link')
       .eq('id', row.company_id)
       .single()
 
@@ -58,10 +58,41 @@ Deno.serve(async (req) => {
       context: {},
     }, { onConflict: 'telegram_chat_id,bot_type' })
 
+    // Auto-create private Telegram group via group-manager Worker
+    const GROUP_MANAGER_URL = 'https://group-manager.luancontasecundaria22.workers.dev'
+    let groupInviteLink = company?.telegram_group_invite_link ?? null
+    const webhookSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
+
+    if (webhookSecret && !groupInviteLink) {
+      try {
+        const gmRes = await fetch(GROUP_MANAGER_URL, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-webhook-secret': webhookSecret,
+          },
+          body: JSON.stringify({
+            client_user_id: chat_id,
+            company_name: company?.business_name ?? 'Cliente',
+            company_id: row.company_id,
+          }),
+        })
+        const gmData = await gmRes.json() as { ok?: boolean; invite_link?: string }
+        if (gmData.ok && gmData.invite_link) {
+          groupInviteLink = gmData.invite_link
+          await admin.from('companies')
+            .update({ telegram_group_invite_link: groupInviteLink })
+            .eq('id', row.company_id)
+        }
+      } catch (e) {
+        console.error('group-manager call failed (non-fatal):', e)
+      }
+    }
+
     return json({
       ok: true,
       company_id: row.company_id,
-      group_invite_link: company?.telegram_group_invite_link ?? null,
+      group_invite_link: groupInviteLink,
     })
   } catch (err) {
     return json({ error: String(err) }, 500)
