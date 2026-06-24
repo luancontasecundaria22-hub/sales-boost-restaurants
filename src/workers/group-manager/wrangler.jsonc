@@ -1,0 +1,11 @@
+{
+  "name": "group-manager",
+  "main": "index.ts",
+  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_date": "2025-06-01",
+  "vars": {
+    "MARKETING_BOT_USERNAME": "SalesBoostContentBot",
+    "VENDAS_BOT_USERNAME": "SalesBoostVendasBot",
+    "OWNER_TELEGRAM_ID": "7575823301"
+  }
+}
