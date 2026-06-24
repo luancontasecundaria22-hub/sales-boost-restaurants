@@ -6,6 +6,11 @@
 html { scroll-behavior: smooth; }
 * { box-sizing: border-box; }
 
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0E0B0A; }
+::-webkit-scrollbar-thumb { background: #FF6D29; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #e05920; }
+
 :root {
   --orange: #FF6D29;
   --bg: #0E0B0A;

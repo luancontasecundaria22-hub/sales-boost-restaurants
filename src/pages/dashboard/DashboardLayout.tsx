@@ -1,7 +1,9 @@
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { LanguageProvider, useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
+import { supabase } from '../../lib/supabase'
 
 const ORANGE = '#FF6D29'
 const SIDEBAR_BG = '#0D0A07'
@@ -13,6 +15,9 @@ const iconStroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, str
 
 type NavItem = { to: string; label: string; icon: React.ReactNode; end?: boolean }
 type NavSection = { section?: string; accent?: boolean; items: NavItem[] }
+
+interface ActivityItem { id: string; content: string; agent_role: string | null; created_at: string }
+const AGENT_EMOJI: Record<string, string> = { ceo: '🗂️', researcher: '🔍', cmo: '📣', sales: '💼', analyst: '📊', cs: '⭐' }
 
 function makeNavSections(T: typeof d[keyof typeof d]): NavSection[] {
   return [
@@ -98,6 +103,22 @@ function SidebarInner() {
   const navigate = useNavigate()
   const { lang } = useLang()
   const T = d[lang]
+  const [activity, setActivity] = useState<ActivityItem[]>([])
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('companies').select('id').eq('user_id', user.id).maybeSingle()
+      .then(({ data: co }) => {
+        if (!co?.id) return
+        supabase.from('agent_messages')
+          .select('id, content, agent_role, created_at')
+          .eq('company_id', co.id)
+          .eq('role', 'assistant')
+          .order('created_at', { ascending: false })
+          .limit(5)
+          .then(({ data }) => setActivity(data ?? []))
+      })
+  }, [user])
 
   const navSections = makeNavSections(T)
   const bottomItems = makeBottomItems(T)
@@ -133,6 +154,34 @@ function SidebarInner() {
         ))}
         <div style={{ height: '1px', background: BORDER, margin: '8px 0 12px' }} />
         {bottomItems.map(item => <NavItemLink key={item.to} item={item} />)}
+
+        {/* Bot activity feed */}
+        {activity.length > 0 && (
+          <div style={{ marginTop: '14px' }}>
+            <div style={{ height: '1px', background: BORDER, marginBottom: '10px' }} />
+            <div style={{ fontSize: '9.5px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', padding: '0 12px 6px', color: 'rgba(255,109,41,0.5)' }}>
+              Atividade
+            </div>
+            {activity.map(item => (
+              <div key={item.id} style={{ padding: '7px 12px', borderRadius: '8px', marginBottom: '2px', cursor: 'default', transition: 'background 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(255,255,255,0.03)' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
+                  <span style={{ fontSize: '10px' }}>{AGENT_EMOJI[item.agent_role ?? ''] ?? '🤖'}</span>
+                  <span style={{ fontSize: '9.5px', color: 'rgba(255,109,41,0.5)', fontWeight: 600, letterSpacing: '0.05em', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {item.agent_role ?? 'agente'}
+                  </span>
+                  <span style={{ fontSize: '9px', color: MUTED, flexShrink: 0 }}>
+                    {new Date(item.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {item.content.length > 70 ? item.content.slice(0, 70) + '…' : item.content}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </nav>
       <div style={{ padding: '12px 10px', borderTop: `1px solid ${BORDER}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '9px', marginBottom: '4px' }}>

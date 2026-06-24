@@ -13,8 +13,8 @@ type Lang = 'pt' | 'en'
 type AgentRole = 'ceo' | 'researcher' | 'cmo' | 'sales' | 'analyst' | 'cs'
 
 const VOICE_IDS: Record<Lang, string> = {
-  pt: 'CstacWqMhJQlnfLPxRG4',
-  en: 'cCYjmrGZaI86GUJ7F2Nn',
+  pt: 'pNInz6obpgDQGcFmaJgB', // Adam — multilingual v2, works on all ElevenLabs accounts
+  en: 'pNInz6obpgDQGcFmaJgB',
 }
 const STT_LANG: Record<Lang, string> = { pt: 'pt-BR', en: 'en-US' }
 

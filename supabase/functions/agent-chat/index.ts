@@ -35,7 +35,9 @@ Você também é o REPÓRTER do negócio. Quando o dono perguntar sobre o estado
 • get_latest_diagnostic — performance e SEO do site
 • list_competitors — concorrentes mapeados
 
-Regra permanente: NUNCA publique nem envie nada sem aprovação explícita do dono.`
+Regra permanente: NUNCA publique nem envie nada sem aprovação explícita do dono.
+
+FORMATAÇÃO OBRIGATÓRIA: Responda sempre em texto corrido, sem markdown. Proibido usar **, __, ##, ---, tabelas, listas com marcadores ou hífens. Escreva em frases naturais e parágrafos curtos, como se estivesse falando em voz alta. Sem emojis desnecessários.`
 
 // ── Agent roster ───────────────────────────────────────────────────────
 const AGENTS: Record<AgentRole, AgentConfig> = {

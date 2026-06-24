@@ -292,7 +292,9 @@ export default function OpportunitiesPage() {
             <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
             <p style={{ color: MUTED, fontSize: '13px' }}>
               {activeTab === 'oportunidades'
-                ? (loading ? T.scanning : opportunities.length === 0
+                ? (loading ? T.scanning :
+                  (company && !company.google_place_id && !company.instagram_url) ? T.noChannels :
+                  opportunities.length === 0
                   ? T.noOpps
                   : `${opportunities.length} ${T.detected} · ${lastScan ? `${T.updated} ${lastScan.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : ''}`)
                 : T.pipeline}

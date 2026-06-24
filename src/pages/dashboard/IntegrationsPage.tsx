@@ -195,6 +195,26 @@ export default function IntegrationsPage() {
     await supabase.from('companies').update({ instagram_post_frequency: freq }).eq('id', companyId)
   }
 
+  const handleDisconnectGsc = async () => {
+    if (!integration) return
+    await supabase.from('company_integrations').delete().eq('id', integration.id)
+    setIntegration(null)
+    setMetrics(null)
+  }
+
+  const handleDisconnectGbp = async () => {
+    if (!gbpIntegration) return
+    await supabase.from('company_integrations').delete().eq('id', gbpIntegration.id)
+    setGbpIntegration(null)
+  }
+
+  const handleDisconnectIgOauth = async () => {
+    if (!companyId) return
+    await supabase.from('companies').update({ instagram_user_id: null, instagram_auto_post: false }).eq('id', companyId)
+    setIgConnected(false)
+    setIgAutoPost(false)
+  }
+
   if (loading) {
     return (
       <div style={{ padding: '28px 32px' }}>
@@ -237,10 +257,18 @@ export default function IntegrationsPage() {
                 </button>
               )}
               {companyId && GSC_CLIENT_ID && (
-                <a href={buildGscAuthUrl(companyId)}
-                  style={{ padding: '8px 16px', background: integration ? 'rgba(255,255,255,0.04)' : ORANGE, color: integration ? MUTED : '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: integration ? `1px solid ${BORDER}` : 'none', textDecoration: 'none', cursor: 'pointer', display: 'inline-block' }}>
-                  {integration ? 'Reconectar' : 'Conectar →'}
-                </a>
+                <>
+                  <a href={buildGscAuthUrl(companyId)}
+                    style={{ padding: '8px 16px', background: integration ? 'rgba(255,255,255,0.04)' : ORANGE, color: integration ? MUTED : '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: integration ? `1px solid ${BORDER}` : 'none', textDecoration: 'none', cursor: 'pointer', display: 'inline-block' }}>
+                    {integration ? 'Reconectar' : 'Conectar →'}
+                  </a>
+                  {integration && (
+                    <button onClick={handleDisconnectGsc}
+                      style={{ padding: '8px 14px', background: 'transparent', color: '#f87171', fontWeight: 600, fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer' }}>
+                      Desconectar
+                    </button>
+                  )}
+                </>
               )}
               {!GSC_CLIENT_ID && (
                 <div style={{ fontSize: '12px', color: MUTED, fontStyle: 'italic', padding: '8px' }}>
@@ -449,10 +477,16 @@ export default function IntegrationsPage() {
                 O Agente de Marketing vai criar conteúdo com IA, gerar uma imagem e publicar direto no Instagram, todos os dias às 10h. Você pode pausar a qualquer momento.
               </div>
               {companyId && (
-                <a href={`${SUPABASE_URL}/functions/v1/instagram-oauth-start?company_id=${companyId}`}
-                  style={{ display: 'inline-block', marginTop: 12, fontSize: '11px', color: 'rgba(255,109,41,0.5)', textDecoration: 'none' }}>
-                  Reconectar Instagram
-                </a>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 12 }}>
+                  <a href={`${SUPABASE_URL}/functions/v1/instagram-oauth-start?company_id=${companyId}`}
+                    style={{ fontSize: '11px', color: 'rgba(255,109,41,0.5)', textDecoration: 'none' }}>
+                    Reconectar Instagram
+                  </a>
+                  <button onClick={handleDisconnectIgOauth}
+                    style={{ background: 'transparent', border: 'none', padding: 0, fontSize: '11px', color: 'rgba(248,113,113,0.5)', cursor: 'pointer' }}>
+                    Desconectar
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -481,12 +515,20 @@ export default function IntegrationsPage() {
               </div>
             </div>
             {companyId && (import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID as string) && (
-              <a
-                href={buildGbpAuthUrl(companyId)}
-                style={{ padding: '8px 16px', background: gbpIntegration ? 'rgba(255,255,255,0.04)' : ORANGE, color: gbpIntegration ? MUTED : '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: gbpIntegration ? `1px solid ${BORDER}` : 'none', textDecoration: 'none', display: 'inline-block', cursor: 'pointer' }}
-              >
-                {gbpIntegration ? 'Reconectar' : 'Conectar →'}
-              </a>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <a
+                  href={buildGbpAuthUrl(companyId)}
+                  style={{ padding: '8px 16px', background: gbpIntegration ? 'rgba(255,255,255,0.04)' : ORANGE, color: gbpIntegration ? MUTED : '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: gbpIntegration ? `1px solid ${BORDER}` : 'none', textDecoration: 'none', display: 'inline-block', cursor: 'pointer' }}
+                >
+                  {gbpIntegration ? 'Reconectar' : 'Conectar →'}
+                </a>
+                {gbpIntegration && (
+                  <button onClick={handleDisconnectGbp}
+                    style={{ padding: '8px 14px', background: 'transparent', color: '#f87171', fontWeight: 600, fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer' }}>
+                    Desconectar
+                  </button>
+                )}
+              </div>
             )}
           </div>
           {!gbpIntegration && (
