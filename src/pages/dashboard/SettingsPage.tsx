@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { useSearchParams } from 'react-router-dom'
+import { useCompany } from '../../contexts/CompanyContext'
+import { useLang } from '../../contexts/LanguageContext'
+import { d } from '../../i18n-dash'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -70,9 +73,9 @@ function SelectField({ label, value, onChange, options, hint }: {
   )
 }
 
-function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+function SectionCard({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', marginBottom: '20px', overflow: 'hidden' }}>
+    <div id={id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', marginBottom: '20px', overflow: 'hidden' }}>
       <div style={{ padding: '16px 22px', borderBottom: `1px solid ${BORDER}` }}>
         <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>{title}</span>
       </div>
@@ -91,21 +94,37 @@ const PLANS = [
     key: 'basic',
     name: 'Basic',
     price: 'R$197/mês',
-    limit: 150,
-    features: ['150 mensagens/mês com o agente', 'Criação de posts ilimitada', 'Diagnóstico de site', 'Suporte por e-mail'],
+    postLimit: 15,
+    features: ['15 posts/mês com imagem IA', 'Jarvis — assistente de voz', 'Diagnóstico de site', 'Suporte por e-mail'],
   },
   {
     key: 'pro',
     name: 'Pro',
     price: 'R$397/mês',
-    limit: null,
-    features: ['Mensagens ilimitadas com o agente', 'Criação de posts ilimitada', 'Revenue Opportunities', 'Relatórios mensais em PDF', 'Suporte prioritário'],
+    postLimit: 35,
+    features: ['35 posts/mês com imagem IA', 'Revenue Opportunities', 'Respostas automáticas a reviews', 'Relatórios mensais em PDF', 'Suporte prioritário'],
+  },
+  {
+    key: 'ultra',
+    name: 'Ultra',
+    price: 'R$697/mês',
+    postLimit: 50,
+    features: ['50 posts/mês com imagem IA', 'Multi-agente (7 especialistas)', 'Relatório white-label', 'Tudo do Pro', 'Suporte dedicado'],
   },
 ]
 
 export default function SettingsPage() {
   const { user, session } = useAuth()
+  const { refreshCompany } = useCompany()
   const [searchParams] = useSearchParams()
+  const { lang } = useLang()
+  const T = d[lang].settings
+
+  useEffect(() => {
+    const section = searchParams.get('section')
+    if (!section) return
+    setTimeout(() => document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
+  }, [searchParams])
 
   // Company fields
   const [companyId, setCompanyId] = useState<string | null>(null)
@@ -131,6 +150,13 @@ export default function SettingsPage() {
   const [googleRating, setGoogleRating] = useState<number | null>(null)
   const [googleReviewCount, setGoogleReviewCount] = useState<number | null>(null)
 
+  // Telegram connect
+  const [telegramChatId, setTelegramChatId] = useState<number | null>(null)
+  const [telegramGroupLink, setTelegramGroupLink] = useState('')
+  const [telegramCode, setTelegramCode] = useState('')
+  const [telegramGenerating, setTelegramGenerating] = useState(false)
+  const [telegramCopied, setTelegramCopied] = useState(false)
+
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -146,7 +172,7 @@ export default function SettingsPage() {
     if (!user) return
     supabase
       .from('companies')
-      .select('id, business_name, business_type, city, phone, contact_email, goal, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, tripadvisor_url, reclame_aqui_url, ifood_url, google_place_id, google_rating, google_review_count, plan, agent_messages_used')
+      .select('id, business_name, business_type, city, phone, contact_email, goal, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, tripadvisor_url, reclame_aqui_url, ifood_url, google_place_id, google_rating, google_review_count, plan, agent_messages_used, telegram_chat_id, telegram_group_invite_link')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -171,6 +197,8 @@ export default function SettingsPage() {
           setGoogleReviewCount(data.google_review_count ?? null)
           setCurrentPlan(data.plan ?? 'free')
           setAgentUsed(data.agent_messages_used ?? 0)
+          setTelegramChatId(data.telegram_chat_id ?? null)
+          setTelegramGroupLink(data.telegram_group_invite_link ?? '')
         }
       })
   }, [user])
@@ -254,6 +282,21 @@ export default function SettingsPage() {
     setUpgrading(null)
   }
 
+  const generateTelegramCode = async () => {
+    if (!session) return
+    setTelegramGenerating(true)
+    setTelegramCode('')
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-link`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const data = await res.json() as { code?: string; error?: string }
+      if (data.code) setTelegramCode(data.code)
+    } catch { /* silently ignore */ }
+    setTelegramGenerating(false)
+  }
+
   const handleSave = async () => {
     if (!user || !businessName.trim()) { setSaveError('Nome do negócio é obrigatório.'); return }
     setSaving(true)
@@ -289,6 +332,7 @@ export default function SettingsPage() {
         if (data) setCompanyId(data.id)
       }
       setSaved(true)
+      void refreshCompany()
       setTimeout(() => setSaved(false), 2500)
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : String(e))
@@ -299,10 +343,8 @@ export default function SettingsPage() {
   return (
     <div>
       <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}` }}>
-        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>Configurações</h1>
-        <p style={{ color: MUTED, fontSize: '13px' }}>
-          {companyId ? 'Atualize as informações do seu negócio' : 'Preencha os dados do seu negócio para ativar o painel'}
-        </p>
+        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
+        <p style={{ color: MUTED, fontSize: '13px' }}>{T.subtitle}</p>
       </div>
 
       <div style={{ padding: '28px 32px', maxWidth: '680px' }}>
@@ -314,7 +356,7 @@ export default function SettingsPage() {
         )}
 
         {/* Google Places search */}
-        <SectionCard title="Vincular ao Google">
+        <SectionCard id="section-google" title="Vincular ao Google">
           {googlePlaceId ? (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px', marginBottom: '4px' }}>
               <div>
@@ -360,7 +402,7 @@ export default function SettingsPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="Sobre o negócio">
+        <SectionCard id="section-negocio" title="Sobre o negócio">
           <Field label="Nome do negócio" value={businessName} onChange={setBusinessName} placeholder="Ex: Studio Beleza Carioca" />
           <SelectField label="Tipo de estabelecimento" value={businessType} onChange={setBusinessType} options={BUSINESS_TYPES} />
           <Field label="Cidade / UF" value={city} onChange={setCity} placeholder="Ex: Rio de Janeiro, RJ" />
@@ -369,7 +411,7 @@ export default function SettingsPage() {
           <SelectField label="Principal objetivo" value={goal} onChange={setGoal} options={GOALS} hint="Guia a IA para gerar conteúdo e plano de ação relevantes" />
         </SectionCard>
 
-        <SectionCard title="Presença digital">
+        <SectionCard id="section-presenca" title="Presença digital">
           <p style={{ fontSize: '12px', color: MUTED, marginBottom: '18px', lineHeight: 1.6 }}>
             Quanto mais canais você preencher, mais completo e assertivo será o diagnóstico e os posts gerados pela IA.
           </p>
@@ -394,7 +436,7 @@ export default function SettingsPage() {
           </button>
         </SectionCard>
 
-        <SectionCard title="Conta">
+        <SectionCard id="section-conta" title="Conta">
           <Field label="E-mail" value={user?.email ?? ''} readOnly />
 
           {upgradeSuccess && (
@@ -410,7 +452,7 @@ export default function SettingsPage() {
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '7px 14px', background: currentPlan === 'free' ? 'rgba(255,255,255,0.04)' : 'rgba(255,109,41,0.1)', border: `1px solid ${currentPlan === 'free' ? BORDER : 'rgba(255,109,41,0.3)'}`, borderRadius: '99px' }}>
               <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: currentPlan === 'free' ? MUTED : ORANGE }} />
               <span style={{ fontSize: '13px', fontWeight: 600, color: currentPlan === 'free' ? MUTED : ORANGE, textTransform: 'capitalize' }}>
-                {currentPlan === 'free' ? 'Gratuito — 30 mensagens/mês' : currentPlan === 'basic' ? 'Basic — 150 mensagens/mês' : 'Pro — ilimitado'}
+                {currentPlan === 'free' ? 'Gratuito — 5 posts/mês' : currentPlan === 'basic' ? 'Basic — 15 posts/mês' : currentPlan === 'pro' ? 'Pro — 35 posts/mês' : 'Ultra — 50 posts/mês'}
               </span>
             </div>
             {currentPlan === 'free' && (
@@ -421,40 +463,98 @@ export default function SettingsPage() {
           </div>
 
           {/* Plan cards */}
-          {currentPlan !== 'pro' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              {PLANS.filter(p => p.key !== currentPlan).map(plan => (
-                <div key={plan.key} style={{ background: 'rgba(255,255,255,0.02)', border: plan.key === 'pro' ? `1px solid rgba(255,109,41,0.35)` : `1px solid ${BORDER}`, borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>{plan.name}</span>
-                      {plan.key === 'pro' && <span style={{ fontSize: '10px', fontWeight: 700, background: ORANGE, color: '#000', padding: '2px 7px', borderRadius: '99px' }}>RECOMENDADO</span>}
+          {currentPlan !== 'ultra' && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
+              {PLANS.filter(p => {
+                const order = ['basic', 'pro', 'ultra']
+                return order.indexOf(p.key) > order.indexOf(currentPlan === 'free' ? '' : currentPlan)
+              }).map(plan => {
+                const isUltra = plan.key === 'ultra'
+                const isPro = plan.key === 'pro'
+                const highlighted = isPro || isUltra
+                const cardBorder = isUltra
+                  ? `2px solid ${ORANGE}`
+                  : isPro
+                  ? `1px solid rgba(255,109,41,0.35)`
+                  : `1px solid ${BORDER}`
+                const cardBg = isUltra ? 'rgba(255,109,41,0.05)' : isPro ? 'rgba(255,109,41,0.03)' : 'rgba(255,255,255,0.02)'
+                const btnBg = highlighted ? ORANGE : 'rgba(255,109,41,0.12)'
+                const btnColor = highlighted ? '#000' : ORANGE
+                return (
+                  <div key={plan.key} style={{ background: cardBg, border: cardBorder, borderRadius: '12px', padding: '18px', display: 'flex', flexDirection: 'column', gap: '12px', boxShadow: isUltra ? '0 0 24px rgba(255,109,41,0.1)' : 'none' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: isUltra ? ORANGE : 'white' }}>{plan.name}</span>
+                        {isPro && !isUltra && <span style={{ fontSize: '10px', fontWeight: 700, background: ORANGE, color: '#000', padding: '2px 7px', borderRadius: '99px' }}>POPULAR</span>}
+                        {isUltra && <span style={{ fontSize: '10px', fontWeight: 700, background: ORANGE, color: '#000', padding: '2px 7px', borderRadius: '99px' }}>ULTRA</span>}
+                      </div>
+                      <div style={{ fontSize: '18px', fontWeight: 800, color: highlighted ? ORANGE : 'white' }}>{plan.price}</div>
                     </div>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: plan.key === 'pro' ? ORANGE : 'white' }}>{plan.price}</div>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {plan.features.map(f => (
+                        <li key={f} style={{ fontSize: '12px', color: MUTED, display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
+                          <span style={{ color: ORANGE, flexShrink: 0, marginTop: '1px' }}>✓</span>{f}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => handleUpgrade(plan.key)}
+                      disabled={upgrading === plan.key}
+                      style={{ padding: '10px', background: btnBg, color: btnColor, fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: highlighted ? 'none' : `1px solid rgba(255,109,41,0.3)`, cursor: upgrading ? 'not-allowed' : 'pointer', opacity: upgrading ? 0.7 : 1, transition: 'opacity 0.2s', boxShadow: highlighted ? '0 4px 14px rgba(255,109,41,0.25)' : 'none' }}
+                    >
+                      {upgrading === plan.key ? 'Redirecionando...' : `Assinar ${plan.name} →`}
+                    </button>
                   </div>
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {plan.features.map(f => (
-                      <li key={f} style={{ fontSize: '12px', color: MUTED, display: 'flex', gap: '6px', alignItems: 'flex-start' }}>
-                        <span style={{ color: ORANGE, flexShrink: 0, marginTop: '1px' }}>✓</span>{f}
-                      </li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => handleUpgrade(plan.key)}
-                    disabled={upgrading === plan.key}
-                    style={{ padding: '10px', background: plan.key === 'pro' ? ORANGE : 'rgba(255,109,41,0.12)', color: plan.key === 'pro' ? '#000' : ORANGE, fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: plan.key === 'pro' ? 'none' : `1px solid rgba(255,109,41,0.3)`, cursor: upgrading ? 'not-allowed' : 'pointer', opacity: upgrading ? 0.7 : 1, transition: 'opacity 0.2s' }}
-                  >
-                    {upgrading === plan.key ? 'Redirecionando...' : `Assinar ${plan.name} →`}
-                  </button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 
-          {currentPlan === 'pro' && (
+          {currentPlan === 'ultra' && (
             <div style={{ fontSize: '13px', color: MUTED, lineHeight: 1.6 }}>
-              Você está no plano Pro. Para gerenciar sua assinatura, acesse o portal do cliente no e-mail de confirmação do Stripe.
+              Você está no plano Ultra. Para gerenciar sua assinatura, acesse o portal do cliente no e-mail de confirmação do Stripe.
             </div>
+          )}
+        </SectionCard>
+
+        <SectionCard id="section-telegram" title="Telegram">
+          <p style={{ fontSize: '12px', color: MUTED, marginBottom: '16px', lineHeight: 1.6 }}>
+            Conecte seu Telegram para receber alertas e acessar o grupo exclusivo com os assistentes de IA.
+          </p>
+
+          {telegramChatId && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px', marginBottom: '16px' }}>
+              <span style={{ fontSize: '13px', color: '#4ade80', fontWeight: 600 }}>✓ Telegram conectado</span>
+            </div>
+          )}
+
+          {telegramGroupLink && (
+            <a href={telegramGroupLink} target="_blank" rel="noreferrer"
+              style={{ display: 'block', marginBottom: '16px', padding: '12px 16px', background: 'rgba(255,109,41,0.08)', border: '1px solid rgba(255,109,41,0.25)', borderRadius: '10px', color: ORANGE, fontSize: '13px', fontWeight: 700, textDecoration: 'none', textAlign: 'center' }}>
+              Entrar no grupo Sales Boost →
+            </a>
+          )}
+
+          {telegramCode ? (
+            <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '12px' }}>
+              <div style={{ fontSize: '11px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '10px' }}>Seu código de conexão</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '26px', fontWeight: 800, color: ORANGE, letterSpacing: '0.12em' }}>{telegramCode}</span>
+                <button onClick={() => { navigator.clipboard.writeText(telegramCode); setTelegramCopied(true); setTimeout(() => setTelegramCopied(false), 2000) }}
+                  style={{ padding: '6px 14px', background: telegramCopied ? 'rgba(74,222,128,0.15)' : 'rgba(255,109,41,0.12)', border: `1px solid ${telegramCopied ? 'rgba(74,222,128,0.3)' : 'rgba(255,109,41,0.3)'}`, borderRadius: '8px', color: telegramCopied ? '#4ade80' : ORANGE, fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                  {telegramCopied ? '✓ Copiado!' : 'Copiar'}
+                </button>
+              </div>
+              <div style={{ marginTop: '12px', fontSize: '12px', color: MUTED, lineHeight: 1.7 }}>
+                Abra o Telegram, encontre o bot <strong style={{ color: 'white' }}>@SalesBoostContentBot</strong> e envie:<br />
+                <span style={{ fontFamily: 'monospace', color: ORANGE }}>/conectar {telegramCode}</span>
+              </div>
+            </div>
+          ) : (
+            <button onClick={generateTelegramCode} disabled={telegramGenerating || !companyId}
+              style={{ padding: '10px 20px', background: 'rgba(255,109,41,0.12)', border: '1px solid rgba(255,109,41,0.3)', borderRadius: '10px', color: ORANGE, fontSize: '13px', fontWeight: 700, cursor: telegramGenerating || !companyId ? 'not-allowed' : 'pointer', opacity: telegramGenerating ? 0.7 : 1 }}>
+              {telegramGenerating ? 'Gerando...' : telegramChatId ? 'Gerar novo código' : 'Conectar Telegram'}
+            </button>
           )}
         </SectionCard>
 
