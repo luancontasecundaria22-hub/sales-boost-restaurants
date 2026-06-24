@@ -1,4 +1,4 @@
-import { TelegramUpdate } from '../../../../shared/types';
+import { TelegramUpdate } from '../../../../shared/notifications/types';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const BOT_NAME = 'marketing';
@@ -40,15 +40,80 @@ async function logEvent(env: Record<string, string>, chatId: number, eventType: 
 
 async function handleStart(chatId: number, _text: string, env: Record<string, string>) {
   const greeting =
-    'Olá! Eu sou o SalesBoostContentBot.\n\n' +
+    'Olá! Eu sou o SalesBoostContentBot 🚀\n\n' +
     'Comandos disponíveis:\n' +
+    '/conectar CÓDIGO — vincular sua conta Sales Boost\n' +
     '/diagnostico — diagnóstico do site\n' +
     '/concorrentes — análise de concorrentes\n' +
     '/relatorio — relatório mensal\n\n' +
-    'Em breve: análise de avaliações e alertas automáticos.';
+    'Após conectar, você pode me fazer perguntas livres sobre marketing e vendas!';
 
   await sendMessage(env, chatId, greeting);
   await logEvent(env, chatId, 'start', '👋 Novo usuário iniciou o bot de marketing');
+}
+
+async function handleConectar(chatId: number, code: string, env: Record<string, string>) {
+  if (!code) {
+    await sendMessage(env, chatId, '⚠️ Use: /conectar CÓDIGO\n\nGere seu código em: Dashboard → Configurações → Telegram');
+    return;
+  }
+
+  const connectUrl = env.TELEGRAM_CONNECT_URL;
+  if (!connectUrl) {
+    await sendMessage(env, chatId, 'Serviço de conexão não configurado.');
+    return;
+  }
+
+  try {
+    const res = await fetch(connectUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-webhook-secret': env.TELEGRAM_WEBHOOK_SECRET ?? '',
+      },
+      body: JSON.stringify({ code, chat_id: chatId, bot_type: 'marketing' }),
+    });
+    const data = await res.json() as { ok?: boolean; error?: string };
+
+    if (data.ok) {
+      await sendMessage(env, chatId, '✅ Conta conectada com sucesso!\n\nAgora você pode me perguntar qualquer coisa sobre marketing, posts, avaliações ou estratégias. Pode falar!');
+      await logEvent(env, chatId, 'conectar_ok', '✅ Conta conectada ao Telegram via código');
+    } else {
+      await sendMessage(env, chatId, `❌ ${data.error ?? 'Código inválido ou já utilizado.'}\n\nGere um novo código no dashboard.`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'erro desconhecido';
+    await sendMessage(env, chatId, `❌ Falha ao conectar: ${message}`);
+  }
+}
+
+async function handleFreeChat(chatId: number, text: string, env: Record<string, string>) {
+  const chatUrl = env.TELEGRAM_CHAT_URL;
+  if (!chatUrl) {
+    await sendMessage(env, chatId, 'Comando não reconhecido. Use /start para ver os comandos disponíveis.');
+    return;
+  }
+
+  try {
+    const res = await fetch(chatUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-webhook-secret': env.TELEGRAM_WEBHOOK_SECRET ?? '',
+      },
+      body: JSON.stringify({ chat_id: chatId, message: text, bot_type: 'marketing' }),
+    });
+    const data = await res.json() as { reply?: string; error?: string };
+
+    if (data.reply) {
+      await sendMessage(env, chatId, data.reply);
+    } else if (data.error) {
+      await sendMessage(env, chatId, `❌ ${data.error}`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'erro desconhecido';
+    await sendMessage(env, chatId, `❌ Erro ao processar mensagem: ${message}`);
+  }
 }
 
 async function handleDiagnostico(chatId: number, _text: string, env: Record<string, string>) {
@@ -130,6 +195,7 @@ async function handleRelatorio(chatId: number, _text: string, env: Record<string
 
 const COMMANDS = new Map<string, (chatId: number, text: string, env: Record<string, string>) => Promise<void>>([
   ['/start', handleStart],
+  ['/conectar', handleConectar],
   ['/diagnostico', handleDiagnostico],
   ['/diagnostico_site', handleDiagnostico],
   ['/concorrentes', handleConcorrentes],
@@ -142,13 +208,36 @@ export async function handleTelegramUpdate(update: TelegramUpdate, env: Record<s
   if (!message || !message.text) return { ok: true };
 
   const chatId = message.chat.id;
+  const chatType = message.chat.type; // "private" | "group" | "supergroup"
   const text = message.text.trim();
   const [command, ...rest] = text.split(/\s+/);
   const args = rest.join(' ');
 
+  // Em grupos, só responde a comandos ou quando mencionado
+  if (chatType === 'group' || chatType === 'supergroup') {
+    const botUsername = env.BOT_USERNAME || '';
+    const mentioned = text.includes(`@${botUsername}`);
+
+    if (!mentioned && !command.startsWith('/')) {
+      return { ok: true };
+    }
+
+    // Remove menção do texto para processar o comando
+    const cleanCommand = command.replace(new RegExp(`@${botUsername}$`), '');
+    const handler = COMMANDS.get(cleanCommand.toLowerCase());
+    if (!handler) {
+      await sendMessage(env, chatId, 'Comando não reconhecido. Use /start para ver os comandos disponíveis.');
+      return { ok: true };
+    }
+    await handler(chatId, args, env);
+    return { ok: true };
+  }
+
+  // Chat privado
   const handler = COMMANDS.get(command.toLowerCase());
   if (!handler) {
-    await sendMessage(env, chatId, 'Comando não reconhecido. Use /start para ver os comandos disponíveis.');
+    // Mensagem livre — encaminha para o agente de IA
+    await handleFreeChat(chatId, text, env);
     return { ok: true };
   }
 

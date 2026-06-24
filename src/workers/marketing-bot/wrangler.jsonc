@@ -4,6 +4,11 @@
   "compatibility_flags": ["nodejs_compat"],
   "compatibility_date": "2025-06-01",
   "vars": {
-    "BOT_TYPE": "marketing"
+    "BOT_TYPE": "marketing",
+    "DIAGNOSTIC_EDGE_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/claim-diagnostic",
+    "COMPETITORS_EDGE_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/map-competitors",
+    "REPORT_EDGE_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/generate-report",
+    "TELEGRAM_CONNECT_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/telegram-connect",
+    "TELEGRAM_CHAT_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/telegram-chat"
   }
 }
