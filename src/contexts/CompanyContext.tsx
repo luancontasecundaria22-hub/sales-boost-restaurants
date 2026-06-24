@@ -1,0 +1,58 @@
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { useAuth } from './AuthContext'
+
+export interface CompanyData {
+  id: string
+  business_name: string
+  business_type: string | null
+  city: string | null
+  phone: string | null
+  website_url: string | null
+  instagram_url: string | null
+  facebook_url: string | null
+  google_place_id: string | null
+  google_rating: number | null
+  google_review_count: number | null
+  instagram_user_id: string | null
+  plan: string | null
+}
+
+interface CompanyContextType {
+  company: CompanyData | null
+  loading: boolean
+  refreshCompany: () => Promise<void>
+}
+
+const CompanyContext = createContext<CompanyContextType>({
+  company: null,
+  loading: true,
+  refreshCompany: async () => {},
+})
+
+export function CompanyProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  const [company, setCompany] = useState<CompanyData | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const fetchCompany = useCallback(async () => {
+    if (!user) { setCompany(null); setLoading(false); return }
+    const { data } = await supabase
+      .from('companies')
+      .select('id, business_name, business_type, city, phone, website_url, instagram_url, facebook_url, google_place_id, google_rating, google_review_count, instagram_user_id, plan')
+      .eq('user_id', user.id)
+      .maybeSingle()
+    setCompany(data as CompanyData | null)
+    setLoading(false)
+  }, [user])
+
+  useEffect(() => { fetchCompany() }, [fetchCompany])
+
+  return (
+    <CompanyContext.Provider value={{ company, loading, refreshCompany: fetchCompany }}>
+      {children}
+    </CompanyContext.Provider>
+  )
+}
+
+export const useCompany = () => useContext(CompanyContext)
