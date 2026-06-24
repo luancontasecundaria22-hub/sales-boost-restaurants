@@ -73,10 +73,18 @@ async function handleConectar(chatId: number, code: string, env: Record<string, 
       },
       body: JSON.stringify({ code, chat_id: chatId, bot_type: 'marketing' }),
     });
-    const data = await res.json() as { ok?: boolean; error?: string };
+    const data = await res.json() as { ok?: boolean; error?: string; group_invite_link?: string };
 
     if (data.ok) {
-      await sendMessage(env, chatId, '✅ Conta conectada com sucesso!\n\nAgora você pode me perguntar qualquer coisa sobre marketing, posts, avaliações ou estratégias. Pode falar!');
+      if (data.group_invite_link) {
+        await sendMessage(env, chatId,
+          '✅ Conta conectada com sucesso!\n\n' +
+          'Clique no link abaixo para entrar no seu grupo Sales Boost — lá você encontra os dois assistentes:\n\n' +
+          data.group_invite_link
+        );
+      } else {
+        await sendMessage(env, chatId, '✅ Conta conectada com sucesso!\n\nUse /start para ver os comandos disponíveis.');
+      }
       await logEvent(env, chatId, 'conectar_ok', '✅ Conta conectada ao Telegram via código');
     } else {
       await sendMessage(env, chatId, `❌ ${data.error ?? 'Código inválido ou já utilizado.'}\n\nGere um novo código no dashboard.`);
@@ -87,34 +95,6 @@ async function handleConectar(chatId: number, code: string, env: Record<string, 
   }
 }
 
-async function handleFreeChat(chatId: number, text: string, env: Record<string, string>) {
-  const chatUrl = env.TELEGRAM_CHAT_URL;
-  if (!chatUrl) {
-    await sendMessage(env, chatId, 'Comando não reconhecido. Use /start para ver os comandos disponíveis.');
-    return;
-  }
-
-  try {
-    const res = await fetch(chatUrl, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-webhook-secret': env.TELEGRAM_WEBHOOK_SECRET ?? '',
-      },
-      body: JSON.stringify({ chat_id: chatId, message: text, bot_type: 'marketing' }),
-    });
-    const data = await res.json() as { reply?: string; error?: string };
-
-    if (data.reply) {
-      await sendMessage(env, chatId, data.reply);
-    } else if (data.error) {
-      await sendMessage(env, chatId, `❌ ${data.error}`);
-    }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'erro desconhecido';
-    await sendMessage(env, chatId, `❌ Erro ao processar mensagem: ${message}`);
-  }
-}
 
 async function handleDiagnostico(chatId: number, _text: string, env: Record<string, string>) {
   const edgeUrl = env.DIAGNOSTIC_EDGE_URL;
@@ -236,8 +216,7 @@ export async function handleTelegramUpdate(update: TelegramUpdate, env: Record<s
   // Chat privado
   const handler = COMMANDS.get(command.toLowerCase());
   if (!handler) {
-    // Mensagem livre — encaminha para o agente de IA
-    await handleFreeChat(chatId, text, env);
+    await sendMessage(env, chatId, 'Comando não reconhecido. Use /start para ver os comandos disponíveis.');
     return { ok: true };
   }
 
