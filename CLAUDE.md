@@ -96,6 +96,83 @@ contexto da empresa (`companies`) e memória (`agent_messages`, marcada por agen
 MVP atual usa 1 agente (CMO/agente-chat existente). Fase 2: generalizar com
 `agent_role` em `agent_messages` + seletor no HUD.
 
+## Decisão de arquitetura: Hermes é o cérebro central (não o `agent-chat`)
+
+> Decisão registrada em 2026-07-02. Isso substitui qualquer suposição anterior
+> de que a Edge Function `agent-chat` é, para sempre, o "cérebro" do produto.
+> Vale a partir da Fase 2 do Jarvis (multi-agente) em diante — ver Roadmap.
+
+O Sales Boost tem duas arquiteturas possíveis para o motor de agentes, e a
+escolhida é a segunda:
+
+**❌ Não é isto (chatbot de tiro único):**
+```
+Canal (Telegram/WhatsApp/Dashboard) → agent-chat (Edge Function) → Claude API → resposta
+```
+Aqui o `agent-chat` monta um prompt grande e o Claude responde direto. Simples
+e barato, mas é só um chatbot: não planeja, não delega, não coordena outros
+agentes.
+
+**✅ É isto (equipe de agentes orquestrada pelo Hermes):**
+```
+Canais (Instagram, WhatsApp, Telegram, Dashboard, Site)
+        ↓
+   Hermes Gateway (Railway)  ← O CÉREBRO
+        ↓
+   CEO Agent → delega para → CMO / Sales Rep / Researcher / Data Analyst / Customer Success
+        ↓
+   Ferramentas do Sales Boost (Supabase, Google Reviews, CRM, Email, WhatsApp)
+```
+
+### Papel de cada peça
+
+- **Hermes (Railway)** — orquestrador central. Recebe o objetivo do dono
+  (ex: "faça uma campanha para o Dia dos Pais"), planeja, decide quais
+  agentes acionar e em que ordem, mantém memória compartilhada entre eles,
+  chama as ferramentas do Sales Boost e devolve o resultado final.
+- **`agent-chat` (Supabase Edge Function)** — deixa de ser o cérebro e vira
+  **apenas uma interface**: autentica, monta o contexto da empresa, chama o
+  Hermes e devolve a resposta para o canal (Telegram, dashboard, Jarvis).
+  Não raciocina mais sozinho:
+  ```ts
+  // agent-chat depois da migração para Hermes
+  const response = await callHermes({ companyId, message, channel })
+  return response
+  ```
+- **Ferramentas do Sales Boost** (`create_post`, listar leads, responder
+  review, consultar métricas, etc.) continuam existindo, mas passam a ser
+  chamadas *pelo Hermes*, não diretamente pelo Claude dentro do `agent-chat`.
+- **Supabase** continua sendo o banco/memória persistente, usado tanto pelo
+  Hermes quanto pelo restante do Sales Boost.
+
+### Por quê
+
+- O produto não é um chatbot que responde — é uma **equipe de agentes** (CEO,
+  CMO, Sales Rep, Researcher, Data Analyst, Customer Success) que planeja e
+  executa tarefas de marketing/vendas com o mínimo de intervenção manual.
+- Toda a lógica dentro de uma única Edge Function funciona para MVP, mas não
+  escala para orquestração dinâmica (delegação, replanejamento, múltiplos
+  agentes trabalhando na mesma tarefa).
+- Hermes como camada de orquestração separada permite adicionar agentes novos
+  sem reescrever `agent-chat`, reaproveitar a mesma orquestração para vender
+  "agentes" como produto para outras empresas, e manter memória compartilhada
+  entre agentes de forma mais robusta do que dentro de uma única função.
+
+### O que isso significa na prática para quem for codar
+
+- **Não** adicionar lógica de orquestração multi-agente dentro de `agent-chat`.
+  Se a tarefa é "fazer o Claude decidir entre vários agentes / planejar /
+  delegar", isso é trabalho do Hermes, não da Edge Function.
+- `agent-chat` deve tender a ficar **mais fino** com o tempo, não mais gordo:
+  autenticar, montar contexto, chamar Hermes, devolver resposta.
+- "Jarvis Fase 2: Multi-agente" e "Jarvis Fase 3: Modo reunião" (Roadmap
+  abaixo) são, na prática, o Hermes entrando em cena — não uma reimplementação
+  de multi-agente dentro do Supabase/Edge Functions.
+- Hermes roda fora do Supabase/Cloudflare, em infraestrutura própria
+  (Railway). O contrato de API entre `agent-chat` e o Hermes (autenticação,
+  formato de request/response, endpoint de deploy) ainda não está definido
+  neste repositório — quando a integração começar, documentar aqui.
+
 ## As 4 peças do produto
 
 ### 1. Jarvis (voz + HUD 3D)
@@ -207,9 +284,12 @@ Custo de API por cliente: ~$0,20–$0,80/mês (Claude Sonnet) + ~$0,10–$0,30/m
 - [ ] **Fase 4:** Integrações de canal reais — GBP (OAuth + resposta a reviews)
       e Instagram (sync via Apify) já funcionam; falta WhatsApp e E-mail
 - [ ] **Fase 5:** Botão "Resolver tudo" (fila de ações em lote com aprovação)
-- [ ] **Jarvis Fase 2:** Multi-agente — 7 papéis com `agent_role`, seletor no HUD
-- [ ] **Jarvis Fase 3:** Modo "reunião" — CEO orquestra todos os agentes
-- [ ] **Jarvis 24/7:** Crons + webhooks para agentes rodarem autonomamente
+- [ ] **Jarvis Fase 2:** Multi-agente via **Hermes** (Railway) como orquestrador
+      central — `agent-chat` vira interface fina que só chama o Hermes (ver
+      seção "Decisão de arquitetura: Hermes é o cérebro central" acima); 7
+      papéis com `agent_role`, seletor no HUD
+- [ ] **Jarvis Fase 3:** Modo "reunião" — CEO (no Hermes) orquestra todos os agentes
+- [ ] **Jarvis 24/7:** Crons + webhooks para o Hermes rodar agentes autonomamente
 - [x] Stripe — checkout + webhook (`create-checkout`, `stripe-webhook`)
 - [ ] Onboarding self-service com relatório demo em 24h
 - [ ] Definir e instrumentar modelo de cobrança final (a/b/c)
