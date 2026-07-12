@@ -151,7 +151,7 @@ export default function OverviewPage() {
       supabase.from('agent_messages')
         .select('content, created_at')
         .eq('company_id', co.id)
-        .eq('agent_role', 'ceo')
+        .eq('role', 'assistant')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle(),

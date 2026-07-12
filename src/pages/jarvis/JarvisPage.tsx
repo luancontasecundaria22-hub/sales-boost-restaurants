@@ -10,7 +10,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
 type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking'
 type Lang = 'pt' | 'en'
-type AgentRole = 'ceo' | 'researcher' | 'cmo' | 'sales' | 'analyst' | 'cs'
+type AgentRole = 'cmo' | 'sales'
 
 const VOICE_IDS: Record<Lang, string> = {
   pt: 'pNInz6obpgDQGcFmaJgB', // Adam — multilingual v2, works on all ElevenLabs accounts
@@ -24,17 +24,12 @@ const STATUS_LABELS: Record<Lang, Record<VoiceState, string>> = {
 }
 
 const AGENTS: { role: AgentRole; emoji: string; label: { pt: string; en: string } }[] = [
-  { role: 'ceo',        emoji: '🗂️', label: { pt: 'Secretário', en: 'Secretary'  } },
-  { role: 'researcher', emoji: '🔍', label: { pt: 'Pesquisa',   en: 'Research'   } },
   { role: 'cmo',        emoji: '📣', label: { pt: 'Marketing',  en: 'Marketing'  } },
   { role: 'sales',      emoji: '💼', label: { pt: 'Vendas',     en: 'Sales'      } },
-  { role: 'analyst',    emoji: '📊', label: { pt: 'Dados',      en: 'Data'       } },
-  { role: 'cs',         emoji: '⭐', label: { pt: 'Clientes',   en: 'Clients'    } },
 ]
 
 const AGENT_NAMES: Record<AgentRole, string> = {
-  ceo: 'Agente Secretário', researcher: 'Agente de Pesquisa', cmo: 'Agente de Marketing',
-  sales: 'Agente de Vendas', analyst: 'Agente de Dados', cs: 'Agente de Clientes',
+  cmo: 'Agente de Marketing', sales: 'Agente de Vendas',
 }
 
 // Atmospheric glow behind orb per state
@@ -67,7 +62,7 @@ export default function JarvisPage() {
   const [userText, setUserText]       = useState('')
   const [agentText, setAgentText]     = useState('')
   const [interimText, setInterimText] = useState('')
-  const [agentRole, setAgentRole]     = useState<AgentRole>('ceo')
+  const [agentRole, setAgentRole]     = useState<AgentRole>('cmo')
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null)
   const audioRef       = useRef<HTMLAudioElement | null>(null)

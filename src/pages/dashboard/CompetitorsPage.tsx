@@ -141,7 +141,7 @@ Por favor, estruture a resposta assim:
       const res = await fetch(`${SUPABASE_URL}/functions/v1/agent-chat`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, agent_role: 'ceo', history: [] }),
+        body: JSON.stringify({ message, agent_role: 'cmo', history: [] }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Erro na análise')

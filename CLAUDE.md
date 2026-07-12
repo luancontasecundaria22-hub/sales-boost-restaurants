@@ -14,7 +14,7 @@ food, clínicas, academias, franquias. Não é um conjunto de ferramentas soltas
 1. **Jarvis (assistente de voz + agentes)** — interface principal do produto.
    O dono fala por voz (ou texto) e um time de agentes de IA executa tarefas de
    marketing e vendas. Cada agente tem personalidade, ferramentas e especialidade
-   próprias (CEO, Researcher, CMO, Sales Rep, Data Analyst, Customer Success).
+   próprias (CMO/Marketing e Sales Rep/Vendas — ver `agents/`).
    Rota `/jarvis` — tela HUD 3D estilo Tony Stark, sempre ouvindo.
 2. **Agente chat (texto)** — fallback/alternativa ao Jarvis por voz. O dono fala
    em linguagem natural e o agente executa tarefas. Rota `/dashboard/agente`.
@@ -79,22 +79,22 @@ food, clínicas, academias, franquias. Não é um conjunto de ferramentas soltas
    JarvisOrb reage (idle → listening → thinking → speaking)
 ```
 
-### Agentes (roadmap de papéis)
+### Agentes (papéis ativos)
 Cada agente = system prompt + tools + voz ElevenLabs. Todos compartilham
 contexto da empresa (`companies`) e memória (`agent_messages`, marcada por agente).
+Reduzido de 6 para 2 papéis em 2026-07-12 — só Marketing e Vendas importam
+para o negócio hoje. Manual de responsabilidades e plano de operação autônoma
+(ciclo de 30 em 30 min na VPS) de cada um em `agents/marketing/SKILL.md` e
+`agents/sales/SKILL.md`.
 
 | Agente | Especialidade | Motor |
 |--------|--------------|-------|
-| CEO | Orquestra e delega | Claude Sonnet |
-| Researcher | Varre reviews/Maps/redes (Apify) | Claude Haiku |
-| CMO | Posts, conteúdo, calendário | Claude Haiku |
-| Sales Rep | Leads, follow-up, WhatsApp | Claude Haiku |
-| Data Analyst | Métricas, SQL, gráficos | Claude Haiku |
-| Customer Success | Avaliações, retenção | Claude Haiku |
+| CMO (Marketing) | Posts, conteúdo, reputação, concorrência | Claude Haiku |
+| Sales Rep (Vendas) | Leads, follow-up, WhatsApp | Claude Sonnet |
 | Dev (Claude) | Executa código — sou eu | Claude Sonnet/Opus |
 
-MVP atual usa 1 agente (CMO/agente-chat existente). Fase 2: generalizar com
-`agent_role` em `agent_messages` + seletor no HUD.
+Chat de texto (`/dashboard/agente`) usa o agente de Marketing por padrão.
+Jarvis por voz (`/jarvis`) tem seletor entre os 2 agentes.
 
 ## As 4 peças do produto
 

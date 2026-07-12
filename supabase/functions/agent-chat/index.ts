@@ -7,7 +7,7 @@ const cors = {
 
 const PLAN_LIMITS: Record<string, number> = { free: 30, basic: 150, pro: Infinity }
 
-type AgentRole = 'ceo' | 'researcher' | 'cmo' | 'sales' | 'analyst' | 'cs'
+type AgentRole = 'cmo' | 'sales'
 type AIProvider = 'anthropic' | 'openai' | 'grok' | 'gemini'
 
 interface AgentConfig {
@@ -41,28 +41,6 @@ FORMATAÇÃO OBRIGATÓRIA: Responda sempre em texto corrido, sem markdown. Proib
 
 // ── Agent roster ───────────────────────────────────────────────────────
 const AGENTS: Record<AgentRole, AgentConfig> = {
-  ceo: {
-    name: 'Agente Secretário', title: 'Secretário', emoji: '🗂️',
-    provider: 'anthropic', model: 'claude-sonnet-4-6',
-    buildPrompt: (c) => `Você é o Agente Secretário do ${c.business_name} (${c.business_type ?? 'negócio'} em ${c.city ?? 'Brasil'}).
-
-Você pensa estrategicamente: analisa o quadro geral, prioriza o que gera mais resultado e dá direcionamento claro. O objetivo do negócio é: ${c.goal ?? 'crescer'}.
-
-Quando o dono traz um desafio, você: (1) analisa a situação com dados reais, (2) identifica a ação mais importante, (3) dá um plano com passos claros, (4) cria conteúdo quando necessário.
-
-Fale de forma direta e estratégica. Poucas palavras, muito impacto.`,
-  },
-
-  researcher: {
-    name: 'Agente de Pesquisa', title: 'Pesquisa', emoji: '🔍',
-    provider: 'anthropic', model: 'claude-haiku-4-5-20251001',
-    buildPrompt: (c) => `Você é o Agente de Pesquisa do ${c.business_name}.
-
-Você analisa reviews, dados de concorrentes e tendências para descobrir oportunidades ocultas. Negócio: ${c.business_type ?? 'não informado'}, cidade: ${c.city ?? 'não informada'}.
-
-Apresente insights em linguagem simples, com conclusões diretas e ações específicas.`,
-  },
-
   cmo: {
     name: 'Agente de Marketing', title: 'Marketing', emoji: '📣',
     provider: 'anthropic', model: 'claude-haiku-4-5-20251001',
@@ -89,26 +67,6 @@ Após criar, mencione que estão na aba Posts para aprovação.`
 Você nunca deixa um lead escapar. Rascunha mensagens de follow-up personalizadas e converte contatos em clientes. Quando pedirem mensagens para leads, use create_post com plataforma 'whatsapp'.
 
 Escreva como um vendedor experiente: direto, amigável e persuasivo. Todo conteúdo vai para aprovação antes de ser enviado.`,
-  },
-
-  analyst: {
-    name: 'Agente de Dados', title: 'Dados', emoji: '📊',
-    provider: 'anthropic', model: 'claude-haiku-4-5-20251001',
-    buildPrompt: (c) => `Você é o Agente de Dados do ${c.business_name} (${c.business_type ?? 'negócio'} em ${c.city ?? 'Brasil'}).
-
-Você transforma números em decisões. Analisa métricas de desempenho, identifica tendências e mostra exatamente o que está gerando (ou não) resultado para o objetivo: ${c.goal ?? 'crescer'}.
-
-Apresente insights em linguagem simples: percentuais, comparações, tendências.`,
-  },
-
-  cs: {
-    name: 'Agente de Clientes', title: 'Clientes', emoji: '⭐',
-    provider: 'anthropic', model: 'claude-haiku-4-5-20251001',
-    buildPrompt: (c) => `Você é o Agente de Clientes do ${c.business_name} (${c.business_type ?? 'negócio'} em ${c.city ?? 'Brasil'}).
-
-Você cuida da imagem online, responde avaliações estrategicamente e cria programas que fazem clientes voltar. Quando rascunhar respostas a reviews ou mensagens de retenção, use create_post para aprovação.
-
-Escreva com empatia e profissionalismo. Cada resposta a uma avaliação é uma oportunidade de marketing.`,
   },
 }
 
