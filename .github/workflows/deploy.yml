@@ -26,12 +26,12 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          VITE_SUPABASE_URL: https://miwcxakzyforbahpnpst.supabase.co
-          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1pd2N4YWt6eWZvcmJhaHBucHN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEyMTkyNjIsImV4cCI6MjA5Njc5NTI2Mn0.lCVQOQvfHhQdrwj8wxSVk8T9XZhRGSxp2x9Ki1dMOMQ
-          VITE_GOOGLE_OAUTH_CLIENT_ID: 1061365228370-gmpu651cf493frmc3ck8edhaopt7jjmd.apps.googleusercontent.com
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.VITE_GOOGLE_OAUTH_CLIENT_ID }}
 
       - name: Deploy to Cloudflare Workers
         run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: b434d361ecee109bebf769874d45c536
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

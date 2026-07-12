@@ -30,3 +30,6 @@ dist-ssr
 
 # stray nested clone, not part of this project
 /sales-boost-restaurants/
+
+# Supabase CLI local cache
+supabase/.temp/
