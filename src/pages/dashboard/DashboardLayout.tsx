@@ -35,13 +35,6 @@ function makeNavSections(T: typeof d[keyof typeof d]): NavSection[] {
       }],
     },
     {
-      section: T.layout.sections.sales,
-      items: [{
-        to: '/dashboard/oportunidades', label: T.layout.nav.sales,
-        icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" /></svg>,
-      }],
-    },
-    {
       section: T.layout.sections.marketing,
       items: [{
         to: '/dashboard/posts', label: T.layout.nav.posts,
@@ -49,10 +42,9 @@ function makeNavSections(T: typeof d[keyof typeof d]): NavSection[] {
       }],
     },
     {
-      section: T.layout.sections.competitors,
       items: [{
-        to: '/dashboard/concorrentes', label: T.layout.nav.competitors,
-        icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0 .5 1.5m-.5-1.5h-9.5m0 0-.5 1.5m.75-9 3-3 2.148 2.148A12.061 12.061 0 0 1 16.5 7.605" /></svg>,
+        to: '/dashboard/aprovacoes', label: T.layout.nav.approvals,
+        icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>,
       }],
     },
   ]

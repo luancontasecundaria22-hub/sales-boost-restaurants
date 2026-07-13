@@ -16,9 +16,8 @@ import DiagnosticsPage from './pages/dashboard/DiagnosticsPage.tsx'
 import InsightsPage from './pages/dashboard/InsightsPage.tsx'
 import SettingsPage from './pages/dashboard/SettingsPage.tsx'
 import PostsPage from './pages/dashboard/PostsPage.tsx'
-import CompetitorsPage from './pages/dashboard/CompetitorsPage.tsx'
 import AgentePage from './pages/dashboard/AgentePage.tsx'
-import OpportunitiesPage from './pages/dashboard/OpportunitiesPage.tsx'
+import ApprovalsPage from './pages/dashboard/ApprovalsPage.tsx'
 import ReportPage from './pages/dashboard/ReportPage.tsx'
 import JarvisPage from './pages/jarvis/JarvisPage.tsx'
 import OwnerPage from './pages/owner/OwnerPage.tsx'
@@ -75,8 +74,9 @@ function RouterRoot() {
         <Route path="integrations" element={<Navigate to="/dashboard/settings?tab=integracoes" replace />} />
         <Route path="posts" element={<PostsPage />} />
         <Route path="agente" element={<AgentePage />} />
-        <Route path="oportunidades" element={<OpportunitiesPage />} />
-        <Route path="concorrentes" element={<CompetitorsPage />} />
+        <Route path="oportunidades" element={<Navigate to="/dashboard/posts?tab=oportunidades" replace />} />
+        <Route path="concorrentes" element={<Navigate to="/dashboard/posts?tab=concorrentes" replace />} />
+        <Route path="aprovacoes" element={<ApprovalsPage />} />
         <Route path="relatorio" element={<ReportPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>

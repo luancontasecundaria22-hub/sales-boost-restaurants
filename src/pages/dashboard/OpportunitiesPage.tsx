@@ -13,7 +13,7 @@ const D = "'Bricolage Grotesque', system-ui, sans-serif"
 const BORDER = 'rgba(255,255,255,0.06)'
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
-interface Opportunity {
+export interface Opportunity {
   id: string
   type: string
   title: string
@@ -41,7 +41,7 @@ const TYPE_COLORS: Record<string, { color: string; bg: string; icon: string }> =
   low_engagement:    { color: '#60a5fa', bg: 'rgba(96,165,250,0.1)',  icon: '📉' },
 }
 
-function OppCard({
+export function OppCard({
   opp, session, onResolve, onDismiss, T,
 }: {
   opp: Opportunity; session: { access_token: string } | null

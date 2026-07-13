@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { ViralTrendsTab, CampanhasTab } from './MarketingTabs'
 import AudienciaTab from './AudienciaTab'
 import DiagnosticsPage from './DiagnosticsPage'
+import OpportunitiesPage from './OpportunitiesPage'
+import CompetitorsPage from './CompetitorsPage'
 import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
 
@@ -17,9 +19,9 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
 const PLAN_LIMITS: Record<string, number> = { free: 5, basic: 15, pro: 35, ultra: 50 }
 
-type PostStatus = 'rascunho' | 'aprovado' | 'publicado'
+export type PostStatus = 'rascunho' | 'aprovado' | 'publicado'
 
-interface Post {
+export interface Post {
   id: string
   content: string
   image_suggestion: string | null
@@ -46,7 +48,7 @@ function StatusBadge({ status, label }: { status: PostStatus; label: string }) {
   )
 }
 
-function PostCard({ post, onStatusChange, locked, T }: {
+export function PostCard({ post, onStatusChange, locked, T }: {
   post: Post
   onStatusChange: (id: string, status: PostStatus) => void
   locked: boolean
@@ -251,7 +253,13 @@ export default function PostsPage() {
   const [monthlyCount, setMonthlyCount] = useState(0)
   const [monthlyLimit, setMonthlyLimit] = useState(5)
   const autoGenTriggered = useRef(false)
-  const [activeTab, setActiveTab] = useState('posts')
+  const [searchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'posts')
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    if (tab) setActiveTab(tab)
+  }, [searchParams])
 
   const loadPostsOnly = async () => {
     if (!user) return
@@ -408,6 +416,8 @@ export default function PostsPage() {
         )}
       </div>}
 
+      {activeTab === 'oportunidades' && <OpportunitiesPage />}
+      {activeTab === 'concorrentes' && <CompetitorsPage />}
       {activeTab === 'audiencia' && <AudienciaTab />}
       {activeTab === 'trends' && <ViralTrendsTab />}
       {activeTab === 'campanhas' && <CampanhasTab />}

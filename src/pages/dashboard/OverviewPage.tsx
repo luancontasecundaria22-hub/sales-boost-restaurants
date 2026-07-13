@@ -321,7 +321,7 @@ export default function OverviewPage() {
                     )}
                   </div>
                 ))}
-                <button onClick={() => navigate('/dashboard/oportunidades')}
+                <button onClick={() => navigate('/dashboard/posts?tab=oportunidades')}
                   style={{ marginTop: '14px', padding: '10px 18px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
                   {T.resolveNow}
                 </button>

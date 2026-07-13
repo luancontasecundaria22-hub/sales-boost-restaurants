@@ -5,7 +5,7 @@ export const d = {
       planFree: 'Plano Free',
       signOut: 'Sair da conta',
       sections: { meetings: 'Reuniões', sales: 'Vendas', marketing: 'Marketing', competitors: 'Concorrentes' },
-      nav: { overview: 'Visão Geral', jarvis: 'Jarvis', sales: 'Vendas', posts: 'Posts', competitors: 'Concorrentes', integrations: 'Integrações', settings: 'Configurações' },
+      nav: { overview: 'Visão Geral', jarvis: 'Jarvis', sales: 'Vendas', posts: 'Marketing', competitors: 'Concorrentes', integrations: 'Integrações', settings: 'Configurações', approvals: 'Aprovações' },
     },
     common: {
       loading: 'Carregando...',
@@ -62,8 +62,8 @@ export const d = {
     posts: {
       title: 'Marketing',
       subtitle: 'Posts criados pelo Agente de Marketing com base no perfil do seu negócio',
-      tabs: ['Posts', 'Audiência', 'Viral Trends', 'Campanhas', 'Diagnóstico'],
-      tabIds: ['posts', 'audiencia', 'trends', 'campanhas', 'diagnostico'],
+      tabs: ['Posts', 'Oportunidades', 'Concorrentes', 'Audiência', 'Viral Trends', 'Campanhas', 'Diagnóstico'],
+      tabIds: ['posts', 'oportunidades', 'concorrentes', 'audiencia', 'trends', 'campanhas', 'diagnostico'],
       statuses: { rascunho: 'Rascunho', aprovado: 'Aprovado', publicado: 'Publicado' },
       filterLabels: { todos: 'Total', rascunho: 'Rascunhos', aprovado: 'Aprovados', publicado: 'Publicados' },
       agentCreating: 'Agente de Marketing criando posts',
@@ -180,6 +180,14 @@ export const d = {
       title: 'Integrações',
       subtitle: 'Conecte seus canais para ampliar o que os agentes conseguem fazer',
     },
+    approvals: {
+      title: 'Aprovações',
+      subtitle: 'Tudo que os agentes prepararam e está esperando seu sinal verde',
+      postsSection: 'Posts aguardando aprovação',
+      reviewsSection: 'Respostas de review aguardando aprovação',
+      emptyAll: '✓ Nada esperando você agora',
+      emptyAllDesc: 'Quando o agente gerar um post ou rascunhar uma resposta de review, vai aparecer aqui.',
+    },
   },
   en: {
     layout: {
@@ -187,7 +195,7 @@ export const d = {
       planFree: 'Free Plan',
       signOut: 'Sign out',
       sections: { meetings: 'Meetings', sales: 'Sales', marketing: 'Marketing', competitors: 'Competitors' },
-      nav: { overview: 'Overview', jarvis: 'Jarvis', sales: 'Sales', posts: 'Posts', competitors: 'Competitors', integrations: 'Integrations', settings: 'Settings' },
+      nav: { overview: 'Overview', jarvis: 'Jarvis', sales: 'Sales', posts: 'Marketing', competitors: 'Competitors', integrations: 'Integrations', settings: 'Settings', approvals: 'Approvals' },
     },
     common: {
       loading: 'Loading...',
@@ -244,8 +252,8 @@ export const d = {
     posts: {
       title: 'Marketing',
       subtitle: 'Posts created by the Marketing Agent based on your business profile',
-      tabs: ['Posts', 'Audience', 'Viral Trends', 'Campaigns', 'Diagnosis'],
-      tabIds: ['posts', 'audiencia', 'trends', 'campanhas', 'diagnostico'],
+      tabs: ['Posts', 'Opportunities', 'Competitors', 'Audience', 'Viral Trends', 'Campaigns', 'Diagnosis'],
+      tabIds: ['posts', 'oportunidades', 'concorrentes', 'audiencia', 'trends', 'campanhas', 'diagnostico'],
       statuses: { rascunho: 'Draft', aprovado: 'Approved', publicado: 'Published' },
       filterLabels: { todos: 'Total', rascunho: 'Drafts', aprovado: 'Approved', publicado: 'Published' },
       agentCreating: 'Marketing Agent creating posts',
@@ -361,6 +369,14 @@ export const d = {
     integrations: {
       title: 'Integrations',
       subtitle: 'Connect your channels to expand what the agents can do',
+    },
+    approvals: {
+      title: 'Approvals',
+      subtitle: 'Everything the agents prepared and is waiting on your go-ahead',
+      postsSection: 'Posts awaiting approval',
+      reviewsSection: 'Review replies awaiting approval',
+      emptyAll: '✓ Nothing waiting on you right now',
+      emptyAllDesc: 'When the agent generates a post or drafts a review reply, it will show up here.',
     },
   },
 }

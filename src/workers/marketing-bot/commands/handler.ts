@@ -180,6 +180,36 @@ const COMMANDS = new Map<string, (chatId: number, text: string, env: Record<stri
   ['report', handleRelatorio],
 ]);
 
+async function handleFreeText(chatId: number, text: string, env: Record<string, string>) {
+  const chatUrl = env.TELEGRAM_CHAT_URL;
+  if (!chatUrl) {
+    await sendMessage(env, chatId, 'Serviço de chat não configurado.');
+    return;
+  }
+
+  try {
+    const res = await fetch(chatUrl, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-webhook-secret': env.TELEGRAM_WEBHOOK_SECRET ?? '',
+      },
+      body: JSON.stringify({ chat_id: chatId, message: text, bot_type: 'marketing' }),
+    });
+    const data = await res.json() as { reply?: string; error?: string };
+
+    if (data.reply) {
+      await sendMessage(env, chatId, data.reply);
+      await logEvent(env, chatId, 'chat_response', `💬 Resposta automática enviada: ${text.substring(0, 50)}`);
+    } else if (data.error) {
+      await sendMessage(env, chatId, `❌ Erro ao processar mensagem: ${data.error}`);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'erro desconhecido';
+    await sendMessage(env, chatId, `❌ Falha ao processar: ${message}`);
+  }
+}
+
 export async function handleTelegramUpdate(update: TelegramUpdate, env: Record<string, string>) {
   const message = update.message ?? update.edited_message;
   if (!message || !message.text) return { ok: true };
@@ -212,11 +242,13 @@ export async function handleTelegramUpdate(update: TelegramUpdate, env: Record<s
 
   // Chat privado
   const handler = COMMANDS.get(command.toLowerCase());
-  if (!handler) {
-    await sendMessage(env, chatId, 'Comando não reconhecido. Use /start para ver os comandos disponíveis.');
+  if (handler) {
+    // É um comando registrado
+    await handler(chatId, args, env);
     return { ok: true };
   }
 
-  await handler(chatId, args, env);
+  // Não é comando → processar como conversa natural com Claude
+  await handleFreeText(chatId, text, env);
   return { ok: true };
 }
