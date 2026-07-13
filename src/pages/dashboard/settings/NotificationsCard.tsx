@@ -3,7 +3,7 @@ import { useAuth } from '../../../contexts/AuthContext'
 import { supabase } from '../../../lib/supabase'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
-const MARKETING_BOT_USERNAME = 'SalesBoostContentBot'
+const MARKETING_BOT_USERNAME = 'luansoaresribeirobot'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'

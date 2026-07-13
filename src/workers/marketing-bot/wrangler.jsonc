@@ -5,7 +5,7 @@
   "compatibility_date": "2025-06-01",
   "vars": {
     "BOT_TYPE": "marketing",
-    "BOT_USERNAME": "SalesBoostContentBot",
+    "BOT_USERNAME": "luansoaresribeirobot",
     "DIAGNOSTIC_EDGE_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/claim-diagnostic",
     "COMPETITORS_EDGE_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/map-competitors",
     "REPORT_EDGE_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/generate-report",

@@ -408,8 +408,8 @@ export default function OverviewPage() {
           {botNotifications.length === 0 ? (
             <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
               {lang === 'en'
-                ? 'No bot activity yet. Send /start to @SalesBoostContentBot or @SalesBoostVendassBot on Telegram.'
-                : 'Nenhuma atividade ainda. Mande /start para @SalesBoostContentBot ou @SalesBoostVendassBot no Telegram.'}
+                ? 'No bot activity yet. Send /start to @luansoaresribeirobot on Telegram.'
+                : 'Nenhuma atividade ainda. Mande /start para @luansoaresribeirobot no Telegram.'}
             </div>
           ) : (
             <div style={{ padding: '8px 0' }}>
