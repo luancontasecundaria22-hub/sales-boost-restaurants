@@ -79,18 +79,10 @@ async function handleConectar(chatId: number, code: string, env: Record<string, 
       },
       body: JSON.stringify({ code, chat_id: chatId, bot_type: 'marketing' }),
     });
-    const data = await res.json() as { ok?: boolean; error?: string; group_invite_link?: string };
+    const data = await res.json() as { ok?: boolean; error?: string };
 
     if (data.ok) {
-      if (data.group_invite_link) {
-        await sendMessage(env, chatId,
-          '✅ Conta conectada com sucesso!\n\n' +
-          'Clique no link abaixo para entrar no seu grupo Sales Boost — lá você encontra os dois assistentes:\n\n' +
-          data.group_invite_link
-        );
-      } else {
-        await sendMessage(env, chatId, '✅ Conta conectada com sucesso!\n\nUse /start para ver os comandos disponíveis.');
-      }
+      await sendMessage(env, chatId, '✅ Conta conectada com sucesso!\n\nVocê vai receber os avisos e sugestões aqui mesmo, direto nesta conversa. Use /start para ver os comandos disponíveis.');
       await logEvent(env, chatId, 'conectar_ok', '✅ Conta conectada ao Telegram via código');
     } else {
       await sendMessage(env, chatId, `❌ ${data.error ?? 'Código inválido ou já utilizado.'}\n\nGere um novo código no dashboard.`);

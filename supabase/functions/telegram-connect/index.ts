@@ -37,12 +37,6 @@ Deno.serve(async (req) => {
 
     if (findErr || !row) return json({ error: 'Código inválido ou já utilizado' }, 404)
 
-    // Get company info
-    const { data: company } = await admin.from('companies')
-      .select('business_name, telegram_group_invite_link')
-      .eq('id', row.company_id)
-      .single()
-
     // Link chat_id to company
     await admin.from('companies').update({ telegram_chat_id: chat_id }).eq('id', row.company_id)
 
@@ -58,41 +52,10 @@ Deno.serve(async (req) => {
       context: {},
     }, { onConflict: 'telegram_chat_id,bot_type' })
 
-    // Auto-create private Telegram group via group-manager Worker
-    const GROUP_MANAGER_URL = 'https://group-manager.luancontasecundaria22.workers.dev'
-    let groupInviteLink = company?.telegram_group_invite_link ?? null
-    const webhookSecret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
-
-    if (webhookSecret && !groupInviteLink) {
-      try {
-        const gmRes = await fetch(GROUP_MANAGER_URL, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            'x-webhook-secret': webhookSecret,
-          },
-          body: JSON.stringify({
-            client_user_id: chat_id,
-            company_name: company?.business_name ?? 'Cliente',
-            company_id: row.company_id,
-          }),
-        })
-        const gmData = await gmRes.json() as { ok?: boolean; invite_link?: string }
-        if (gmData.ok && gmData.invite_link) {
-          groupInviteLink = gmData.invite_link
-          await admin.from('companies')
-            .update({ telegram_group_invite_link: groupInviteLink })
-            .eq('id', row.company_id)
-        }
-      } catch (e) {
-        console.error('group-manager call failed (non-fatal):', e)
-      }
-    }
-
+    // Conexão é sempre no chat privado com o bot principal — nenhum grupo é criado.
     return json({
       ok: true,
       company_id: row.company_id,
-      group_invite_link: groupInviteLink,
     })
   } catch (err) {
     return json({ error: String(err) }, 500)
