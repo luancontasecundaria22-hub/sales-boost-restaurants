@@ -18,6 +18,15 @@ function buildNotificationText(payload: {
       return `⚠️ Nova avaliação negativa!\n⭐ ${(data?.rating as string) ?? ''} | ${(data?.source as string) ?? ''}\n${(data?.excerpt as string) ?? ''}`;
     case 'OPPORTUNITY_DETECTED':
       return `💰 Oportunidade detectada!\n${(data?.description as string) ?? 'Nova oportunidade encontrada'}\nUse /relatorio para mais detalhes.`;
+    case 'CYCLE_SUMMARY': {
+      const openCount = (data?.openCount as number) ?? 0;
+      const newCount = (data?.newCount as number) ?? 0;
+      const suggestions = (data?.suggestions as string[]) ?? [];
+      if (openCount === 0) return '✅ Tudo em dia! Nenhuma oportunidade pendente no momento.';
+      const list = suggestions.map(s => `• ${s}`).join('\n');
+      const novidade = newCount > 0 ? `${newCount} nova(s) desta vez.\n` : '';
+      return `📋 Resumo do Agente de Marketing\n${openCount} oportunidade(s) aberta(s) aguardando você:\n${list}\n${novidade}Use /relatorio para mais detalhes.`;
+    }
     case 'REPORT_READY':
       return `📊 Relatório disponível!\nPeríodo: ${(data?.period as string) ?? ''}\nScore: ${(data?.health_score as number) ?? ''}\nUse /relatorio para acessar.`;
     default:

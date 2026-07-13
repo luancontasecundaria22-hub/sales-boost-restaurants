@@ -14,7 +14,6 @@ import DashboardLayout from './pages/dashboard/DashboardLayout.tsx'
 import OverviewPage from './pages/dashboard/OverviewPage.tsx'
 import DiagnosticsPage from './pages/dashboard/DiagnosticsPage.tsx'
 import InsightsPage from './pages/dashboard/InsightsPage.tsx'
-import IntegrationsPage from './pages/dashboard/IntegrationsPage.tsx'
 import SettingsPage from './pages/dashboard/SettingsPage.tsx'
 import PostsPage from './pages/dashboard/PostsPage.tsx'
 import CompetitorsPage from './pages/dashboard/CompetitorsPage.tsx'
@@ -73,7 +72,7 @@ function RouterRoot() {
         <Route index element={<OverviewPage />} />
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="insights" element={<InsightsPage />} />
-        <Route path="integrations" element={<IntegrationsPage />} />
+        <Route path="integrations" element={<Navigate to="/dashboard/settings?tab=integracoes" replace />} />
         <Route path="posts" element={<PostsPage />} />
         <Route path="agente" element={<AgentePage />} />
         <Route path="oportunidades" element={<OpportunitiesPage />} />

@@ -39,8 +39,13 @@ tudo vira rascunho na aba Posts, esperando aprovação do dono.
   cron" pronto (mesma lógica de `cron_secret`), hoje sem ninguém chamando.
 - Quando encontra algo, dispara notificação no Telegram automaticamente
   (`notifyMarketing`).
-- Rascunha respostas a avaliações via `draft-reply` (chamada sob demanda hoje
-  — ainda não integrada ao ciclo automático).
+- Rascunha respostas a avaliações via `draft-reply` — hoje já roda em modo cron
+  dentro do ciclo automático (ver seção final): a cada 30 min, toda review
+  negativa/sem resposta detectada por `detect-opportunities` já ganha uma
+  resposta de IA pronta em `opportunities.ai_draft`, esperando o dono aprovar
+  na aba Oportunidades. Aprovar de fato publica no Google (via
+  `reply-google-review`) — nunca acontece sozinho, sempre precisa do clique do
+  dono. Requer Google Business Profile conectado para publicar de verdade.
 
 ### 3. Concorrência
 - Lê concorrentes mapeados via `list_competitors` (nome, nota, nº de reviews,
@@ -77,12 +82,16 @@ rascunho até o dono aprovar na aba Posts (human-in-the-loop).
 Objetivo: o agente de Marketing roda sozinho na VPS, sem depender do dono
 abrir o app, verificando a cada 30 minutos se há trabalho a fazer.
 
-A cada ciclo (30 em 30 min), o agente deve:
+A cada ciclo (30 em 30 min), o agente deve (implementado em
+`/opt/sales-boost-cron/marketing_cycle.sh`, systemd timer
+`sales-boost-marketing.timer`):
 1. Chamar `detect-opportunities` em modo cron (`cron_secret`) para todas as
    empresas ativas — isso já cobre reputação e conteúdo parado.
-2. Se `no_content` ou `stale_draft` foi detectado para alguma empresa, chamar
+2. Chamar `draft-reply` em modo cron — rascunha automaticamente a resposta de
+   IA para toda review negativa/sem resposta que ainda não tem `ai_draft`.
+3. Se `no_content` ou `stale_draft` foi detectado para alguma empresa, chamar
    `generate-posts` em modo cron para essa empresa (gera até 4 rascunhos).
-3. Não fazer nada além de gerar rascunho + notificar Telegram. Nunca aprovar
+4. Não fazer nada além de gerar rascunho + notificar Telegram. Nunca aprovar
    ou publicar nada.
 
 **Regra de alimentação de contexto:** cada execução do ciclo só recebe o que

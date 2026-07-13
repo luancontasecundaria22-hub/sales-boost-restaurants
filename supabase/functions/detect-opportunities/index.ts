@@ -197,7 +197,17 @@ Deno.serve(async (req) => {
         try {
           const count = await detectForCompany(company as Company, admin)
           total += count
-          if (count > 0) notifyMarketing((company as Company).telegram_chat_id, 'OPPORTUNITY_DETECTED', { description: `${count} nova(s) oportunidade(s) detectada(s)` })
+
+          // Sempre manda um resumo com sugestões, mesmo sem nada novo — nunca fica em silêncio.
+          const [{ count: openCount }, { data: topOpps }] = await Promise.all([
+            admin.from('opportunities').select('id', { count: 'exact', head: true }).eq('company_id', company.id).eq('status', 'open'),
+            admin.from('opportunities').select('title').eq('company_id', company.id).eq('status', 'open').order('created_at', { ascending: false }).limit(5),
+          ])
+          notifyMarketing((company as Company).telegram_chat_id, 'CYCLE_SUMMARY', {
+            newCount: count,
+            openCount: openCount ?? 0,
+            suggestions: (topOpps ?? []).map(o => o.title),
+          })
         } catch (e) {
           console.error(`detect-opportunities: company ${company.id} error:`, e)
         }
@@ -240,7 +250,7 @@ Deno.serve(async (req) => {
     )
 
     if (sorted.length > 0) {
-      notifyMarketing(admin, company.id, 'OPPORTUNITY_DETECTED', {
+      notifyMarketing((company as Company).telegram_chat_id, 'OPPORTUNITY_DETECTED', {
         description: `${sorted.length} oportunidades detectadas`,
         opportunities: sorted.map(o => ({ type: o.type, title: o.title })),
       })
@@ -248,7 +258,7 @@ Deno.serve(async (req) => {
       const negativeTypes = new Set(['negative_review', 'unanswered_review'])
       for (const o of sorted) {
         if (negativeTypes.has(o.type)) {
-          notifyMarketing(admin, company.id, 'NEGATIVE_REVIEW', {
+          notifyMarketing((company as Company).telegram_chat_id, 'NEGATIVE_REVIEW', {
             rating: o.ref_type === 'review' ? 'nova' : undefined,
             source: o.ref_type,
             excerpt: o.title,

@@ -54,6 +54,7 @@ function OppCard({
   const [loadingDraft, setLoadingDraft] = useState(false)
   const [copied, setCopied] = useState(false)
   const [resolving, setResolving] = useState(false)
+  const [resolveError, setResolveError] = useState('')
 
   const typeMeta = TYPE_COLORS[opp.type] ?? TYPE_COLORS.no_content
   const meta = { ...typeMeta, label: T.typeLabels[opp.type as keyof typeof T.typeLabels] ?? opp.type }
@@ -86,19 +87,33 @@ function OppCard({
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const isReviewWithDraft = opp.ref_type === 'review' && !!opp.ref_id && !!draft.trim()
+
   const handleResolve = async () => {
     setResolving(true)
+    setResolveError('')
+
+    if (isReviewWithDraft) {
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/reply-google-review`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session?.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ review_id: opp.ref_id, reply_text: draft }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? 'Erro ao publicar no Google')
+      } catch (e: unknown) {
+        setResolveError(e instanceof Error ? e.message : String(e))
+        setResolving(false)
+        return
+      }
+    }
+
     await supabase.from('opportunities').update({
       status: 'resolved',
       resolved_at: new Date().toISOString(),
     }).eq('id', opp.id)
 
-    if (opp.ref_type === 'review' && opp.ref_id && draft) {
-      await supabase.from('reviews').update({
-        owner_reply: draft,
-        responded_at: new Date().toISOString(),
-      }).eq('id', opp.ref_id)
-    }
     onResolve(opp.id)
     setResolving(false)
   }
@@ -220,13 +235,19 @@ function OppCard({
 
         <button onClick={handleResolve} disabled={resolving}
           style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 700, borderRadius: '8px', cursor: resolving ? 'not-allowed' : 'pointer', background: 'rgba(74,222,128,0.1)', color: '#4ade80', border: '1px solid rgba(74,222,128,0.25)', opacity: resolving ? 0.6 : 1 }}>
-          {resolving ? T.resolving : T.resolve}
+          {resolving
+            ? (isReviewWithDraft ? T.resolvePublishing : T.resolving)
+            : (isReviewWithDraft ? T.resolvePublish : T.resolve)}
         </button>
 
         <button onClick={handleDismiss}
           style={{ padding: '7px 14px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,0.2)', border: `1px solid ${BORDER}` }}>
           {T.dismiss}
         </button>
+
+        {resolveError && (
+          <div style={{ width: '100%', fontSize: '12px', color: '#f87171', marginTop: '4px' }}>{resolveError}</div>
+        )}
       </div>
     </div>
   )

@@ -5,9 +5,10 @@ import { useSearchParams } from 'react-router-dom'
 import { useCompany } from '../../contexts/CompanyContext'
 import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
+import NotificationsCard from './settings/NotificationsCard'
+import IntegrationsTab from './settings/IntegrationsTab'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
-const MARKETING_BOT_USERNAME = 'SalesBoostContentBot'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
@@ -121,7 +122,10 @@ export default function SettingsPage() {
   const { lang } = useLang()
   const T = d[lang].settings
 
+  const [tab, setTab] = useState<'info' | 'integrations'>(searchParams.get('tab') === 'integracoes' ? 'integrations' : 'info')
+
   useEffect(() => {
+    if (searchParams.get('tab') === 'integracoes') setTab('integrations')
     const section = searchParams.get('section')
     if (!section) return
     setTimeout(() => document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
@@ -151,12 +155,6 @@ export default function SettingsPage() {
   const [googleRating, setGoogleRating] = useState<number | null>(null)
   const [googleReviewCount, setGoogleReviewCount] = useState<number | null>(null)
 
-  // Telegram connect
-  const [telegramChatId, setTelegramChatId] = useState<number | null>(null)
-  const [telegramGroupLink, setTelegramGroupLink] = useState('')
-  const [telegramCode, setTelegramCode] = useState('')
-  const [telegramGenerating, setTelegramGenerating] = useState(false)
-
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -172,7 +170,7 @@ export default function SettingsPage() {
     if (!user) return
     supabase
       .from('companies')
-      .select('id, business_name, business_type, city, phone, contact_email, goal, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, tripadvisor_url, reclame_aqui_url, ifood_url, google_place_id, google_rating, google_review_count, plan, agent_messages_used, telegram_chat_id, telegram_group_invite_link')
+      .select('id, business_name, business_type, city, phone, contact_email, goal, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, tripadvisor_url, reclame_aqui_url, ifood_url, google_place_id, google_rating, google_review_count, plan, agent_messages_used')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -197,8 +195,6 @@ export default function SettingsPage() {
           setGoogleReviewCount(data.google_review_count ?? null)
           setCurrentPlan(data.plan ?? 'free')
           setAgentUsed(data.agent_messages_used ?? 0)
-          setTelegramChatId(data.telegram_chat_id ?? null)
-          setTelegramGroupLink(data.telegram_group_invite_link ?? '')
         }
       })
   }, [user])
@@ -282,21 +278,6 @@ export default function SettingsPage() {
     setUpgrading(null)
   }
 
-  const generateTelegramCode = async () => {
-    if (!session) return
-    setTelegramGenerating(true)
-    setTelegramCode('')
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/telegram-link`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      const data = await res.json() as { code?: string; error?: string }
-      if (data.code) setTelegramCode(data.code)
-    } catch { /* silently ignore */ }
-    setTelegramGenerating(false)
-  }
-
   const handleSave = async () => {
     if (!user || !businessName.trim()) { setSaveError('Nome do negócio é obrigatório.'); return }
     setSaving(true)
@@ -349,12 +330,31 @@ export default function SettingsPage() {
 
       <div style={{ padding: '28px 32px', maxWidth: '680px' }}>
 
-        {!companyId && (
+        {/* Tab switcher */}
+        <div style={{ display: 'flex', gap: '6px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '5px', marginBottom: '24px', width: 'fit-content' }}>
+          {([['info', 'Informações da empresa'], ['integrations', 'Integrações']] as const).map(([key, label]) => (
+            <button key={key} onClick={() => setTab(key)}
+              style={{ padding: '9px 18px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, background: tab === key ? ORANGE : 'transparent', color: tab === key ? '#000' : MUTED, transition: 'all 0.15s' }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {!companyId && tab === 'info' && (
           <div style={{ background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '12px', padding: '14px 18px', marginBottom: '20px', fontSize: '13px', color: MUTED, lineHeight: 1.6 }}>
             👋 <strong style={{ color: 'white' }}>Bem-vindo!</strong> Preencha as informações abaixo para configurar seu painel. Depois de salvar, o dashboard mostrará seus dados.
           </div>
         )}
 
+        {tab === 'integrations' && (
+          <>
+            <NotificationsCard />
+            <IntegrationsTab />
+          </>
+        )}
+
+        {tab === 'info' && (
+        <>
         {/* Google Places search */}
         <SectionCard id="section-google" title="Vincular ao Google">
           {googlePlaceId ? (
@@ -517,40 +517,6 @@ export default function SettingsPage() {
           )}
         </SectionCard>
 
-        <SectionCard id="section-telegram" title="Telegram">
-          <p style={{ fontSize: '12px', color: MUTED, marginBottom: '16px', lineHeight: 1.6 }}>
-            Conecte seu Telegram para receber alertas e acessar o grupo exclusivo com os assistentes de IA.
-          </p>
-
-          {telegramChatId && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px', marginBottom: '16px' }}>
-              <span style={{ fontSize: '13px', color: '#4ade80', fontWeight: 600 }}>✓ Telegram conectado</span>
-            </div>
-          )}
-
-          {telegramGroupLink && (
-            <a href={telegramGroupLink} target="_blank" rel="noreferrer"
-              style={{ display: 'block', marginBottom: '16px', padding: '12px 16px', background: 'rgba(255,109,41,0.08)', border: '1px solid rgba(255,109,41,0.25)', borderRadius: '10px', color: ORANGE, fontSize: '13px', fontWeight: 700, textDecoration: 'none', textAlign: 'center' }}>
-              Entrar no grupo Sales Boost →
-            </a>
-          )}
-
-          {telegramCode ? (
-            <a
-              href={`https://t.me/${MARKETING_BOT_USERNAME}?start=${telegramCode}`}
-              target="_blank"
-              rel="noreferrer"
-              style={{ display: 'block', padding: '14px 20px', background: ORANGE, borderRadius: '12px', color: '#000', fontSize: '15px', fontWeight: 800, textAlign: 'center', textDecoration: 'none', letterSpacing: '-0.01em' }}>
-              Abrir Sales Boost no Telegram →
-            </a>
-          ) : (
-            <button onClick={generateTelegramCode} disabled={telegramGenerating || !companyId}
-              style={{ padding: '10px 20px', background: 'rgba(255,109,41,0.12)', border: '1px solid rgba(255,109,41,0.3)', borderRadius: '10px', color: ORANGE, fontSize: '13px', fontWeight: 700, cursor: telegramGenerating || !companyId ? 'not-allowed' : 'pointer', opacity: telegramGenerating ? 0.7 : 1 }}>
-              {telegramGenerating ? 'Gerando...' : telegramChatId ? 'Reconectar Telegram' : 'Conectar Telegram'}
-            </button>
-          )}
-        </SectionCard>
-
         <SectionCard title="Zona de perigo">
           <p style={{ fontSize: '13px', color: MUTED, marginBottom: '14px', lineHeight: 1.5 }}>
             Excluir sua conta remove permanentemente todos os dados. Esta ação não pode ser desfeita.
@@ -559,6 +525,8 @@ export default function SettingsPage() {
             Excluir conta
           </button>
         </SectionCard>
+        </>
+        )}
       </div>
     </div>
   )
