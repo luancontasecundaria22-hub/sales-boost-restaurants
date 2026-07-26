@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useCompany } from '../../contexts/CompanyContext'
 import { supabase } from '../../lib/supabase'
@@ -31,7 +30,6 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 export default function MarketingAiPage() {
   const { session } = useAuth()
   const { company } = useCompany()
-  const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('overview')
   const [loading, setLoading] = useState(true)
 
@@ -77,15 +75,9 @@ export default function MarketingAiPage() {
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: '1100px' }}>
-      <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
-        <div>
-          <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 900, color: 'white', letterSpacing: '-0.03em', marginBottom: '4px' }}>✨ Marketing AI</h1>
-          <p style={{ color: MUTED, fontSize: '13px' }}>Sistema próprio de inteligência de marketing — tracking, conteúdo, concorrentes e estratégia, sempre com aprovação sua antes de publicar.</p>
-        </div>
-        <button onClick={() => navigate('/dashboard/settings?tab=marketing-ai')}
-          style={{ flexShrink: 0, padding: '8px 16px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '9px', color: MUTED, fontSize: '12.5px', cursor: 'pointer' }}>
-          ⚙️ Configurações
-        </button>
+      <div style={{ marginBottom: '20px' }}>
+        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 900, color: 'white', letterSpacing: '-0.03em', marginBottom: '4px' }}>✨ Marketing AI</h1>
+        <p style={{ color: MUTED, fontSize: '13px' }}>Sistema próprio de inteligência de marketing — tracking, conteúdo, concorrentes e estratégia, sempre com aprovação sua antes de publicar.</p>
       </div>
 
       <div style={{ display: 'flex', gap: '6px', marginBottom: '24px', borderBottom: `1px solid ${BORDER}`, paddingBottom: '2px', overflowX: 'auto' }}>
@@ -106,12 +98,9 @@ export default function MarketingAiPage() {
         <div style={{ padding: '48px 32px', textAlign: 'center', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px' }}>
           <div style={{ fontSize: '32px', marginBottom: '12px' }}>✨</div>
           <div style={{ fontSize: '15px', fontWeight: 700, color: 'white', marginBottom: '6px' }}>Marketing AI ainda não foi ativado</div>
-          <div style={{ fontSize: '12.5px', color: MUTED, marginBottom: '18px', maxWidth: '420px', margin: '0 auto 18px' }}>
-            Configure a marca, o público e os concorrentes pra ativar as quatro inteligências: Tracking, Conteúdo, Concorrentes e Estratégia.
+          <div style={{ fontSize: '12.5px', color: MUTED, maxWidth: '420px', margin: '0 auto' }}>
+            Nossa equipe configura a marca, o público e os concorrentes da sua empresa pra ativar as quatro inteligências: Tracking, Conteúdo, Concorrentes e Estratégia. Assim que estiver pronto, tudo aparece aqui.
           </div>
-          <button onClick={() => navigate('/dashboard/settings?tab=marketing-ai')} style={{ padding: '10px 20px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
-            Ir pra Configurações →
-          </button>
         </div>
       ) : (
         <>

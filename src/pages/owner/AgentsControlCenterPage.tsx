@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import CompanyMarketingAiSection from './CompanyMarketingAiSection'
 
 const ORANGE = '#FF6D29'
 const BG = '#0E0B0A'
@@ -318,6 +319,10 @@ export default function AgentsControlCenterPage() {
                   </label>
                 ))}
               </div>
+            </SettingsSection>
+
+            <SettingsSection title="Marketing AI (por empresa)" description="Configura o agente de marketing de cada cliente — puxa a personalidade do Business DNA e só pede o operacional." defaultOpen={false}>
+              <CompanyMarketingAiSection />
             </SettingsSection>
 
             {selectedRoleRow && (
