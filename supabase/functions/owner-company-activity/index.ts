@@ -28,8 +28,8 @@ Deno.serve(async (req) => {
     const { data: roleRow } = await admin.from('user_roles').select('role').eq('email', user.email!).maybeSingle()
     if (roleRow?.role !== 'owner') return json({ error: 'Forbidden' }, 403)
 
-    const body = await req.json() as { company_id: string; limit?: number; action?: string; updates?: Record<string, unknown> }
-    const { company_id, limit = 10, action, updates } = body
+    const body = await req.json() as { company_id: string; limit?: number; action?: string; updates?: Record<string, unknown>; marketing_ai?: Record<string, unknown> }
+    const { company_id, limit = 10, action, updates, marketing_ai } = body
 
     if (!company_id) return json({ error: 'company_id é obrigatório' }, 400)
 
@@ -44,8 +44,33 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
 
+    // Update marketing_ai_config (owner edit, por empresa) — o cliente não
+    // configura mais isso em /dashboard/settings. RLS de marketing_ai_config
+    // só deixa o dono da empresa (client) gravar direto, então o owner passa
+    // por aqui (service role) sempre. Só grava os campos operacionais vindos
+    // da UI — brand_voice/target_audience são DERIVADOS do Business DNA da
+    // empresa (fonte única, evita pedir a mesma coisa duas vezes), nunca
+    // vêm do formulário.
+    if (action === 'update_marketing_ai' && marketing_ai) {
+      const { data: company } = await admin.from('companies').select('business_dna').eq('id', company_id).maybeSingle()
+      const dna = (company?.business_dna as { brand_voice?: string; target_audience?: string } | null) ?? {}
+
+      const operationalKeys = ['agent_name', 'posting_frequency', 'preferred_content_types', 'content_pillars', 'marketing_goals', 'competitors']
+      const payload: Record<string, unknown> = { company_id }
+      for (const key of operationalKeys) {
+        if (key in marketing_ai) payload[key] = marketing_ai[key]
+      }
+      payload.brand_voice = dna.brand_voice ?? null
+      payload.target_audience = dna.target_audience ?? null
+      payload.updated_at = new Date().toISOString()
+
+      const { error } = await admin.from('marketing_ai_config').upsert(payload)
+      if (error) return json({ error: error.message }, 500)
+      return json({ ok: true })
+    }
+
     // Fetch company detail + agent messages + telegram conversations
-    const [companyRes, messagesRes, telegramRes] = await Promise.all([
+    const [companyRes, messagesRes, telegramRes, marketingAiRes] = await Promise.all([
       admin.from('companies')
         .select('id, business_name, business_type, city, goal, plan, instagram_url, website_url, google_rating, google_review_count, telegram_chat_id, business_dna, jarvis_enabled, agent_enabled, created_at')
         .eq('id', company_id)
@@ -59,6 +84,7 @@ Deno.serve(async (req) => {
         .select('id, bot_type, telegram_chat_id, status, created_at')
         .eq('customer_id', company_id)
         .order('created_at', { ascending: false }),
+      admin.from('marketing_ai_config').select('*').eq('company_id', company_id).maybeSingle(),
     ])
 
     // Fetch last messages for each telegram conversation
@@ -79,6 +105,7 @@ Deno.serve(async (req) => {
       company: companyRes.data,
       messages: messagesRes.data ?? [],
       telegram: telegramMessages,
+      marketing_ai: marketingAiRes.data ?? null,
     })
   } catch (err) {
     return json({ error: String(err) }, 500)

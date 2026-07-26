@@ -36,6 +36,17 @@ interface CompanyDetail {
   created_at: string
 }
 
+interface MarketingAiConfig {
+  agent_name: string | null
+  posting_frequency: string | null
+  preferred_content_types: string[] | null
+  content_pillars: string[] | null
+  marketing_goals: string | null
+  competitors: string[] | null
+}
+
+const CONTENT_TYPE_OPTIONS = ['reel', 'carrossel', 'foto', 'story']
+
 interface AgentMessage { id: string; role: string; content: string; agent_role: string | null; created_at: string }
 interface TelegramConv {
   id: string; bot_type: string; telegram_chat_id: string; status: string; created_at: string
@@ -67,6 +78,20 @@ export default function CompanyDetailPage() {
   const [saved, setSaved] = useState(false)
   const [loadError, setLoadError] = useState('')
 
+  // Marketing AI — configurado aqui, junto do Business DNA, porque voz e
+  // público vêm de lá (fonte única, não repetida no form abaixo).
+  const [maExists, setMaExists] = useState(false)
+  const [maAgentName, setMaAgentName] = useState('Agente de Marketing')
+  const [maPostingFrequency, setMaPostingFrequency] = useState('3x por semana')
+  const [maContentTypes, setMaContentTypes] = useState<string[]>(['reel', 'carrossel', 'foto'])
+  const [maContentPillars, setMaContentPillars] = useState<string[]>([])
+  const [maNewPillar, setMaNewPillar] = useState('')
+  const [maMarketingGoals, setMaMarketingGoals] = useState('')
+  const [maCompetitors, setMaCompetitors] = useState<string[]>([])
+  const [maNewCompetitor, setMaNewCompetitor] = useState('')
+  const [maSaving, setMaSaving] = useState(false)
+  const [maSaved, setMaSaved] = useState(false)
+
   const [deleteConfirmText, setDeleteConfirmText] = useState('')
   const [showDelete, setShowDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -86,7 +111,7 @@ export default function CompanyDetailPage() {
         headers: { Authorization: `Bearer ${session!.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ company_id: id, limit: 30 }),
       })
-      const data = await res.json() as { company?: CompanyDetail; messages?: AgentMessage[]; telegram?: TelegramConv[]; error?: string }
+      const data = await res.json() as { company?: CompanyDetail; messages?: AgentMessage[]; telegram?: TelegramConv[]; marketing_ai?: MarketingAiConfig | null; error?: string }
       if (!res.ok || !data.company) {
         setLoadError(data.error ?? `Erro ao carregar (${res.status}).`)
       } else {
@@ -103,6 +128,15 @@ export default function CompanyDetailPage() {
         setDna(data.company.business_dna ?? {})
         setJarvisEnabled(!!data.company.jarvis_enabled)
         setAgentEnabled(!!data.company.agent_enabled)
+
+        const ma = data.marketing_ai
+        setMaExists(!!ma)
+        setMaAgentName(ma?.agent_name ?? 'Agente de Marketing')
+        setMaPostingFrequency(ma?.posting_frequency ?? '3x por semana')
+        setMaContentTypes(ma?.preferred_content_types ?? ['reel', 'carrossel', 'foto'])
+        setMaContentPillars(ma?.content_pillars ?? [])
+        setMaMarketingGoals(ma?.marketing_goals ?? '')
+        setMaCompetitors(ma?.competitors ?? [])
       }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : 'Erro de rede inesperado.')
@@ -140,6 +174,34 @@ export default function CompanyDetailPage() {
     setNewValue('')
   }
   const removeValue = (i: number) => setDna(prev => ({ ...prev, values: (prev.values ?? []).filter((_, idx) => idx !== i) }))
+
+  const maToggleType = (t: string) => setMaContentTypes(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])
+  const maAddPillar = () => { if (maNewPillar.trim()) { setMaContentPillars(prev => [...prev, maNewPillar.trim()]); setMaNewPillar('') } }
+  const maRemovePillar = (i: number) => setMaContentPillars(prev => prev.filter((_, idx) => idx !== i))
+  const maAddCompetitor = () => { if (maNewCompetitor.trim()) { setMaCompetitors(prev => [...prev, maNewCompetitor.trim()]); setMaNewCompetitor('') } }
+  const maRemoveCompetitor = (i: number) => setMaCompetitors(prev => prev.filter((_, idx) => idx !== i))
+
+  const saveMarketingAi = async () => {
+    setMaSaving(true)
+    setMaSaved(false)
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/owner-company-activity`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${session!.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        company_id: id, action: 'update_marketing_ai',
+        marketing_ai: {
+          agent_name: maAgentName.trim() || 'Agente de Marketing',
+          posting_frequency: maPostingFrequency,
+          preferred_content_types: maContentTypes,
+          content_pillars: maContentPillars,
+          marketing_goals: maMarketingGoals || null,
+          competitors: maCompetitors,
+        },
+      }),
+    })
+    setMaSaving(false)
+    if (res.ok) { setMaExists(true); setMaSaved(true); setTimeout(() => setMaSaved(false), 2000) }
+  }
 
   const deleteCompany = async () => {
     if (!id || !detail) return
@@ -276,6 +338,94 @@ export default function CompanyDetailPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '22px', marginBottom: '20px' }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: 'white', marginBottom: '4px' }}>✨ Marketing AI</div>
+          <div style={{ fontSize: '11px', color: MUTED, marginBottom: '16px', lineHeight: 1.5 }}>
+            {maExists ? 'Já ativado pra essa empresa.' : 'Ainda não ativado — preencha e salve pra ligar as quatro inteligências (tracking, conteúdo, concorrentes, brain).'}
+          </div>
+
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{ fontSize: '10.5px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Herdado do Business DNA</div>
+            {dna.brand_voice || dna.target_audience ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', fontSize: '12.5px' }}>
+                  <span style={{ color: MUTED }}>Voz da marca: </span>
+                  <span style={{ color: 'white' }}>{dna.brand_voice || 'não definida'}</span>
+                </div>
+                <div style={{ padding: '9px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', fontSize: '12.5px' }}>
+                  <span style={{ color: MUTED }}>Público-alvo: </span>
+                  <span style={{ color: 'white' }}>{dna.target_audience || 'não definido'}</span>
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: '10px 12px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '9px', fontSize: '11.5px', color: 'rgba(255,255,255,0.7)', lineHeight: 1.6 }}>
+                Preencha voz da marca e público-alvo no Business DNA acima primeiro.
+              </div>
+            )}
+          </div>
+
+          <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nome do agente</label>
+          <input value={maAgentName} onChange={e => setMaAgentName(e.target.value)} placeholder="Agente de Marketing" style={{ ...inputStyle, marginBottom: '14px' }} />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Frequência de postagem</label>
+              <input value={maPostingFrequency} onChange={e => setMaPostingFrequency(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Formatos preferidos</label>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '4px' }}>
+                {CONTENT_TYPE_OPTIONS.map(t => (
+                  <button key={t} onClick={() => maToggleType(t)}
+                    style={{ padding: '6px 12px', borderRadius: '8px', border: `1px solid ${maContentTypes.includes(t) ? 'rgba(255,109,41,0.4)' : BORDER}`, background: maContentTypes.includes(t) ? 'rgba(255,109,41,0.1)' : 'transparent', color: maContentTypes.includes(t) ? ORANGE : MUTED, fontSize: '11.5px', cursor: 'pointer' }}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Pilares de conteúdo</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+            {maContentPillars.map((p, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                <span style={{ flex: 1, fontSize: '12.5px', color: 'white' }}>{p}</span>
+                <button onClick={() => maRemovePillar(i)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '14px' }}>×</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+            <input value={maNewPillar} onChange={e => setMaNewPillar(e.target.value)} placeholder="Ex: bastidores, promoções, depoimentos..."
+              onKeyDown={e => { if (e.key === 'Enter') maAddPillar() }} style={{ ...inputStyle, flex: 1 }} />
+            <button onClick={maAddPillar} style={{ padding: '0 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}>+ Adicionar</button>
+          </div>
+
+          <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Metas de marketing</label>
+          <textarea value={maMarketingGoals} onChange={e => setMaMarketingGoals(e.target.value)} rows={2}
+            placeholder="Ex: dobrar o engajamento no Instagram em 3 meses."
+            style={{ ...inputStyle, resize: 'vertical', fontFamily: D, marginBottom: '16px' }} />
+
+          <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Concorrentes monitorados</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+            {maCompetitors.map((c, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                <span style={{ flex: 1, fontSize: '12.5px', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c}</span>
+                <button onClick={() => maRemoveCompetitor(i)} style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.3)', cursor: 'pointer', fontSize: '14px' }}>×</button>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
+            <input value={maNewCompetitor} onChange={e => setMaNewCompetitor(e.target.value)} placeholder="https://instagram.com/concorrente"
+              onKeyDown={e => { if (e.key === 'Enter') maAddCompetitor() }} style={{ ...inputStyle, flex: 1 }} />
+            <button onClick={maAddCompetitor} style={{ padding: '0 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}>+ Adicionar</button>
+          </div>
+
+          <button onClick={saveMarketingAi} disabled={maSaving}
+            style={{ padding: '10px 22px', background: maSaved ? '#4ade80' : ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
+            {maSaved ? '✓ Salvo' : maSaving ? 'Salvando...' : maExists ? 'Salvar Marketing AI' : 'Ativar Marketing AI'}
+          </button>
         </div>
 
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '22px', marginBottom: '20px' }}>

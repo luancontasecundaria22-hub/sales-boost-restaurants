@@ -21,7 +21,8 @@ import AgentSectionPage from './pages/dashboard/AgentSectionPage.tsx'
 import AgentCategoryPage from './pages/dashboard/AgentCategoryPage.tsx'
 import OpportunitiesPage from './pages/dashboard/OpportunitiesPage.tsx'
 import AgentePage from './pages/dashboard/AgentePage.tsx'
-import MarketingAiPage from './pages/dashboard/MarketingAiPage.tsx'
+import MarketingAiHubPage from './pages/dashboard/MarketingAiHubPage.tsx'
+import MarketingAiSectionPage from './pages/dashboard/MarketingAiSectionPage.tsx'
 import ApprovalsPage from './pages/dashboard/ApprovalsPage.tsx'
 import ReportPage from './pages/dashboard/ReportPage.tsx'
 import JarvisPage from './pages/jarvis/JarvisPage.tsx'
@@ -102,7 +103,8 @@ function RouterRoot() {
         <Route path="posts/categoria/:group" element={<AgentCategoryPage />} />
         <Route path="posts/:section" element={<AgentSectionPage />} />
         <Route path="agente" element={<AgentePage />} />
-        <Route path="marketing-ai" element={<MarketingAiPage />} />
+        <Route path="marketing-ai" element={<MarketingAiHubPage />} />
+        <Route path="marketing-ai/:section" element={<MarketingAiSectionPage />} />
         <Route path="oportunidades" element={<OpportunitiesPage />} />
         <Route path="concorrentes" element={<Navigate to="/dashboard/posts/concorrentes" replace />} />
         <Route path="aprovacoes" element={<ApprovalsPage />} />

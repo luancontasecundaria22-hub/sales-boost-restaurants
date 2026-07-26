@@ -52,6 +52,7 @@ export interface ContentItem {
   image_url: string | null
   status: 'idea' | 'draft' | 'approved' | 'scheduled' | 'published'
   reasoning: string | null
+  campaign_id: string | null
   created_at: string
 }
 
@@ -81,6 +82,95 @@ export interface ActivityLogRow {
   action: string
   reasoning: string | null
   created_at: string
+}
+
+export interface BrainNode {
+  id: string
+  node_type: 'pattern' | 'learned_behavior' | 'recommendation' | 'successful_strategy' | 'failed_strategy' | 'experiment_result' | 'competitor_observation' | 'brand_fact'
+  source_pillar: 'tracking' | 'content' | 'competitor' | 'strategy' | 'experiment'
+  title: string
+  body: string
+  confidence: 'high' | 'medium' | 'low' | null
+  created_at: string
+}
+
+export interface Experiment {
+  id: string
+  hypothesis: string
+  variable: string
+  variant_a: string
+  variant_b: string
+  status: 'proposed' | 'running' | 'completed' | 'cancelled'
+  winner: 'a' | 'b' | 'inconclusive' | null
+  results: Record<string, unknown>
+  reasoning: string | null
+  started_at: string | null
+  ended_at: string | null
+  created_at: string
+}
+
+export interface ToolRegistryRow {
+  id: string
+  name: string
+  description: string
+  category: string
+  connected: boolean
+  requires_integration: string | null
+  status: 'live' | 'partial' | 'planned'
+  notes: string | null
+}
+
+export interface ToolConfigRow {
+  id: string
+  tool_id: string
+  enabled: boolean
+  settings: Record<string, unknown>
+  health: 'ok' | 'warning' | 'error' | 'unknown'
+  last_sync_at: string | null
+}
+
+export interface Campaign {
+  id: string
+  name: string
+  goal: string | null
+  budget: number | null
+  status: 'planned' | 'active' | 'completed' | 'cancelled'
+  start_date: string | null
+  end_date: string | null
+  created_at: string
+}
+
+export interface Trend {
+  id: string
+  title: string
+  description: string
+  category: string | null
+  relevance: 'high' | 'medium' | 'low' | null
+  detected_at: string
+}
+
+export interface MarketingReport {
+  id: string
+  report_type: 'weekly' | 'monthly' | 'campaign' | 'executive' | 'growth' | 'audience'
+  title: string
+  summary: string
+  period_start: string | null
+  period_end: string | null
+  created_at: string
+}
+
+export const REPORT_TYPE_LABEL: Record<string, string> = {
+  weekly: 'Semanal', monthly: 'Mensal', campaign: 'Campanha', executive: 'Executivo', growth: 'Crescimento', audience: 'Audiência',
+}
+
+export const BRAIN_NODE_LABEL: Record<string, string> = {
+  pattern: 'Padrão', learned_behavior: 'Comportamento aprendido', recommendation: 'Recomendação',
+  successful_strategy: 'Estratégia bem-sucedida', failed_strategy: 'Estratégia malsucedida',
+  experiment_result: 'Resultado de experimento', competitor_observation: 'Observação de concorrente', brand_fact: 'Fato da marca',
+}
+export const BRAIN_NODE_ICON: Record<string, string> = {
+  pattern: '📊', learned_behavior: '🧩', recommendation: '💡', successful_strategy: '✅',
+  failed_strategy: '❌', experiment_result: '🧪', competitor_observation: '🔍', brand_fact: '🏷️',
 }
 
 export const IMPACT_COLOR: Record<string, string> = { high: '#f87171', medium: '#FBBF24', low: MUTED }

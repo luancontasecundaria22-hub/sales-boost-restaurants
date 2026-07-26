@@ -1,22 +1,31 @@
 /**
- * marketing-ai
- * Sistema 100% independente do módulo "Agentes" (hermes-proxy) — por decisão
- * explícita do dono. Não importa, não chama e não compartilha tabelas com
- * generate-posts / content-intelligence / map-competitors / hermes-proxy.
- * Tudo aqui é próprio: dados, prompts, lógica.
+ * marketing-ai (V2 — Marketing Brain)
+ * Dados, tabelas, dashboard e tools são 100% próprios — não compartilha
+ * nenhuma tabela com generate-posts / content-intelligence / map-competitors
+ * / hermes-proxy. Isso continua igual.
  *
- * Quatro pilares, cada um uma função própria abaixo:
+ * O que MUDOU (decisão explícita do dono, revertendo a decisão anterior):
+ * Strategy Intelligence não decide mais sozinha — ela empacota tudo que as
+ * outras inteligências e o Marketing Brain sabem e manda pro Hermes (a
+ * mesma VPS externa que decide pelo módulo Agentes) via
+ * report_marketing_decision. "Hermes decide, Marketing AI executa." Essa
+ * VPS é documentada como instável (502/timeout); quando ela falha, o ciclo
+ * simplesmente não decide nada nessa rodada — nunca inventa decisão.
+ *
+ * Quatro pilares:
  *   - Tracking Intelligence   → runTracking()
- *   - Content Intelligence    → runContent()
+ *   - Content Intelligence    → runContent()   (só roda se Hermes decidir)
  *   - Competitor Intelligence → runCompetitors()
- *   - Strategy Intelligence   → runStrategy()  (o "cérebro" que lê os outros três)
+ *   - Strategy Intelligence   → runStrategy()   (empacota e pergunta ao Hermes)
  *
- * Regra que NÃO muda mesmo sendo um sistema independente: nunca publica
- * sozinho. marketing_ai_content nunca sai do status 'draft'/'approved' por
- * conta própria — publicar de verdade no Instagram é uma integração que
- * ainda não existe de forma segura na plataforma (ver auditoria do
- * Executor). "approval_workflow: auto_publish" no config fica registrado
- * pra quando essa integração existir de verdade, mas hoje não tem efeito.
+ * Marketing Brain: cada pilar grava conhecimento destilado em
+ * marketing_ai_brain_nodes (ver logBrainNode) — nenhuma memória isolada.
+ *
+ * Regra que NÃO muda: nunca publica sozinho. marketing_ai_content nunca sai
+ * do status 'draft'/'approved' por conta própria — publicar de verdade no
+ * Instagram é uma integração que ainda não existe de forma segura na
+ * plataforma (ver auditoria do Executor). Isso vale mesmo quando o Hermes
+ * decide "generate_content" — o resultado é sempre rascunho.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -57,12 +66,25 @@ Público-alvo: ${config.target_audience ?? 'não definido ainda'}.
 Pilares de conteúdo: ${config.content_pillars.join(', ') || 'não definidos ainda'}.
 Objetivos: ${config.marketing_goals ?? config.business_objectives ?? 'crescer e engajar mais'}.
 
-Você é um sistema 100% independente do "Agente Geral" do dashboard — não compartilha dados, posts nem histórico com ele. Você enxerga só o que suas próprias quatro inteligências coletaram: Tracking (métricas reais do Instagram), Content (ideias e legendas), Competitor (concorrentes configurados) e Strategy (recomendações com o porquê).
+Seus dados são 100% próprios — não compartilha tabelas, posts nem histórico com o "Agente Geral" do dashboard. Você enxerga só o que suas próprias quatro inteligências coletaram: Tracking (métricas reais do Instagram), Content (ideias e legendas), Competitor (concorrentes configurados) e Strategy (o que o Hermes decidiu, com o porquê).
 Regra permanente: você nunca publica nada sozinho — todo conteúdo que você cria fica como rascunho esperando aprovação. Nunca invente número que não veio de uma coleta real.`
 }
 
 async function logActivity(admin: SupaClient, companyId: string, pillar: string, action: string, reasoning?: string) {
   await admin.from('marketing_ai_activity_log').insert({ company_id: companyId, pillar, action, reasoning: reasoning ?? null })
+}
+
+// Marketing Brain — conhecimento permanente e unificado. Cada pilar grava
+// aqui, além da própria tabela de detalhe, pra nunca existir memória
+// isolada (ver doc "Marketing Brain Updates").
+type BrainNodeType = 'pattern' | 'learned_behavior' | 'recommendation' | 'successful_strategy' | 'failed_strategy' | 'experiment_result' | 'competitor_observation' | 'brand_fact'
+type BrainPillar = 'tracking' | 'content' | 'competitor' | 'strategy' | 'experiment'
+
+async function logBrainNode(admin: SupaClient, companyId: string, nodeType: BrainNodeType, sourcePillar: BrainPillar, title: string, body: string, confidence?: string, data?: Record<string, unknown>) {
+  await admin.from('marketing_ai_brain_nodes').insert({
+    company_id: companyId, node_type: nodeType, source_pillar: sourcePillar,
+    title, body, confidence: confidence ?? null, data: data ?? {},
+  })
 }
 
 async function callClaude(anthropicKey: string, prompt: string, maxTokens = 1200): Promise<string> {
@@ -141,6 +163,7 @@ Retorne APENAS um JSON array de até 3 insights, cada um: {"title": "frase curta
   const insights = parseJsonArray<{ title: string; description: string; impact: string }>(raw)
   for (const ins of insights) {
     await admin.from('marketing_ai_insights').insert({ company_id: company.id, pillar: 'tracking', title: ins.title, description: ins.description, impact: ins.impact })
+    await logBrainNode(admin, company.id, 'pattern', 'tracking', ins.title, ins.description, ins.impact)
   }
   if (insights.length > 0) await logActivity(admin, company.id, 'tracking', `${insights.length} padrão(ões) detectado(s)`, insights[0]?.description)
   return { insights: insights.length }
@@ -199,9 +222,29 @@ O objetivo NÃO é copiar concorrente, é achar oportunidade real. Retorne APENA
   const insights = parseJsonArray<{ title: string; description: string; impact: string }>(raw)
   for (const ins of insights) {
     await admin.from('marketing_ai_insights').insert({ company_id: company.id, pillar: 'competitor', title: ins.title, description: ins.description, impact: ins.impact })
+    await logBrainNode(admin, company.id, 'competitor_observation', 'competitor', ins.title, ins.description, ins.impact)
   }
   if (scanned > 0) await logActivity(admin, company.id, 'competitor', `${scanned} concorrente(s) analisado(s)`, insights[0]?.description)
   return { insights: insights.length, scanned }
+}
+
+// ── Trend Discovery ─────────────────────────────────────────────────────
+// Raciocínio da IA sobre o segmento — não é uma API de tendências em tempo
+// real (o Tool Registry marca essa ferramenta como "partial" por isso).
+async function runTrends(admin: SupaClient, company: Company, config: MarketingAiConfig, anthropicKey: string): Promise<{ created: number }> {
+  const prompt = `${composeMarketingAgentPreamble(config, company)}
+
+Agora você está atuando como Trend Discovery. Com base no segmento do negócio e nos pilares de conteúdo configurados, sugira até 3 tendências relevantes pra esse tipo de negócio agora (formatos em alta, temas sazonais, ângulos de conteúdo). Seja honesto: isso é raciocínio, não dado de tendência em tempo real — nunca cite números de alcance ou volume que você não tem.
+
+Retorne APENAS um JSON array: [{"title": "...", "description": "por que essa tendência importa pra esse negócio", "category": "formato"|"tema"|"sazonal", "relevance": "high"|"medium"|"low"}]`
+
+  const raw = await callClaude(anthropicKey, prompt, 800)
+  const trends = parseJsonArray<{ title: string; description: string; category: string; relevance: string }>(raw)
+  for (const t of trends) {
+    await admin.from('marketing_ai_trends').insert({ company_id: company.id, title: t.title, description: t.description, category: t.category, relevance: t.relevance })
+  }
+  if (trends.length > 0) await logActivity(admin, company.id, 'content', `${trends.length} tendência(s) sugerida(s)`, trends[0]?.description)
+  return { created: trends.length }
 }
 
 // ── 3. Content Intelligence ────────────────────────────────────────────────
@@ -251,39 +294,194 @@ Gere 2 ideias de conteúdo alinhadas com a estratégia acima. Retorne APENAS um 
 }
 
 // ── 4. Strategy Intelligence ───────────────────────────────────────────────
-// O cérebro — lê o que as outras três inteligências já descobriram +
-// memória de aprendizado + config, e recomenda o próximo passo, sempre com
-// o porquê. Nunca executa nada sozinho — só registra recomendação.
-async function runStrategy(admin: SupaClient, company: Company, config: MarketingAiConfig, anthropicKey: string): Promise<{ recommendations: number }> {
-  const [{ data: insights }, { data: memory }, { data: recentContent }] = await Promise.all([
+// "Hermes decide. Marketing AI executa." — Strategy não decide mais sozinha
+// com uma chamada direta à Claude: ela empacota tudo que as outras
+// inteligências descobriram (+ Marketing Brain + experimentos) e manda pro
+// Hermes (a mesma VPS externa que decide pelo módulo Agentes) via
+// report_marketing_decision. Hermes decide; esta função só executa e
+// registra. Decisão explícita do dono — ver docstring do arquivo.
+//
+// Fail-safe: se a VPS do Hermes estiver fora do ar (já documentado como
+// instável), não inventamos decisão nenhuma — só registramos que a rodada
+// falhou e seguimos em frente, igual ao orquestrador do hermes-proxy.
+const MARKETING_STRATEGY_TOOL = [{
+  type: 'function',
+  function: {
+    name: 'report_marketing_decision',
+    description: 'ÚNICA forma de terminar. Decide o que o Marketing AI deve fazer a seguir pra esta empresa.',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', enum: ['generate_content', 'run_tracking', 'run_competitors', 'propose_experiment', 'no_action'], description: 'A próxima ação concreta que o Marketing AI deve executar.' },
+        findings: {
+          type: 'array',
+          description: 'Conhecimento novo pra gravar no Marketing Brain — só o que for real, baseado nos dados fornecidos.',
+          items: {
+            type: 'object',
+            properties: {
+              node_type: { type: 'string', enum: ['pattern', 'learned_behavior', 'recommendation', 'successful_strategy', 'failed_strategy', 'brand_fact'] },
+              title: { type: 'string' },
+              body: { type: 'string' },
+              confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+            },
+            required: ['node_type', 'title', 'body'],
+          },
+        },
+        experiment: {
+          type: 'object',
+          description: 'Preencha só se action = propose_experiment.',
+          properties: {
+            hypothesis: { type: 'string' }, variable: { type: 'string' },
+            variant_a: { type: 'string' }, variant_b: { type: 'string' },
+          },
+        },
+        reasoning: { type: 'string', description: 'Por que essa decisão, citando os dados reais fornecidos — nunca invente evidência.' },
+      },
+      required: ['action', 'reasoning'],
+    },
+  },
+}]
+
+interface MarketingDecision {
+  action: string; findings: { node_type: BrainNodeType; title: string; body: string; confidence?: string }[]
+  experiment?: { hypothesis: string; variable: string; variant_a: string; variant_b: string }
+  reasoning: string
+}
+
+async function askHermesForMarketingDecision(hermesUrl: string, hermesApiKey: string, systemPrompt: string): Promise<MarketingDecision | null> {
+  const messages: unknown[] = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: 'Analise os dados reais fornecidos e decida o que o Marketing AI deve fazer agora. Chame report_marketing_decision pra concluir.' },
+  ]
+  for (let i = 0; i < 3; i++) {
+    const res = await fetch(`${hermesUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hermesApiKey}` },
+      body: JSON.stringify({ model: 'hermes', messages, tools: MARKETING_STRATEGY_TOOL, tool_choice: 'auto' }),
+    })
+    if (!res.ok) throw new Error(`Hermes retornou erro ${res.status}`)
+    const data = await res.json() as { choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[] }
+    const msg = data.choices?.[0]?.message
+    const call = msg?.tool_calls?.find(tc => tc.function.name === 'report_marketing_decision')
+    if (call) {
+      try { return JSON.parse(call.function.arguments ?? '{}') as MarketingDecision } catch { return null }
+    }
+    if (!msg?.tool_calls?.length) return null // respondeu em texto livre — falha, não adivinha
+    messages.push({ role: 'assistant', content: null, tool_calls: msg.tool_calls })
+    for (const tc of msg.tool_calls) messages.push({ role: 'tool', tool_call_id: tc.id, content: 'ferramenta não reconhecida, use report_marketing_decision' })
+  }
+  return null
+}
+
+async function runStrategy(admin: SupaClient, company: Company, config: MarketingAiConfig, hermesUrl: string | null, hermesApiKey: string | null): Promise<{ recommendations: number; hermesUnavailable?: boolean; action?: string }> {
+  const [{ data: insights }, { data: memory }, { data: recentContent }, { data: brainNodes }, { data: openExperiments }] = await Promise.all([
     admin.from('marketing_ai_insights').select('pillar, title, description, impact').eq('company_id', company.id).eq('status', 'open').order('created_at', { ascending: false }).limit(10),
     admin.from('marketing_ai_memory').select('key, learning, confidence').eq('company_id', company.id),
     admin.from('marketing_ai_content').select('status, format, performance').eq('company_id', company.id).order('created_at', { ascending: false }).limit(10),
+    admin.from('marketing_ai_brain_nodes').select('node_type, title, body, confidence').eq('company_id', company.id).order('created_at', { ascending: false }).limit(15),
+    admin.from('marketing_ai_experiments').select('hypothesis, status').eq('company_id', company.id).in('status', ['proposed', 'running']),
   ])
 
-  const prompt = `${composeMarketingAgentPreamble(config, company)}
+  const systemPrompt = `${composeMarketingAgentPreamble(config, company)}
 
-Agora você está atuando como Strategy Intelligence — o cérebro que decide o que fazer a seguir.
-Frequência de postagem configurada: ${config.posting_frequency}.
+Você está atuando como Strategy Intelligence, mas a decisão final é sempre do Hermes — você (Hermes) é quem decide o que o Marketing AI faz a seguir. Frequência de postagem configurada: ${config.posting_frequency}.
+
+Marketing Brain (conhecimento acumulado desta empresa):
+${brainNodes?.length ? brainNodes.map(n => `- [${n.node_type}] ${n.title}: ${n.body}`).join('\n') : 'ainda vazio — sistema recém-começou.'}
 
 Insights abertos (Tracking + Competitor):
 ${insights?.length ? insights.map(i => `- [${i.pillar}/${i.impact}] ${i.title}: ${i.description}`).join('\n') : 'nenhum ainda.'}
 
-Aprendizados acumulados:
-${memory?.length ? memory.map(m => `- ${m.learning} (confiança: ${m.confidence})`).join('\n') : 'nenhum ainda — sistema recém-começou.'}
+Aprendizados acumulados (memória):
+${memory?.length ? memory.map(m => `- ${m.learning} (confiança: ${m.confidence})`).join('\n') : 'nenhum ainda.'}
 
 Conteúdo recente (status/formato):
 ${recentContent?.length ? recentContent.map(c => `- ${c.status} · ${c.format ?? '?'}`).join('\n') : 'nenhum ainda.'}
 
-Responda com o que fazer a seguir. Retorne APENAS um JSON array de até 3 recomendações: {"recommendation": "ação concreta", "reasoning": "por que, citando os dados acima"}. Se não houver dado suficiente pra recomendar algo com confiança, diga isso numa única recomendação pedindo mais coleta de dados — não invente justificativa.`
+Experimentos em aberto:
+${openExperiments?.length ? openExperiments.map(e => `- ${e.hypothesis} (${e.status})`).join('\n') : 'nenhum.'}
 
-  const raw = await callClaude(anthropicKey, prompt, 1000)
-  const recs = parseJsonArray<{ recommendation: string; reasoning: string }>(raw)
-  for (const r of recs) {
-    await admin.from('marketing_ai_strategy_log').insert({ company_id: company.id, recommendation: r.recommendation, reasoning: r.reasoning })
+Nunca invente dado que não esteja acima. Se não houver evidência suficiente pra uma decisão forte, escolha action="no_action" e explique o motivo.`
+
+  if (!hermesUrl || !hermesApiKey) {
+    await logActivity(admin, company.id, 'strategy', 'Ciclo de estratégia pulado — HERMES_URL/HERMES_API_KEY não configurados.', undefined)
+    return { recommendations: 0, hermesUnavailable: true }
   }
-  if (recs.length > 0) await logActivity(admin, company.id, 'strategy', recs[0].recommendation, recs[0].reasoning)
-  return { recommendations: recs.length }
+
+  let decision: MarketingDecision | null
+  try {
+    decision = await askHermesForMarketingDecision(hermesUrl, hermesApiKey, systemPrompt)
+  } catch (err) {
+    console.error('runStrategy: Hermes unavailable:', err)
+    await logActivity(admin, company.id, 'strategy', 'Ciclo de estratégia falhou — Hermes (VPS externa) não respondeu.', String(err))
+    return { recommendations: 0, hermesUnavailable: true }
+  }
+  if (!decision) {
+    await logActivity(admin, company.id, 'strategy', 'Hermes não retornou uma decisão estruturada desta vez.', undefined)
+    return { recommendations: 0 }
+  }
+
+  await admin.from('marketing_ai_strategy_log').insert({ company_id: company.id, recommendation: `[${decision.action}] ${decision.reasoning}`, reasoning: decision.reasoning })
+
+  for (const f of decision.findings ?? []) {
+    await logBrainNode(admin, company.id, f.node_type, 'strategy', f.title, f.body, f.confidence)
+  }
+
+  if (decision.action === 'propose_experiment' && decision.experiment) {
+    await admin.from('marketing_ai_experiments').insert({
+      company_id: company.id, hypothesis: decision.experiment.hypothesis, variable: decision.experiment.variable,
+      variant_a: decision.experiment.variant_a, variant_b: decision.experiment.variant_b, reasoning: decision.reasoning, status: 'proposed',
+    })
+  }
+
+  await logActivity(admin, company.id, 'strategy', `Hermes decidiu: ${decision.action}`, decision.reasoning)
+  return { recommendations: 1, action: decision.action }
+}
+
+// ── Analytics Tool — relatórios armazenados ────────────────────────────────
+// Antes só existia agregação na hora (ReportsTab lendo insights direto).
+// Agora fica um registro permanente, gerado sob demanda, sempre citando os
+// dados reais que embasaram o resumo — nunca invade número.
+const REPORT_WINDOW_DAYS: Record<string, number> = { weekly: 7, monthly: 30, campaign: 30, executive: 30, growth: 30, audience: 30 }
+
+async function runReport(admin: SupaClient, company: Company, config: MarketingAiConfig, anthropicKey: string, reportType: string): Promise<{ report_id: string }> {
+  const windowDays = REPORT_WINDOW_DAYS[reportType] ?? 7
+  const since = new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString()
+
+  const [{ data: snapshots }, { data: insights }, { data: content }, { data: competitors }, { data: strategyLog }, { data: experiments }] = await Promise.all([
+    admin.from('marketing_ai_tracking_snapshots').select('followers, avg_likes, avg_comments, engagement_rate, collected_at').eq('company_id', company.id).order('collected_at', { ascending: false }).limit(20),
+    admin.from('marketing_ai_insights').select('pillar, title, description, impact').eq('company_id', company.id).gte('created_at', since),
+    admin.from('marketing_ai_content').select('status, format').eq('company_id', company.id).gte('created_at', since),
+    admin.from('marketing_ai_competitors').select('name, followers, avg_engagement').eq('company_id', company.id),
+    admin.from('marketing_ai_strategy_log').select('recommendation, created_at').eq('company_id', company.id).gte('created_at', since),
+    admin.from('marketing_ai_experiments').select('hypothesis, status, winner').eq('company_id', company.id),
+  ])
+
+  const prompt = `${composeMarketingAgentPreamble(config, company)}
+
+Agora você está atuando como Analytics Tool, gerando um relatório do tipo "${reportType}" (últimos ${windowDays} dias). Use SÓ os dados reais abaixo — nunca invente número.
+
+Histórico de métricas: ${JSON.stringify(snapshots ?? [])}
+Insights do período: ${JSON.stringify(insights ?? [])}
+Conteúdo do período (status/formato): ${JSON.stringify(content ?? [])}
+Concorrentes: ${JSON.stringify(competitors ?? [])}
+Decisões do Hermes no período: ${JSON.stringify(strategyLog ?? [])}
+Experimentos: ${JSON.stringify(experiments ?? [])}
+
+Escreva um resumo executivo curto (3-5 parágrafos), sempre explicando conclusões, nunca só listando números. Se não houver dado suficiente pra alguma seção, diga isso honestamente. Responda em texto corrido, sem markdown.`
+
+  const summary = await callClaude(anthropicKey, prompt, 1200)
+  const title = `Relatório ${reportType} — ${new Date().toLocaleDateString('pt-BR')}`
+  const { data: row, error } = await admin.from('marketing_ai_reports').insert({
+    company_id: company.id, report_type: reportType, title, summary,
+    data: { snapshots, insights, content, competitors, strategyLog, experiments },
+    period_start: new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    period_end: new Date().toISOString().slice(0, 10),
+  }).select('id').single()
+  if (error) throw new Error(error.message)
+
+  await logActivity(admin, company.id, 'content', `Relatório ${reportType} gerado.`)
+  return { report_id: row.id as string }
 }
 
 // ── Chat (o agente conversando de verdade) ─────────────────────────────────
@@ -334,7 +532,7 @@ ${contextBlock}`
 // 1 Tracking → 2 Competitors → 3 Strategy → 4 Content (só se fizer sentido).
 // Só roda pra empresas que têm marketing_ai_config (opt-in explícito nas
 // Configurações do Marketing AI — nunca liga sozinho pra ninguém).
-async function runPipelineForCompany(admin: SupaClient, company: Company, apifyToken: string | null, anthropicKey: string, replicateKey: string | null): Promise<void> {
+async function runPipelineForCompany(admin: SupaClient, company: Company, apifyToken: string | null, anthropicKey: string, replicateKey: string | null, hermesUrl: string | null, hermesApiKey: string | null): Promise<void> {
   const config = await getConfig(admin, company.id)
   if (!config) return // não fez onboarding do Marketing AI ainda
 
@@ -342,8 +540,10 @@ async function runPipelineForCompany(admin: SupaClient, company: Company, apifyT
     await runTracking(admin, company, config, apifyToken, anthropicKey).catch(e => console.error('pipeline tracking error:', e))
     await runCompetitors(admin, company, config, apifyToken, anthropicKey).catch(e => console.error('pipeline competitor error:', e))
   }
-  await runStrategy(admin, company, config, anthropicKey).catch(e => console.error('pipeline strategy error:', e))
-  if (config.content_pillars.length > 0) {
+  // "Hermes decide. Marketing AI executa." — só gera conteúdo se o Hermes
+  // decidiu isso agora, não mais por conta própria toda rodada.
+  const strategyResult = await runStrategy(admin, company, config, hermesUrl, hermesApiKey).catch(e => { console.error('pipeline strategy error:', e); return null })
+  if (strategyResult?.action === 'generate_content' && config.content_pillars.length > 0) {
     await runContent(admin, company, config, anthropicKey, replicateKey).catch(e => console.error('pipeline content error:', e))
   }
 }
@@ -358,6 +558,10 @@ Deno.serve(async (req) => {
     const apifyToken = Deno.env.get('APIFY_TOKEN') ?? null
     const replicateKey = Deno.env.get('REPLICATE_API_KEY') ?? null
     const cronSecretEnv = Deno.env.get('CRON_SECRET')
+    // Mesma VPS externa do módulo Agentes (hermes-proxy) — Strategy Intelligence
+    // decide através dela agora, por decisão explícita do dono.
+    const hermesUrl = Deno.env.get('HERMES_URL') ?? null
+    const hermesApiKey = Deno.env.get('HERMES_API_KEY') ?? null
     if (!anthropicKey) return json({ error: 'ANTHROPIC_API_KEY não configurada.' }, 503)
 
     const admin = createClient(supabaseUrl, serviceKey)
@@ -369,7 +573,7 @@ Deno.serve(async (req) => {
       let processed = 0
       for (const company of (companies ?? []) as Company[]) {
         try {
-          await runPipelineForCompany(admin, company, apifyToken, anthropicKey, replicateKey)
+          await runPipelineForCompany(admin, company, apifyToken, anthropicKey, replicateKey, hermesUrl, hermesApiKey)
           processed++
         } catch (e) {
           console.error(`marketing-ai cron: company ${company.id} error:`, e)
@@ -405,8 +609,17 @@ Deno.serve(async (req) => {
       const r = await runContent(admin, company as Company, config, anthropicKey, replicateKey)
       return json({ ok: true, ...r })
     }
+    if (action === 'run_trends') {
+      const r = await runTrends(admin, company as Company, config, anthropicKey)
+      return json({ ok: true, ...r })
+    }
+    if (action === 'generate_report') {
+      const reportType = String(body.report_type ?? 'weekly')
+      const r = await runReport(admin, company as Company, config, anthropicKey, reportType)
+      return json({ ok: true, ...r })
+    }
     if (action === 'run_strategy') {
-      const r = await runStrategy(admin, company as Company, config, anthropicKey)
+      const r = await runStrategy(admin, company as Company, config, hermesUrl, hermesApiKey)
       return json({ ok: true, ...r })
     }
     if (action === 'chat') {
@@ -416,7 +629,37 @@ Deno.serve(async (req) => {
       return json({ ok: true, ...r })
     }
 
-    return json({ error: 'action inválida. Use run_tracking, run_competitors, run_content, run_strategy ou chat.' }, 400)
+    // Experiment Tool — o experimento em si é sempre PROPOSTO pelo Hermes
+    // (via report_marketing_decision, dentro de runStrategy). Essas duas
+    // ações só cobrem o ciclo de vida depois de proposto: o dono decide
+    // começar a rodar, e quando termina, registra o resultado real —
+    // nunca inventamos qual variante "ganhou".
+    if (action === 'run_experiment') {
+      const experimentId = String(body.experiment_id ?? '')
+      if (!experimentId) return json({ error: 'experiment_id é obrigatório' }, 400)
+      const { error } = await admin.from('marketing_ai_experiments').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', experimentId).eq('company_id', company.id)
+      if (error) return json({ error: error.message }, 500)
+      await logActivity(admin, company.id, 'experiment', 'Experimento iniciado.')
+      return json({ ok: true })
+    }
+    if (action === 'conclude_experiment') {
+      const experimentId = String(body.experiment_id ?? '')
+      const winner = body.winner as string | undefined
+      const results = (body.results ?? {}) as Record<string, unknown>
+      if (!experimentId || !winner) return json({ error: 'experiment_id e winner são obrigatórios' }, 400)
+      const { data: exp, error } = await admin.from('marketing_ai_experiments')
+        .update({ status: 'completed', winner, results, ended_at: new Date().toISOString() })
+        .eq('id', experimentId).eq('company_id', company.id).select('hypothesis, variable, variant_a, variant_b').single()
+      if (error) return json({ error: error.message }, 500)
+      await logBrainNode(admin, company.id, 'experiment_result', 'experiment',
+        `Experimento concluído: ${exp.hypothesis}`,
+        `Variável testada: ${exp.variable}. Vencedor: ${winner === 'a' ? exp.variant_a : winner === 'b' ? exp.variant_b : 'inconclusivo'}.`,
+        'high', results)
+      await logActivity(admin, company.id, 'experiment', `Experimento concluído — vencedor: ${winner}`)
+      return json({ ok: true })
+    }
+
+    return json({ error: 'action inválida. Use run_tracking, run_competitors, run_content, run_trends, run_strategy, chat, run_experiment, conclude_experiment ou generate_report.' }, 400)
   } catch (err) {
     console.error('marketing-ai error:', err)
     return json({ error: String(err) }, 500)

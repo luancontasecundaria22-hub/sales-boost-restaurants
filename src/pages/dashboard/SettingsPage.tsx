@@ -7,8 +7,6 @@ import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
 import NotificationsCard from './settings/NotificationsCard'
 import IntegrationsTab from './settings/IntegrationsTab'
-import MarketingAiSettingsCard from './settings/MarketingAiSettingsCard'
-import type { MarketingAiConfig } from './marketingAi/shared'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -132,20 +130,14 @@ export default function SettingsPage() {
   const { lang } = useLang()
   const T = d[lang].settings
 
-  const tabFromParam = (v: string | null): 'info' | 'integrations' | 'marketing-ai' =>
-    v === 'integracoes' ? 'integrations' : v === 'marketing-ai' ? 'marketing-ai' : 'info'
-  const [tab, setTab] = useState<'info' | 'integrations' | 'marketing-ai'>(tabFromParam(searchParams.get('tab')))
+  const [tab, setTab] = useState<'info' | 'integrations'>(searchParams.get('tab') === 'integracoes' ? 'integrations' : 'info')
 
   useEffect(() => {
-    const paramTab = searchParams.get('tab')
-    if (paramTab === 'integracoes' || paramTab === 'marketing-ai') setTab(tabFromParam(paramTab))
+    if (searchParams.get('tab') === 'integracoes') setTab('integrations')
     const section = searchParams.get('section')
     if (!section) return
     setTimeout(() => document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
   }, [searchParams])
-
-  const [marketingAiConfig, setMarketingAiConfig] = useState<MarketingAiConfig | null>(null)
-  const [marketingAiLoaded, setMarketingAiLoaded] = useState(false)
 
   // Company fields
   const [companyId, setCompanyId] = useState<string | null>(null)
@@ -188,12 +180,6 @@ export default function SettingsPage() {
   const [placesLoading, setPlacesLoading] = useState(false)
   const [placesError, setPlacesError] = useState('')
   const placeSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    if (!companyId) return
-    supabase.from('marketing_ai_config').select('*').eq('company_id', companyId).maybeSingle()
-      .then(({ data }) => { setMarketingAiConfig((data as MarketingAiConfig | null) ?? null); setMarketingAiLoaded(true) })
-  }, [companyId])
 
   useEffect(() => {
     if (!user) return
@@ -462,7 +448,7 @@ export default function SettingsPage() {
 
         {/* Tab switcher */}
         <div style={{ display: 'flex', gap: '6px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '5px', marginBottom: '24px', width: 'fit-content' }}>
-          {([['info', 'Informações da empresa'], ['integrations', 'Integrações'], ['marketing-ai', '✨ Marketing AI']] as const).map(([key, label]) => (
+          {([['info', 'Informações da empresa'], ['integrations', 'Integrações']] as const).map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)}
               style={{ padding: '9px 18px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, background: tab === key ? ORANGE : 'transparent', color: tab === key ? '#000' : MUTED, transition: 'all 0.15s' }}>
               {label}
@@ -481,14 +467,6 @@ export default function SettingsPage() {
             <NotificationsCard />
             <IntegrationsTab />
           </>
-        )}
-
-        {/* Fica montado mesmo trocando de aba — o formulário nunca perde o
-            que já foi digitado só porque o dono foi olhar outra aba. */}
-        {marketingAiLoaded && companyId && (
-          <div style={{ display: tab === 'marketing-ai' ? 'block' : 'none' }}>
-            <MarketingAiSettingsCard companyId={companyId} config={marketingAiConfig} onSaved={setMarketingAiConfig} />
-          </div>
         )}
 
         {tab === 'info' && (

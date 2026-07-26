@@ -29,10 +29,10 @@ export default function StrategyTab({ accessToken, log, onRefresh }: { accessTok
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
-        <div style={{ fontSize: '12.5px', color: MUTED }}>O cérebro — lê Tracking + Concorrentes + memória e recomenda o próximo passo, sempre com o porquê.</div>
+        <div style={{ fontSize: '12.5px', color: MUTED }}>O Hermes lê Tracking + Concorrentes + Marketing Brain e decide o próximo passo, sempre com o porquê.</div>
         <button onClick={runStrategy} disabled={running}
           style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}>
-          {running ? 'Pensando...' : '🧭 Pedir recomendação'}
+          {running ? 'Perguntando ao Hermes...' : '🧭 Pedir decisão ao Hermes'}
         </button>
       </div>
       {error && <div style={{ color: '#f87171', fontSize: '12px', marginBottom: '14px' }}>{error}</div>}

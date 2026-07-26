@@ -1,12 +1,23 @@
 import { useState } from 'react'
 import { supabase } from '../../../lib/supabase'
-import { ORANGE, CARD, MUTED, BORDER, callMarketingAi, timeAgo, STATUS_LABEL, type ContentItem } from './shared'
+import { ORANGE, CARD, MUTED, BORDER, D, inputStyle, callMarketingAi, timeAgo, STATUS_LABEL, type ContentItem, type Campaign, type Trend } from './shared'
 
 const STATUS_COLOR: Record<string, string> = { idea: MUTED, draft: '#FBBF24', approved: '#4ade80', scheduled: '#60a5fa', published: '#A78BFA' }
+const CAMPAIGN_STATUS_LABEL: Record<string, string> = { planned: 'Planejada', active: 'Ativa', completed: 'Concluída', cancelled: 'Cancelada' }
+const TREND_COLOR: Record<string, string> = { high: '#f87171', medium: '#FBBF24', low: MUTED }
 
-export default function ContentTab({ accessToken, content, onRefresh }: { accessToken: string; content: ContentItem[]; onRefresh: () => Promise<void> }) {
+export default function ContentTab({
+  companyId, accessToken, content, campaigns, trends, onRefresh,
+}: {
+  companyId: string; accessToken: string; content: ContentItem[]; campaigns: Campaign[]; trends: Trend[]; onRefresh: () => Promise<void>
+}) {
   const [generating, setGenerating] = useState(false)
+  const [detectingTrends, setDetectingTrends] = useState(false)
   const [error, setError] = useState('')
+  const [campaignFilter, setCampaignFilter] = useState('all')
+  const [showNewCampaign, setShowNewCampaign] = useState(false)
+  const [newCampaignName, setNewCampaignName] = useState('')
+  const [newCampaignGoal, setNewCampaignGoal] = useState('')
 
   const generate = async () => {
     setGenerating(true)
@@ -20,6 +31,18 @@ export default function ContentTab({ accessToken, content, onRefresh }: { access
     setGenerating(false)
   }
 
+  const detectTrends = async () => {
+    setDetectingTrends(true)
+    setError('')
+    try {
+      await callMarketingAi(accessToken, 'run_trends')
+      await onRefresh()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao detectar tendências')
+    }
+    setDetectingTrends(false)
+  }
+
   const approve = async (id: string) => {
     await supabase.from('marketing_ai_content').update({ status: 'approved', updated_at: new Date().toISOString() }).eq('id', id)
     await onRefresh()
@@ -28,10 +51,24 @@ export default function ContentTab({ accessToken, content, onRefresh }: { access
     await supabase.from('marketing_ai_content').delete().eq('id', id)
     await onRefresh()
   }
+  const assignCampaign = async (contentId: string, campaignId: string) => {
+    await supabase.from('marketing_ai_content').update({ campaign_id: campaignId || null, updated_at: new Date().toISOString() }).eq('id', contentId)
+    await onRefresh()
+  }
+  const createCampaign = async () => {
+    if (!newCampaignName.trim()) return
+    await supabase.from('marketing_ai_campaigns').insert({ company_id: companyId, name: newCampaignName.trim(), goal: newCampaignGoal || null })
+    setNewCampaignName('')
+    setNewCampaignGoal('')
+    setShowNewCampaign(false)
+    await onRefresh()
+  }
+
+  const filtered = campaignFilter === 'all' ? content : campaignFilter === 'none' ? content.filter(c => !c.campaign_id) : content.filter(c => c.campaign_id === campaignFilter)
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ fontSize: '12.5px', color: MUTED }}>Ideias e legendas geradas pela IA — sempre como rascunho, nunca publicado sozinho.</div>
         <button onClick={generate} disabled={generating}
           style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}>
@@ -40,13 +77,66 @@ export default function ContentTab({ accessToken, content, onRefresh }: { access
       </div>
       {error && <div style={{ color: '#f87171', fontSize: '12px', marginBottom: '14px' }}>{error}</div>}
 
-      {content.length === 0 ? (
+      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '14px', marginBottom: '18px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: trends.length > 0 ? '10px' : 0 }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, color: 'white' }}>📡 Tendências pro segmento</div>
+          <button onClick={detectTrends} disabled={detectingTrends} style={{ padding: '5px 12px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '7px', color: ORANGE, fontSize: '11px', cursor: 'pointer' }}>
+            {detectingTrends ? 'Detectando...' : 'Detectar tendências'}
+          </button>
+        </div>
+        {trends.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {trends.slice(0, 4).map(t => (
+              <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '7px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '7px' }}>
+                {t.relevance && <span style={{ fontSize: '9px', fontWeight: 700, color: TREND_COLOR[t.relevance], flexShrink: 0, marginTop: '1px' }}>●</span>}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: '11.5px', fontWeight: 600, color: 'white' }}>{t.title}</div>
+                  <div style={{ fontSize: '10.5px', color: MUTED, lineHeight: 1.4 }}>{t.description}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '18px' }}>
+        <select value={campaignFilter} onChange={e => setCampaignFilter(e.target.value)} style={{ ...inputStyle, padding: '6px 10px' }}>
+          <option value="all">Todas as campanhas</option>
+          <option value="none">Sem campanha</option>
+          {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <button onClick={() => setShowNewCampaign(s => !s)} style={{ padding: '6px 12px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '7px', color: MUTED, fontSize: '11.5px', cursor: 'pointer' }}>
+          + Nova campanha
+        </button>
+      </div>
+
+      {showNewCampaign && (
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', flexWrap: 'wrap' }}>
+          <input value={newCampaignName} onChange={e => setNewCampaignName(e.target.value)} placeholder="Nome da campanha" style={{ ...inputStyle, flex: 1, minWidth: '160px' }} />
+          <input value={newCampaignGoal} onChange={e => setNewCampaignGoal(e.target.value)} placeholder="Objetivo (opcional)" style={{ ...inputStyle, flex: 1, minWidth: '160px' }} />
+          <button onClick={createCampaign} style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}>Criar</button>
+        </div>
+      )}
+
+      {campaigns.length > 0 && campaignFilter === 'all' && (
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '18px' }}>
+          {campaigns.map(c => (
+            <div key={c.id} style={{ padding: '8px 12px', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '9px', fontSize: '11.5px' }}>
+              <span style={{ color: 'white', fontWeight: 600 }}>{c.name}</span>
+              <span style={{ color: MUTED, marginLeft: '8px' }}>{CAMPAIGN_STATUS_LABEL[c.status]}</span>
+              <span style={{ color: 'rgba(255,255,255,0.3)', marginLeft: '8px' }}>{content.filter(x => x.campaign_id === c.id).length} posts</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
         <div style={{ padding: '32px', textAlign: 'center', color: MUTED, fontSize: '13px', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px' }}>
-          Nenhuma ideia ainda. Configure a marca em Configurações e clique em "Gerar ideias".
+          {content.length === 0 ? 'Nenhuma ideia ainda. Configure a marca em Configurações e clique em "Gerar ideias".' : 'Nada nesse filtro ainda.'}
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          {content.map(c => (
+          {filtered.map(c => (
             <div key={c.id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', overflow: 'hidden' }}>
               {c.image_url && <img src={c.image_url} alt="" style={{ width: '100%', height: '160px', objectFit: 'cover' }} />}
               <div style={{ padding: '14px' }}>
@@ -59,6 +149,13 @@ export default function ContentTab({ accessToken, content, onRefresh }: { access
                 {c.caption && <div style={{ fontSize: '11.5px', color: MUTED, lineHeight: 1.5, marginBottom: '6px', maxHeight: '80px', overflow: 'auto' }}>{c.caption}</div>}
                 {c.hashtags && <div style={{ fontSize: '11px', color: ORANGE, marginBottom: '8px' }}>{c.hashtags}</div>}
                 {c.reasoning && <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.35)', fontStyle: 'italic', lineHeight: 1.5, marginBottom: '10px' }}>💡 {c.reasoning}</div>}
+                {campaigns.length > 0 && (
+                  <select value={c.campaign_id ?? ''} onChange={e => assignCampaign(c.id, e.target.value)}
+                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', padding: '5px 8px', fontSize: '11px', marginBottom: '8px', fontFamily: D }}>
+                    <option value="">Sem campanha</option>
+                    {campaigns.map(camp => <option key={camp.id} value={camp.id}>{camp.name}</option>)}
+                  </select>
+                )}
                 {(c.status === 'idea' || c.status === 'draft') && (
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => approve(c.id)} style={{ flex: 1, padding: '7px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: '7px', color: '#4ade80', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer' }}>✓ Aprovar</button>

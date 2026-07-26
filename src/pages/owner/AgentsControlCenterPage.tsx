@@ -72,6 +72,8 @@ const REPORT_OPTIONS: { key: keyof ReportConfig; label: string; hint: string }[]
   { key: 'annual_enabled', label: 'Relatório anual', hint: 'Todo 1º de janeiro — panorama do ano.' },
 ]
 
+interface CompanyOption { id: string; business_name: string }
+
 const FACTORY_DEFAULTS = {
   routines: {
     daily_review: true, weekly_review: true, monthly_planning: true, monitor_competitors: true,
@@ -130,9 +132,16 @@ export default function AgentsControlCenterPage() {
   const [saved, setSaved] = useState(false)
   const [savingGlobal, setSavingGlobal] = useState(false)
 
+  // Lista de empresas — usada pelo seletor que aparece quando o card
+  // "Agente de Marketing" é escolhido em "Agentes Ativos" (config real de
+  // cada uma fica na ficha da empresa, junto do Business DNA).
+  const [companiesList, setCompaniesList] = useState<CompanyOption[]>([])
+
   useEffect(() => {
     if (!session) return
     void loadAll()
+    supabase.from('companies').select('id, business_name').order('business_name')
+      .then(({ data }) => setCompaniesList((data ?? []) as CompanyOption[]))
   }, [session])
 
   const selectRole = (role: string, roles: AgentRoleRow[] = agentRoles) => {
@@ -230,6 +239,7 @@ export default function AgentsControlCenterPage() {
 
   const goBack = () => navigate('/owner')
   const selectedRoleRow = agentRoles.find(r => r.role === selectedRole) ?? null
+  const isMarketingAi = selectedRole === 'marketing_ai'
 
   return (
     <div style={{ minHeight: '100vh', background: BG }}>
@@ -320,13 +330,36 @@ export default function AgentsControlCenterPage() {
               </div>
             </SettingsSection>
 
-            {selectedRoleRow && (
+            {selectedRoleRow && !isMarketingAi && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '9px', marginBottom: '16px', fontSize: '12.5px', color: 'white' }}>
                 <span>{selectedRoleRow.emoji}</span>
                 <span>Editando Rotinas, Limites, Aprovações e Capacidades de <strong>{selectedRoleRow.label}</strong></span>
               </div>
             )}
 
+            {isMarketingAi ? (
+              <SettingsSection title="Empresas" description="O Agente de Marketing é configurado por empresa — escolha uma abaixo pra abrir a ficha dela (voz, público, pilares de conteúdo, concorrentes...).">
+                <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', marginBottom: '16px', lineHeight: 1.6 }}>
+                  Não existe configuração global pra esse agente — Rotinas, Limites, Aprovações e Capacidades daqui não se aplicam a ele. Cada empresa tem seu próprio Marketing AI, configurado junto do Business DNA dela.
+                </div>
+                {companiesList.length === 0 ? (
+                  <div style={{ color: MUTED, fontSize: '12.5px' }}>Nenhuma empresa cadastrada ainda.</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {companiesList.map(c => (
+                      <div key={c.id} onClick={() => navigate(`/owner/company/${c.id}`)}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '12px 14px', borderRadius: '10px', cursor: 'pointer', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)' }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,109,41,0.35)' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER }}>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{c.business_name}</span>
+                        <span style={{ fontSize: '11.5px', color: ORANGE }}>Abrir ficha →</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </SettingsSection>
+            ) : (
+            <>
             <SettingsSection title="Rotinas" description={selectedRoleRow ? `Liga/desliga pedaços do ciclo automático de ${selectedRoleRow.label}.` : 'Selecione um agente acima.'}>
               {!selectedRoleRow ? (
                 <div style={{ color: MUTED, fontSize: '12.5px' }}>Selecione um agente em "Agentes Ativos" pra configurar isso.</div>
@@ -444,6 +477,8 @@ export default function AgentsControlCenterPage() {
               </>
               )}
             </SettingsSection>
+            </>
+            )}
 
             <SettingsSection title="Integrações da Plataforma" description="Quais integrações o Sales Boost sabe usar — o que está conectado por empresa é checado ao vivo, não fica repetido aqui." defaultOpen={false}>
               <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', marginBottom: '16px', lineHeight: 1.6 }}>
@@ -475,6 +510,7 @@ export default function AgentsControlCenterPage() {
               )}
             </SettingsSection>
 
+            {!isMarketingAi && (
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '8px', paddingTop: '8px' }}>
               <button onClick={saveConfig} disabled={saving || !selectedRoleRow}
                 style={{ padding: '10px 22px', background: saved ? '#4ade80' : ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: selectedRoleRow ? 'pointer' : 'not-allowed', opacity: selectedRoleRow ? 1 : 0.5 }}>
@@ -489,6 +525,7 @@ export default function AgentsControlCenterPage() {
                 Cancelar
               </button>
             </div>
+            )}
           </>
         )}
       </div>
