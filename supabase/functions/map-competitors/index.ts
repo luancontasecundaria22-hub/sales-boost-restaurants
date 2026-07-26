@@ -5,131 +5,120 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const BT_TO_TYPE: Record<string, string> = {
-  'Restaurante / Food': 'restaurant',
-  'Varejo / E-commerce': 'store',
-  'Beleza & Estética': 'beauty_salon',
-  'Saúde & Bem-estar': 'health',
-  'Serviços': 'establishment',
+interface BTEntry {
+  types: string[]
+  keyword: string
+  aiLabel: string
+  excludeGoogleTypes: string[]
 }
 
-const MARKETING_NOTIFY_URL = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
-const TELEGRAM_WEBHOOK_SECRET = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
-
-async function notifyMarketing(adminDb: ReturnType<typeof createClient>, companyId: string, event: string, data?: Record<string, unknown>) {
-  if (!MARKETING_NOTIFY_URL || !TELEGRAM_WEBHOOK_SECRET) return
-  const { data: chat } = await adminDb
-    .from('telegram_conversations')
-    .select('telegram_chat_id')
-    .eq('customer_id', companyId)
-    .eq('bot_type', 'marketing')
-    .limit(1)
-    .maybeSingle()
-  if (!chat?.telegram_chat_id) return
-  try {
-    await fetch(MARKETING_NOTIFY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-webhook-secret': TELEGRAM_WEBHOOK_SECRET },
-      body: JSON.stringify({ event, bot_type: 'marketing', chat_id: chat.telegram_chat_id, company_id: companyId, data }),
-    })
-  } catch { /* fire-and-forget */ }
+const BT_CONFIG: Record<string, BTEntry> = {
+  'Restaurante / Food':    { types: ['restaurant', 'bar'],  keyword: 'restaurante bar comida lanchonete', aiLabel: 'restaurant, bar, or food establishment', excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Bar & Pub':             { types: ['bar', 'restaurant'],  keyword: 'bar pub cerveja drinks bebidas',    aiLabel: 'bar, pub, or nightlife venue',           excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Varejo / E-commerce':   { types: ['store'],              keyword: 'loja varejo comércio',              aiLabel: 'retail store or shop',                   excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Beleza & Estética':     { types: ['beauty_salon'],       keyword: 'salão beleza estética spa barbearia', aiLabel: 'beauty salon, spa, barbershop, or aesthetics', excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Barbearia':             { types: ['hair_care'],          keyword: 'barbearia barbeiro corte cabelo',   aiLabel: 'barbershop or men\'s hair salon',        excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Saúde & Bem-estar':     { types: ['health'],             keyword: 'saúde bem-estar clínica',          aiLabel: 'health or wellness service',             excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Clínica / Consultório': { types: ['doctor'],             keyword: 'clínica médico dentista',           aiLabel: 'clinic or medical office',               excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Academia / Fitness':    { types: ['gym'],                keyword: 'academia fitness crossfit',         aiLabel: 'gym or fitness center',                  excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Serviços':              { types: ['establishment'],      keyword: 'serviços',                          aiLabel: 'service business',                       excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Serviços Gerais':       { types: ['establishment'],      keyword: 'serviços',                          aiLabel: 'general service business',               excludeGoogleTypes: ['lodging', 'hotel'] },
+  'Outro':                 { types: ['establishment'],      keyword: '',                                  aiLabel: 'local business',                         excludeGoogleTypes: ['lodging', 'hotel'] },
 }
 
-Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
-
-  try {
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) return json({ error: 'Unauthorized' }, 401)
-
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
-    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? supabaseAnonKey
-    const apiKey = Deno.env.get('GOOGLE_PLACES_API_KEY')
-
-    if (!apiKey) return json({ error: 'GOOGLE_PLACES_API_KEY não configurada no servidor.' }, 503)
-
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    })
-    const { data: { user }, error: userErr } = await userClient.auth.getUser()
-    if (userErr || !user) return json({ error: 'Unauthorized' }, 401)
-
-    const admin = createClient(supabaseUrl, serviceKey)
-
-    const { data: company } = await admin
-      .from('companies')
-      .select('id, business_name, business_type, google_place_id')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (!company) return json({ error: 'Empresa não encontrada.' }, 404)
-    if (!company.google_place_id) {
-      return json({ error: 'Vincule seu negócio ao Google nas Configurações primeiro.' }, 400)
-    }
-
-    // Get lat/lng from Place Details API
-    const detailsRes = await fetch(
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${company.google_place_id}&fields=geometry&key=${apiKey}`
-    )
-    const details = await detailsRes.json()
-    if (details.status !== 'OK') {
-      return json({ error: `Google Places error: ${details.status}` }, 400)
-    }
-
-    const { lat, lng } = details.result.geometry.location
-    const placeType = BT_TO_TYPE[company.business_type ?? ''] ?? 'establishment'
-
-    // Nearby search in 2km radius
-    const nearbyUrl = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=2000&type=${placeType}&language=pt-BR&key=${apiKey}`
-    const nearbyRes = await fetch(nearbyUrl)
-    const nearbyData = await nearbyRes.json()
-
-    if (nearbyData.status !== 'OK' && nearbyData.status !== 'ZERO_RESULTS') {
-      return json({ error: `Google Places nearby error: ${nearbyData.status}` }, 400)
-    }
-
-    const places: GooglePlace[] = (nearbyData.results ?? [])
-      .filter((p: GooglePlace) => p.place_id !== company.google_place_id)
-      .slice(0, 10)
-
-    if (places.length === 0) return json({ mapped: 0 })
-
-    const rows = places.map((p: GooglePlace) => ({
-      company_id: company.id,
-      google_place_id: p.place_id,
-      name: p.name,
-      rating: p.rating ?? null,
-      review_count: p.user_ratings_total ?? 0,
-      distance_m: Math.round(haversine(lat, lng, p.geometry.location.lat, p.geometry.location.lng)),
-      price_level: p.price_level ?? null,
-    }))
-
-    // Replace all: delete then insert fresh
-    await admin.from('competitors').delete().eq('company_id', company.id)
-    await admin.from('competitors').insert(rows)
-
-    if (rows.length > 0) {
-      notifyMarketing(admin, company.id, 'NEW_COMPETITOR', {
-        count: rows.length,
-        competitors: rows.map((r: { name: string }) => r.name),
-      })
-    }
-
-    return json({ mapped: rows.length })
-
-  } catch (err) {
-    return json({ error: String(err) }, 500)
-  }
-})
-
-interface GooglePlace {
+interface PlaceDetails {
   place_id: string
   name: string
   rating?: number
   user_ratings_total?: number
   price_level?: number
   geometry: { location: { lat: number; lng: number } }
+  types?: string[]
+  website?: string
+  formatted_phone_number?: string
+  formatted_address?: string
+  editorial_summary?: { overview?: string }
+  opening_hours?: { weekday_text?: string[]; open_now?: boolean }
+  business_status?: string
+}
+
+async function notifyMarketing(adminDb: ReturnType<typeof createClient>, companyId: string, event: string, data?: Record<string, unknown>) {
+  // Sempre grava na aba Atividades, mesmo sem Telegram conectado — o envio
+  // ao Telegram (dentro de log-bot-event) é só um bônus quando existe chat.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const secret = Deno.env.get('BOT_WEBHOOK_SECRET')
+  if (!supabaseUrl) return
+  const { data: chat } = await adminDb.from('telegram_conversations').select('telegram_chat_id').eq('customer_id', companyId).eq('bot_type', 'marketing').limit(1).maybeSingle()
+  try {
+    await fetch(`${supabaseUrl}/functions/v1/log-bot-event`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: secret ?? '', bot_name: 'marketing', event_type: event, company_id: companyId, telegram_chat_id: chat?.telegram_chat_id ?? null, data }),
+    })
+  } catch { /* fire-and-forget */ }
+}
+
+async function getPlaceDetails(placeId: string, apiKey: string): Promise<PlaceDetails | null> {
+  const fields = 'name,place_id,geometry,rating,user_ratings_total,price_level,types,website,formatted_phone_number,formatted_address,editorial_summary,opening_hours,business_status'
+  const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&language=pt-BR&key=${apiKey}`
+  try {
+    const res = await fetch(url)
+    const data = await res.json()
+    if (data.status === 'OK') return data.result as PlaceDetails
+  } catch { /* ignore */ }
+  return null
+}
+
+async function verifyCompetitors(
+  places: PlaceDetails[],
+  businessType: string,
+  businessName: string,
+  anthropicKey: string,
+): Promise<Set<string>> {
+  if (!anthropicKey || places.length === 0) return new Set(places.map(p => p.place_id))
+
+  const cfg = BT_CONFIG[businessType] ?? BT_CONFIG['Outro']
+  const list = places.map(p => ({
+    id: p.place_id,
+    name: p.name,
+    types: p.types?.join(', ') ?? '',
+    summary: p.editorial_summary?.overview ?? '',
+  }))
+
+  const prompt = `You are classifying whether nearby businesses are DIRECT competitors.
+
+The registered business "${businessName}" is of type: "${businessType}" (${cfg.aiLabel}).
+
+STRICT EXCLUSION RULES — automatically exclude:
+- Hotels, pousadas, hostels, or any accommodation, even if they have a restaurant inside
+- Hospitals, clinics, pharmacies (unless the business itself is a clinic)
+- Gas stations, parking lots, banks
+- Businesses in clearly different sectors from "${cfg.aiLabel}"
+
+INCLUDE only businesses that compete for the EXACT same customer as "${businessName}".
+
+Return ONLY a JSON array of place_ids that ARE direct competitors. No explanation.
+
+Places:
+${JSON.stringify(list, null, 2)}`
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 512, messages: [{ role: 'user', content: prompt }] }),
+    })
+    if (!res.ok) return new Set(places.map(p => p.place_id))
+    const d = await res.json()
+    const text = (d.content?.[0]?.text ?? '').trim()
+    const match = text.match(/\[[\s\S]*\]/)
+    if (match) {
+      const ids: string[] = JSON.parse(match[0])
+      return new Set(ids)
+    }
+  } catch { /* fall through — places is already pre-filtered, safe to use as fallback */ }
+
+  return new Set(places.map(p => p.place_id))
 }
 
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -140,9 +129,205 @@ function haversine(lat1: number, lng1: number, lat2: number, lng2: number): numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
-function json(data: unknown, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+type CompanyRow = { id: string; business_name: string; business_type: string | null; google_place_id: string | null; notification_prefs?: Record<string, boolean> | null }
+
+// Núcleo do mapeamento — usado tanto pelo clique manual (aba Concorrentes) quanto
+// pelo ciclo autônomo. Faz a varredura completa e devolve quantos concorrentes
+// ficaram registrados; quem chama decide se vale notificar/logar o motivo.
+async function scanCompetitors(
+  admin: ReturnType<typeof createClient>,
+  apiKey: string,
+  anthropicKey: string,
+  company: CompanyRow,
+  radiusKm: number,
+): Promise<{ mapped: number; newCompetitorNames: string[] }> {
+  if (!company.google_place_id) return { mapped: 0, newCompetitorNames: [] }
+
+  const radiusM = radiusKm * 1000
+
+  const detailsRes = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${company.google_place_id}&fields=geometry&key=${apiKey}`)
+  const details = await detailsRes.json()
+  if (details.status !== 'OK') throw new Error(`Google Places error: ${details.status}`)
+
+  const { lat, lng } = details.result.geometry.location
+  const cfg = BT_CONFIG[company.business_type ?? ''] ?? BT_CONFIG['Outro']
+  const keywordParam = cfg.keyword ? `&keyword=${encodeURIComponent(cfg.keyword)}` : ''
+
+  const searchResults = await Promise.all(
+    cfg.types.map(searchType =>
+      fetch(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${lat},${lng}&radius=${radiusM}&type=${searchType}${keywordParam}&language=pt-BR&key=${apiKey}`)
+        .then(r => r.json())
+        .then((d: { status: string; results?: { place_id: string; business_status?: string }[] }) =>
+          (d.status === 'OK' || d.status === 'ZERO_RESULTS') ? (d.results ?? []) : []
+        )
+        .catch(() => [] as { place_id: string; business_status?: string }[])
+    )
+  )
+
+  const seen = new Set<string>()
+  const nearby = searchResults
+    .flat()
+    .filter((p: { place_id: string; business_status?: string }) => {
+      if (seen.has(p.place_id) || p.place_id === company.google_place_id || p.business_status === 'CLOSED_PERMANENTLY') return false
+      seen.add(p.place_id)
+      return true
+    })
+    .slice(0, 20)
+
+  if (nearby.length === 0) return { mapped: 0, newCompetitorNames: [] }
+
+  const detailedPlaces = (
+    await Promise.all(nearby.map((p: { place_id: string }) => getPlaceDetails(p.place_id, apiKey)))
+  ).filter((p): p is PlaceDetails => p !== null && p.business_status !== 'CLOSED_PERMANENTLY')
+
+  const preFiltered = detailedPlaces.filter(p => {
+    const placeTypes = p.types ?? []
+    return !cfg.excludeGoogleTypes.some(et => placeTypes.includes(et))
   })
+
+  const verifiedIds = await verifyCompetitors(preFiltered, company.business_type ?? '', company.business_name, anthropicKey)
+  const verifiedPlaces = detailedPlaces.filter(p => verifiedIds.has(p.place_id))
+
+  const igFromWebsite = (url: string | null | undefined): string | null => {
+    if (!url) return null
+    return /instagram\.com/i.test(url) ? url : null
+  }
+
+  const rows = verifiedPlaces.map(p => ({
+    company_id: company.id,
+    google_place_id: p.place_id,
+    name: p.name,
+    rating: p.rating ?? null,
+    review_count: p.user_ratings_total ?? 0,
+    distance_m: Math.round(haversine(lat, lng, p.geometry.location.lat, p.geometry.location.lng)),
+    price_level: p.price_level ?? null,
+    website: p.website ?? null,
+    instagram_url: igFromWebsite(p.website),
+    phone: p.formatted_phone_number ?? null,
+    address: p.formatted_address ?? null,
+    opening_hours: p.opening_hours
+      ? { weekday_text: p.opening_hours.weekday_text ?? [], open_now: p.opening_hours.open_now ?? null }
+      : null,
+    google_types: p.types ?? [],
+    editorial_summary: p.editorial_summary?.overview ?? null,
+    is_verified_competitor: true,
+  }))
+
+  const { data: existing } = await admin.from('competitors').select('id, google_place_id').eq('company_id', company.id)
+  const existingPlaceIds = new Set((existing ?? []).map(e => e.google_place_id))
+
+  let upserted: { id: string; google_place_id: string | null }[] = []
+  if (rows.length > 0) {
+    const { data } = await admin
+      .from('competitors')
+      .upsert(rows, { onConflict: 'company_id,google_place_id' })
+      .select('id, google_place_id')
+    upserted = data ?? []
+  }
+
+  const keepPlaceIds = new Set(rows.map(r => r.google_place_id))
+  const staleIds = (existing ?? []).filter(e => !keepPlaceIds.has(e.google_place_id ?? '')).map(e => e.id)
+  if (staleIds.length > 0) await admin.from('competitors').delete().in('id', staleIds)
+
+  if (upserted.length > 0) {
+    const byPlaceId = new Map(rows.map(r => [r.google_place_id, r]))
+    const snapshots = upserted
+      .map(u => {
+        const src = byPlaceId.get(u.google_place_id ?? '')
+        if (!src) return null
+        return { competitor_id: u.id, price_level: src.price_level, rating: src.rating, review_count: src.review_count }
+      })
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+    if (snapshots.length > 0) await admin.from('competitor_snapshots').insert(snapshots)
+  }
+
+  const newRows = rows.filter(r => !existingPlaceIds.has(r.google_place_id))
+  const prefs = (company.notification_prefs as Record<string, boolean> | null) ?? {}
+  if (newRows.length > 0 && prefs.new_competitor !== false) {
+    notifyMarketing(admin, company.id, 'NEW_COMPETITOR', {
+      count: newRows.length,
+      competitors: newRows.map(r => r.name),
+    })
+  }
+
+  return { mapped: rows.length, newCompetitorNames: newRows.map(r => r.name) }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? supabaseAnonKey
+    const apiKey = Deno.env.get('GOOGLE_PLACES_API_KEY')
+    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY') ?? ''
+    const cronSecretEnv = Deno.env.get('CRON_SECRET')
+
+    if (!apiKey) return json({ error: 'GOOGLE_PLACES_API_KEY não configurada no servidor.' }, 503)
+
+    const admin = createClient(supabaseUrl, serviceKey)
+
+    const rawBody = req.method === 'POST' ? await req.json().catch(() => ({})) as Record<string, unknown> : {}
+    const isCron = cronSecretEnv && rawBody.cron_secret === cronSecretEnv
+
+    // Modo cron: roda pra todas as empresas com Google vinculado, mas só re-varre
+    // quem não foi escaneado nos últimos 7 dias — evita gastar cota do Google
+    // Places e chamadas de IA verificando os mesmos concorrentes a cada 30 min.
+    if (isCron) {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: companies } = await admin
+        .from('companies')
+        .select('id, business_name, business_type, google_place_id, notification_prefs')
+        .eq('active', true)
+        .not('google_place_id', 'is', null)
+
+      let scanned = 0, skipped = 0
+      for (const company of (companies ?? []) as CompanyRow[]) {
+        try {
+          const { data: recentSnap } = await admin
+            .from('competitor_snapshots')
+            .select('collected_at, competitors!inner(company_id)')
+            .eq('competitors.company_id', company.id)
+            .order('collected_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+          if (recentSnap?.collected_at && recentSnap.collected_at > sevenDaysAgo) { skipped++; continue }
+
+          await scanCompetitors(admin, apiKey, anthropicKey, company, 3)
+          scanned++
+        } catch (e) {
+          console.error(`map-competitors cron: company ${company.id} error:`, e)
+        }
+      }
+      return json({ ok: true, cron: true, scanned, skipped })
+    }
+
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) return json({ error: 'Unauthorized' }, 401)
+
+    const userClient = createClient(supabaseUrl, supabaseAnonKey, { global: { headers: { Authorization: authHeader } } })
+    const { data: { user }, error: userErr } = await userClient.auth.getUser()
+    if (userErr || !user) return json({ error: 'Unauthorized' }, 401)
+
+    const { data: company } = await admin.from('companies').select('id, business_name, business_type, google_place_id, notification_prefs').eq('user_id', user.id).maybeSingle()
+
+    if (!company) return json({ error: 'Empresa não encontrada.' }, 404)
+    if (!company.google_place_id) return json({ error: 'Vincule seu negócio ao Google nas Configurações primeiro.' }, 400)
+
+    // Google's Nearby Search caps the radius at 50km (50000m) — requests above
+    // that are clamped, not rejected, so we clamp here too to keep it honest.
+    const radiusKm = Math.min(50, Math.max(1, Math.round((rawBody.radius_km as number) ?? 3)))
+
+    const result = await scanCompetitors(admin, apiKey, anthropicKey, company as CompanyRow, radiusKm)
+
+    return json({ mapped: result.mapped, verified_competitors: result.mapped, radius_km: radiusKm })
+  } catch (err) {
+    return json({ error: String(err) }, 500)
+  }
+})
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
 }

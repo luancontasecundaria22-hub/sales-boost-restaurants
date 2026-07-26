@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
+import { InsightReport } from '../../components/InsightReport'
 
 const CARD = '#150E08'
 const MUTED = '#BABABA'
@@ -20,6 +21,16 @@ interface Competitor {
   distance_m: number | null
   price_level: number | null
   google_place_id: string | null
+  instagram_url: string | null
+}
+
+interface Snapshot {
+  competitor_id: string
+  price_level: number | null
+  instagram_followers: number | null
+  instagram_posts_count: number | null
+  instagram_posting_freq_days: number | null
+  collected_at: string
 }
 
 function PriceLevel({ level }: { level: number | null }) {
@@ -62,6 +73,10 @@ export default function CompetitorsPage() {
   const [hasGoogle, setHasGoogle] = useState(false)
   const [analysis, setAnalysis] = useState<string | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
+  const [radiusKm, setRadiusKm] = useState(3)
+  const [snapshots, setSnapshots] = useState<Record<string, Snapshot[]>>({})
+  const [monitoring, setMonitoring] = useState(false)
+  const [monitorMsg, setMonitorMsg] = useState('')
 
   const load = async () => {
     if (!user) return
@@ -79,16 +94,49 @@ export default function CompetitorsPage() {
 
       const { data } = await supabase
         .from('competitors')
-        .select('id, name, rating, review_count, distance_m, price_level, google_place_id')
+        .select('id, name, rating, review_count, distance_m, price_level, google_place_id, instagram_url')
         .eq('company_id', company.id)
+        .eq('is_verified_competitor', true)
         .order('distance_m', { ascending: true })
 
-      setCompetitors((data ?? []) as Competitor[])
+      const comps = (data ?? []) as Competitor[]
+      setCompetitors(comps)
+
+      if (comps.length > 0) {
+        const { data: snaps } = await supabase
+          .from('competitor_snapshots')
+          .select('competitor_id, price_level, instagram_followers, instagram_posts_count, instagram_posting_freq_days, collected_at')
+          .in('competitor_id', comps.map(c => c.id))
+          .order('collected_at', { ascending: false })
+        const grouped: Record<string, Snapshot[]> = {}
+        for (const s of (snaps ?? []) as Snapshot[]) (grouped[s.competitor_id] ??= []).push(s)
+        setSnapshots(grouped)
+      }
     }
     setLoading(false)
   }
 
   useEffect(() => { load() }, [user])
+
+  const monitorSocial = async () => {
+    if (!session) return
+    setMonitoring(true)
+    setMonitorMsg('')
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/monitor-competitor-social`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Erro desconhecido')
+      setMonitorMsg(data.message ?? `${data.monitored}/${data.total} concorrentes monitorados`)
+      await load()
+    } catch (e: unknown) {
+      setMonitorMsg(e instanceof Error ? e.message : String(e))
+    }
+    setMonitoring(false)
+  }
 
   const mapNow = async () => {
     if (!session) return
@@ -99,11 +147,11 @@ export default function CompetitorsPage() {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/map-competitors`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ radius_km: radiusKm }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Erro desconhecido')
-      setMsg(`${data.mapped} concorrentes mapeados no raio de 2km`)
+      setMsg(`${data.mapped} concorrentes mapeados no raio de ${data.radius_km ?? radiusKm}km`)
       await load()
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -138,10 +186,10 @@ Por favor, estruture a resposta assim:
 **3. Plano da semana** — 5 ações concretas para superar os concorrentes nesta semana (posts, atendimento, preço, reputação).`
 
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/agent-chat`, {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/hermes-proxy`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message, agent_role: 'cmo', history: [] }),
+        body: JSON.stringify({ message, agent_role: 'marketing', history: [] }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Erro na análise')
@@ -178,18 +226,37 @@ Por favor, estruture a resposta assim:
         <div>
           <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
           <p style={{ color: MUTED, fontSize: '13px' }}>
-            {competitors.length > 0 ? `${competitors.length} concorrentes mapeados no raio de 2km` : 'Nenhum concorrente mapeado ainda'}
+            {competitors.length > 0 ? `${competitors.length} concorrentes mapeados no raio de ${radiusKm}km` : 'Nenhum concorrente mapeado ainda'}
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
           {competitors.length > 0 && (
-            <button
-              onClick={analyzeCompetitors}
-              disabled={analyzing}
-              style={{ padding: '9px 18px', background: analyzing ? 'rgba(255,109,41,0.15)' : 'rgba(255,109,41,0.12)', color: ORANGE, fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: '1px solid rgba(255,109,41,0.3)', cursor: analyzing ? 'not-allowed' : 'pointer' }}>
-              {analyzing ? '🤖 Analisando...' : '🤖 Analisar com IA'}
-            </button>
+            <>
+              <button
+                onClick={analyzeCompetitors}
+                disabled={analyzing}
+                style={{ padding: '9px 18px', background: analyzing ? 'rgba(255,109,41,0.15)' : 'rgba(255,109,41,0.12)', color: ORANGE, fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: '1px solid rgba(255,109,41,0.3)', cursor: analyzing ? 'not-allowed' : 'pointer' }}>
+                {analyzing ? '🤖 Analisando...' : '🤖 Analisar com IA'}
+              </button>
+              <button
+                onClick={monitorSocial}
+                disabled={monitoring}
+                title="Puxa seguidores e frequência de postagem do Instagram de cada concorrente (quando identificado)"
+                style={{ padding: '9px 18px', background: monitoring ? 'rgba(255,109,41,0.15)' : 'rgba(255,109,41,0.12)', color: ORANGE, fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: '1px solid rgba(255,109,41,0.3)', cursor: monitoring ? 'not-allowed' : 'pointer' }}>
+                {monitoring ? '📡 Monitorando...' : '📡 Monitorar redes sociais'}
+              </button>
+            </>
           )}
+          <select
+            value={radiusKm}
+            onChange={e => setRadiusKm(Number(e.target.value))}
+            disabled={mapping}
+            title="Raio de busca — o limite do Google Maps é 50km"
+            style={{ padding: '9px 14px', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '9px', color: 'white', fontSize: '13px', cursor: mapping ? 'not-allowed' : 'pointer', outline: 'none' }}>
+            {[1, 3, 5, 10, 20, 30, 50].map(km => (
+              <option key={km} value={km} style={{ background: CARD }}>Raio: {km}km</option>
+            ))}
+          </select>
           <button
             onClick={mapNow}
             disabled={mapping || !hasGoogle}
@@ -201,9 +268,16 @@ Por favor, estruture a resposta assim:
       </div>
 
       <div style={{ padding: '24px 32px' }}>
+        <InsightReport tabKey="concorrentes" />
+
         {(msg || err) && (
           <div style={{ marginBottom: '16px', padding: '12px 16px', background: err ? 'rgba(248,113,113,0.08)' : 'rgba(74,222,128,0.08)', border: `1px solid ${err ? 'rgba(248,113,113,0.2)' : 'rgba(74,222,128,0.2)'}`, borderRadius: '10px', fontSize: '13px', color: err ? '#f87171' : '#4ade80' }}>
             {err || msg}
+          </div>
+        )}
+        {monitorMsg && (
+          <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '10px', fontSize: '13px', color: ORANGE }}>
+            {monitorMsg}
           </div>
         )}
 
@@ -222,7 +296,7 @@ Por favor, estruture a resposta assim:
             <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>🗺</div>
             <div style={{ fontFamily: D, fontSize: '1.2rem', fontWeight: 800, color: 'white', marginBottom: '8px' }}>Nenhum concorrente mapeado</div>
             <div style={{ fontSize: '14px', color: MUTED, maxWidth: '400px', margin: '0 auto 24px', lineHeight: 1.7 }}>
-              Clique em <strong style={{ color: ORANGE }}>"Mapear concorrentes"</strong> para buscar negócios similares num raio de 2km via Google Maps.
+              Escolha o raio acima e clique em <strong style={{ color: ORANGE }}>"Mapear concorrentes"</strong> para buscar negócios similares via Google Maps.
             </div>
             <button onClick={mapNow} disabled={mapping}
               style={{ padding: '11px 24px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '14px', borderRadius: '10px', border: 'none', cursor: 'pointer' }}>
@@ -275,22 +349,48 @@ Por favor, estruture a resposta assim:
 
             {/* Table */}
             <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', overflow: 'hidden' }}>
-              <div style={{ padding: '16px 22px', borderBottom: `1px solid ${BORDER}`, display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 1fr 80px', gap: '12px', alignItems: 'center' }}>
-                {['Nome', 'Avaliação', 'Reviews', 'Preço ↓', 'Dist.'].map(h => (
+              <div style={{ padding: '16px 22px', borderBottom: `1px solid ${BORDER}`, display: 'grid', gridTemplateColumns: '2fr 1.1fr 0.9fr 1fr 1.3fr 80px', gap: '12px', alignItems: 'center' }}>
+                {['Nome', 'Avaliação', 'Reviews', 'Preço ↓', 'Redes sociais', 'Dist.'].map(h => (
                   <div key={h} style={{ fontSize: '10px', fontWeight: 700, color: h === 'Preço ↓' ? ORANGE : MUTED, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{h}</div>
                 ))}
               </div>
-              {sortedCompetitors.map((c, i) => (
-                <div key={c.id} style={{ padding: '14px 22px', borderBottom: i < sortedCompetitors.length - 1 ? `1px solid ${BORDER}` : 'none', display: 'grid', gridTemplateColumns: '2fr 1.2fr 1fr 1fr 80px', gap: '12px', alignItems: 'center' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{c.name}</div>
-                  <div><RatingBar rating={c.rating} /></div>
-                  <div style={{ fontSize: '12px', color: MUTED }}>{c.review_count > 0 ? c.review_count.toLocaleString('pt-BR') : '—'}</div>
-                  <div><PriceLevel level={c.price_level} /></div>
-                  <div style={{ fontSize: '12px', color: MUTED }}>
-                    {c.distance_m != null ? (c.distance_m >= 1000 ? `${(c.distance_m / 1000).toFixed(1)}km` : `${c.distance_m}m`) : '—'}
+              {sortedCompetitors.map((c, i) => {
+                const compSnaps = snapshots[c.id] ?? []
+                const priceHistory = compSnaps.filter(s => s.price_level != null)
+                const priceTrend = priceHistory.length >= 2 && priceHistory[0].price_level !== priceHistory[1].price_level
+                  ? (priceHistory[0].price_level! > priceHistory[1].price_level! ? 'up' : 'down')
+                  : null
+                const social = compSnaps.find(s => s.instagram_followers != null)
+                return (
+                  <div key={c.id} style={{ padding: '14px 22px', borderBottom: i < sortedCompetitors.length - 1 ? `1px solid ${BORDER}` : 'none', display: 'grid', gridTemplateColumns: '2fr 1.1fr 0.9fr 1fr 1.3fr 80px', gap: '12px', alignItems: 'center' }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{c.name}</div>
+                    <div><RatingBar rating={c.rating} /></div>
+                    <div style={{ fontSize: '12px', color: MUTED }}>{c.review_count > 0 ? c.review_count.toLocaleString('pt-BR') : '—'}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <PriceLevel level={c.price_level} />
+                      {priceTrend && (
+                        <span title={priceTrend === 'up' ? 'Preço subiu desde a última checagem' : 'Preço caiu desde a última checagem'}
+                          style={{ fontSize: '11px', color: priceTrend === 'up' ? '#f87171' : '#4ade80' }}>
+                          {priceTrend === 'up' ? '▲' : '▼'}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: '11.5px', color: MUTED }}>
+                      {social ? (
+                        <>
+                          <span style={{ color: 'white' }}>{(social.instagram_followers ?? 0).toLocaleString('pt-BR')}</span> seguidores
+                          {social.instagram_posting_freq_days != null && (
+                            <div>posta a cada {social.instagram_posting_freq_days}d</div>
+                          )}
+                        </>
+                      ) : c.instagram_url ? '—' : 'sem Instagram'}
+                    </div>
+                    <div style={{ fontSize: '12px', color: MUTED }}>
+                      {c.distance_m != null ? (c.distance_m >= 1000 ? `${(c.distance_m / 1000).toFixed(1)}km` : `${c.distance_m}m`) : '—'}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
 
             <div style={{ marginTop: '12px', fontSize: '11px', color: 'rgba(255,255,255,0.2)', textAlign: 'right' }}>

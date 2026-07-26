@@ -10,21 +10,81 @@ type Company = {
   business_name: string
   social_data: Record<string, unknown> | null
   telegram_chat_id?: number | null
+  notification_prefs?: Record<string, boolean> | null
+  avg_ticket?: number | null
 }
 
-async function notifyMarketing(chatId: number | null | undefined, event: string, data?: Record<string, unknown>) {
-  if (!chatId) return
-  const url = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
-  const secret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
-  if (!url) return
-  fetch(url, {
+// "Receita recuperável" só existe quando o dono informou o ticket médio real
+// (Configurações → Sobre o negócio) — nunca inventamos um valor em R$. Os
+// multiplicadores abaixo são uma estimativa de quantos "clientes equivalentes"
+// cada tipo de oportunidade representa, não um cálculo exato.
+function estimatedValue(avgTicket: number | null | undefined, multiplier: number): number | null {
+  if (avgTicket == null || avgTicket <= 0) return null
+  return Math.round(avgTicket * multiplier)
+}
+
+type NewOpportunity = { type: string; title: string }
+
+const NEGATIVE_TYPES = new Set(['negative_review', 'unanswered_review'])
+
+async function notifyMarketing(chatId: number | null | undefined, companyId: string, event: string, data?: Record<string, unknown>) {
+  // Sempre grava na aba Atividades, mesmo sem Telegram conectado — o envio
+  // ao Telegram (dentro de log-bot-event) é só um bônus quando existe chatId.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const secret = Deno.env.get('BOT_WEBHOOK_SECRET')
+  if (!supabaseUrl) return
+  fetch(`${supabaseUrl}/functions/v1/log-bot-event`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-webhook-secret': secret ?? '' },
-    body: JSON.stringify({ event, chat_id: chatId, data }),
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ secret: secret ?? '', bot_name: 'marketing', event_type: event, company_id: companyId, telegram_chat_id: chatId ?? null, data }),
   }).catch(() => {})
 }
 
-async function detectForCompany(company: Company, admin: ReturnType<typeof createClient>) {
+// Sends ONE consolidated message for whatever is genuinely new this run —
+// never one message per item, and never re-announces items that were already
+// open from a previous run. Respects the owner's notification_prefs toggles.
+function notifyNewOpportunities(chatId: number | null | undefined, companyId: string, prefs: Record<string, boolean> | null | undefined, newOpportunities: NewOpportunity[]) {
+  if (newOpportunities.length === 0) return
+  const allowed = newOpportunities.filter(o =>
+    NEGATIVE_TYPES.has(o.type) ? prefs?.negative_reviews !== false : prefs?.opportunities !== false
+  )
+  if (allowed.length === 0) return
+  notifyMarketing(chatId, companyId, 'OPPORTUNITY_DETECTED', {
+    description: `${allowed.length} nova(s) oportunidade(s) detectada(s)`,
+    opportunities: allowed.map(o => ({ type: o.type, title: o.title })),
+  })
+}
+
+// Opportunities without a ref_id (stale_draft, no_content, low_engagement) can't rely on
+// the `company_id,type,ref_id` upsert conflict target — Postgres never treats two NULLs as
+// equal, so every run was inserting a fresh duplicate instead of reusing the open one. This
+// updates the existing open row in place instead, so there's ever only one per (company, type).
+async function upsertSingletonOpportunity(
+  admin: ReturnType<typeof createClient>,
+  companyId: string,
+  type: string,
+  fields: { title: string; description: string; estimated_impact: string; estimated_value: number | null; ref_type: string | null },
+): Promise<boolean> {
+  const { data: existing } = await admin
+    .from('opportunities')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('type', type)
+    .eq('status', 'open')
+    .is('ref_id', null)
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) {
+    await admin.from('opportunities').update(fields).eq('id', existing.id)
+    return false
+  }
+  await admin.from('opportunities').insert({ company_id: companyId, type, status: 'open', ref_id: null, ...fields })
+  return true
+}
+
+async function detectForCompany(company: Company, admin: ReturnType<typeof createClient>): Promise<NewOpportunity[]> {
+  const newOpportunities: NewOpportunity[] = []
   const now = new Date()
   const day60ago = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString()
   const day14ago = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString()
@@ -50,7 +110,7 @@ async function detectForCompany(company: Company, admin: ReturnType<typeof creat
       title: `Review ${r.rating}⭐ de ${r.author} sem resposta`,
       description: r.text ? `"${r.text.slice(0, 120)}..."` : 'Review negativa sem comentário.',
       estimated_impact: 'Responder reviews negativos pode aumentar a nota em até 0.3 pontos.',
-      estimated_value: 150,
+      estimated_value: estimatedValue(company.avg_ticket, 1),
       status: 'open',
       ref_id: r.id,
       ref_type: 'review',
@@ -75,34 +135,43 @@ async function detectForCompany(company: Company, admin: ReturnType<typeof creat
       title: `Review de ${r.author} sem resposta há +14 dias`,
       description: r.text ? `"${r.text.slice(0, 120)}..."` : 'Review sem comentário.',
       estimated_impact: 'Responder todas as avaliações aumenta confiança e melhora o ranking no Google.',
-      estimated_value: 80,
+      estimated_value: estimatedValue(company.avg_ticket, 0.4),
       status: 'open',
       ref_id: r.id,
       ref_type: 'review',
     })
   }
 
-  // 3. Rascunhos de posts parados há mais de 3 dias
-  const { data: staleDrafts } = await admin
+  // 3. Rascunhos de posts parados — conta TODOS os pendentes, não só os com
+  // +3 dias. Um acúmulo rápido (dezenas no mesmo dia, gerados por cron a cada
+  // 30 min) também precisa travar a criação de mais conteúdo — se só olhar
+  // idade, um acúmulo que nasce e cresce mais rápido do que 3 dias nunca é
+  // pego, porque nenhum rascunho individual chega a ficar "velho" o bastante.
+  const PENDING_DRAFT_LIMIT = 8
+  const { data: pendingDrafts } = await admin
     .from('posts')
-    .select('id, content, platform, created_at')
+    .select('id, created_at')
     .eq('company_id', company.id)
     .eq('status', 'rascunho')
-    .lte('created_at', day3ago)
-    .order('created_at', { ascending: false })
+    .order('created_at', { ascending: true })
 
-  if ((staleDrafts ?? []).length > 0) {
-    toUpsert.push({
-      company_id: company.id,
-      type: 'stale_draft',
-      title: `${staleDrafts!.length} rascunho(s) aguardando aprovação há +3 dias`,
+  const totalPending = (pendingDrafts ?? []).length
+  const oldestPendingAt = pendingDrafts?.[0]?.created_at
+  const hasOldDraft = !!oldestPendingAt && oldestPendingAt <= day3ago
+  const isPileup = totalPending >= PENDING_DRAFT_LIMIT || hasOldDraft
+
+  if (isPileup) {
+    const title = `${totalPending} rascunho(s) aguardando aprovação`
+    const created = await upsertSingletonOpportunity(admin, company.id, 'stale_draft', {
+      title,
       description: 'Posts prontos que ainda não foram aprovados ou publicados.',
       estimated_impact: 'Publicar conteúdo regularmente aumenta o alcance orgânico.',
-      estimated_value: 50 * staleDrafts!.length,
-      status: 'open',
-      ref_id: null,
+      estimated_value: estimatedValue(company.avg_ticket, 0.15 * Math.min(totalPending, 20)),
       ref_type: 'post',
     })
+    if (created) newOpportunities.push({ type: 'stale_draft', title })
+  } else {
+    await admin.from('opportunities').update({ status: 'resolved' }).eq('company_id', company.id).eq('type', 'stale_draft').eq('status', 'open')
   }
 
   // 4. Sem posts publicados nos últimos 7 dias
@@ -132,43 +201,57 @@ async function detectForCompany(company: Company, admin: ReturnType<typeof creat
       .eq('type', 'no_content')
       .eq('status', 'open')
   } else {
-    toUpsert.push({
-      company_id: company.id,
-      type: 'no_content',
-      title: 'Nenhum post publicado nos últimos 7 dias',
+    const title = 'Nenhum post publicado nos últimos 7 dias'
+    const created = await upsertSingletonOpportunity(admin, company.id, 'no_content', {
+      title,
       description: 'A ausência de conteúdo reduz o alcance e o engajamento do seu perfil.',
       estimated_impact: 'Contas que postam 3–5x/semana crescem 2x mais rápido.',
-      estimated_value: 300,
-      status: 'open',
-      ref_id: null,
+      estimated_value: estimatedValue(company.avg_ticket, 1),
       ref_type: null,
     })
+    if (created) newOpportunities.push({ type: 'no_content', title })
   }
 
   // 5. Baixo engajamento no Instagram
   const ig = (company.social_data as Record<string, unknown> | null)?.instagram as Record<string, unknown> | undefined
   if (ig && typeof ig.engagement_rate === 'number' && ig.engagement_rate < 1) {
-    toUpsert.push({
-      company_id: company.id,
-      type: 'low_engagement',
-      title: `Engajamento no Instagram baixo: ${ig.engagement_rate}%`,
+    const title = `Engajamento no Instagram baixo: ${ig.engagement_rate}%`
+    const created = await upsertSingletonOpportunity(admin, company.id, 'low_engagement', {
+      title,
       description: `Média do setor é 1–3%. Seus posts têm em média ${ig.avg_likes ?? 0} curtidas e ${ig.avg_comments ?? 0} comentários.`,
       estimated_impact: 'Melhorar engajamento aumenta o alcance orgânico sem gastar em anúncios.',
-      estimated_value: 200,
-      status: 'open',
-      ref_id: null,
+      estimated_value: estimatedValue(company.avg_ticket, 0.5),
       ref_type: null,
     })
+    if (created) newOpportunities.push({ type: 'low_engagement', title })
+  } else {
+    await admin.from('opportunities').update({ status: 'resolved' }).eq('company_id', company.id).eq('type', 'low_engagement').eq('status', 'open')
   }
 
   if (toUpsert.length > 0) {
-    await admin.from('opportunities').upsert(toUpsert, {
+    // ON CONFLICT DO NOTHING + RETURNING only gives back rows that were actually
+    // inserted — rows that hit the conflict (already-open, same review) come back
+    // empty. That's what lets us tell "new since last run" from "still open".
+    const { data: inserted } = await admin.from('opportunities').upsert(toUpsert, {
       onConflict: 'company_id,type,ref_id',
       ignoreDuplicates: true,
-    })
+    }).select('type, title')
+    for (const row of inserted ?? []) {
+      newOpportunities.push({ type: row.type as string, title: row.title as string })
+    }
   }
 
-  return toUpsert.length
+  // Reviews antigos (já abertos antes desta execução) não passam pelo upsert
+  // acima de novo — sem isso, um valor calculado com um ticket médio antigo
+  // (ou o número fixo/falso de antes desta mudança) ficaria preso pra sempre.
+  await admin.from('opportunities')
+    .update({ estimated_value: estimatedValue(company.avg_ticket, 1) })
+    .eq('company_id', company.id).eq('type', 'negative_review').eq('status', 'open')
+  await admin.from('opportunities')
+    .update({ estimated_value: estimatedValue(company.avg_ticket, 0.4) })
+    .eq('company_id', company.id).eq('type', 'unanswered_review').eq('status', 'open')
+
+  return newOpportunities
 }
 
 Deno.serve(async (req) => {
@@ -189,25 +272,17 @@ Deno.serve(async (req) => {
     if (isCron) {
       const { data: companies } = await admin
         .from('companies')
-        .select('id, business_name, social_data, telegram_chat_id')
+        .select('id, business_name, social_data, telegram_chat_id, notification_prefs, avg_ticket')
         .eq('active', true)
 
       let total = 0
       for (const company of companies ?? []) {
         try {
-          const count = await detectForCompany(company as Company, admin)
-          total += count
-
-          // Sempre manda um resumo com sugestões, mesmo sem nada novo — nunca fica em silêncio.
-          const [{ count: openCount }, { data: topOpps }] = await Promise.all([
-            admin.from('opportunities').select('id', { count: 'exact', head: true }).eq('company_id', company.id).eq('status', 'open'),
-            admin.from('opportunities').select('title').eq('company_id', company.id).eq('status', 'open').order('created_at', { ascending: false }).limit(5),
-          ])
-          notifyMarketing((company as Company).telegram_chat_id, 'CYCLE_SUMMARY', {
-            newCount: count,
-            openCount: openCount ?? 0,
-            suggestions: (topOpps ?? []).map(o => o.title),
-          })
+          const newOpportunities = await detectForCompany(company as Company, admin)
+          total += newOpportunities.length
+          // Only sends when something genuinely new shows up — a daily message
+          // with nothing new to say was the main source of "mensagem repetitiva".
+          notifyNewOpportunities((company as Company).telegram_chat_id, (company as Company).id, (company as Company).notification_prefs, newOpportunities)
         } catch (e) {
           console.error(`detect-opportunities: company ${company.id} error:`, e)
         }
@@ -227,14 +302,16 @@ Deno.serve(async (req) => {
 
     const { data: company } = await admin
       .from('companies')
-      .select('id, business_name, social_data, telegram_chat_id')
+      .select('id, business_name, social_data, telegram_chat_id, notification_prefs, avg_ticket')
       .eq('user_id', user.id)
       .maybeSingle()
 
     if (!company) return json({ error: 'Empresa não encontrada.' }, 404)
 
-    const newCount = await detectForCompany(company as Company, admin)
-    if (newCount > 0) notifyMarketing((company as Company).telegram_chat_id, 'OPPORTUNITY_DETECTED', { description: `${newCount} nova(s) oportunidade(s) detectada(s)` })
+    const newOpportunities = await detectForCompany(company as Company, admin)
+    // ONE consolidated message for whatever is new — no more one message per
+    // review plus a duplicate summary on every "Salvar alterações".
+    notifyNewOpportunities((company as Company).telegram_chat_id, (company as Company).id, (company as Company).notification_prefs, newOpportunities)
 
     // Return all open opportunities sorted by priority
     const { data: allOpen } = await admin
@@ -248,24 +325,6 @@ Deno.serve(async (req) => {
     const sorted = (allOpen ?? []).sort((a: { type: string }, b: { type: string }) =>
       priorityOrder.indexOf(a.type) - priorityOrder.indexOf(b.type)
     )
-
-    if (sorted.length > 0) {
-      notifyMarketing((company as Company).telegram_chat_id, 'OPPORTUNITY_DETECTED', {
-        description: `${sorted.length} oportunidades detectadas`,
-        opportunities: sorted.map(o => ({ type: o.type, title: o.title })),
-      })
-
-      const negativeTypes = new Set(['negative_review', 'unanswered_review'])
-      for (const o of sorted) {
-        if (negativeTypes.has(o.type)) {
-          notifyMarketing((company as Company).telegram_chat_id, 'NEGATIVE_REVIEW', {
-            rating: o.ref_type === 'review' ? 'nova' : undefined,
-            source: o.ref_type,
-            excerpt: o.title,
-          })
-        }
-      }
-    }
 
     return json({ ok: true, opportunities: sorted, total: sorted.length })
   } catch (err) {

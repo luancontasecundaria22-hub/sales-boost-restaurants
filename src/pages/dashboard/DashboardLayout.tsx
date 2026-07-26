@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { useCompany } from '../../contexts/CompanyContext'
 import { LanguageProvider, useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
 import { supabase } from '../../lib/supabase'
@@ -19,26 +20,39 @@ type NavSection = { section?: string; accent?: boolean; items: NavItem[] }
 interface ActivityItem { id: string; content: string; agent_role: string | null; created_at: string }
 const AGENT_EMOJI: Record<string, string> = { ceo: '🗂️', researcher: '🔍', cmo: '📣', sales: '💼', analyst: '📊', cs: '⭐' }
 
-function makeNavSections(T: typeof d[keyof typeof d]): NavSection[] {
+function makeNavSections(T: typeof d[keyof typeof d], flags: { jarvis: boolean; agentesMenu: boolean }): NavSection[] {
   return [
     {
-      items: [{
-        to: '/dashboard', label: T.layout.nav.overview, end: true,
-        icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>,
-      }],
+      items: [
+        {
+          to: '/dashboard', label: T.layout.nav.overview, end: true,
+          icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>,
+        },
+        {
+          to: '/dashboard/atividades', label: T.layout.nav.activities,
+          icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M2.25 12c0-1.146.294-2.257.85-3.24a.75.75 0 0 1 1.32.72A5.98 5.98 0 0 0 3.75 12a5.98 5.98 0 0 0 .67 2.52.75.75 0 0 1-1.32.72A7.48 7.48 0 0 1 2.25 12ZM8.03 5.47a.75.75 0 0 1 0 1.06 5.98 5.98 0 0 0-1.75 4.22 5.98 5.98 0 0 0 1.75 4.22.75.75 0 1 1-1.06 1.06A7.48 7.48 0 0 1 4.78 10.75c0-2.07.84-3.95 2.19-5.3a.75.75 0 0 1 1.06.02Z" /><path d="M9.75 10.75a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0Z" /><path d="M15.97 5.45a.75.75 0 0 1 1.06-.02 7.48 7.48 0 0 1 2.19 5.3 7.48 7.48 0 0 1-2.19 5.3.75.75 0 1 1-1.06-1.06 5.98 5.98 0 0 0 1.75-4.22 5.98 5.98 0 0 0-1.75-4.22.75.75 0 0 1 0-1.06ZM19.58 9.48a.75.75 0 0 1 1.32-.72c.556.983.85 2.094.85 3.24a7.48 7.48 0 0 1-.85 3.24.75.75 0 1 1-1.32-.72A5.98 5.98 0 0 0 20.25 12a5.98 5.98 0 0 0-.67-2.52Z" /></svg>,
+        },
+      ],
     },
-    {
+    ...(flags.jarvis ? [{
       section: T.layout.sections.meetings, accent: true,
       items: [{
         to: '/jarvis', label: T.layout.nav.jarvis,
         icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg>,
       }],
-    },
-    {
+    }] : []),
+    ...(flags.agentesMenu ? [{
       section: T.layout.sections.marketing,
       items: [{
         to: '/dashboard/posts', label: T.layout.nav.posts,
         icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>,
+      }],
+    }] : []),
+    {
+      section: T.layout.sections.marketingAi, accent: true,
+      items: [{
+        to: '/dashboard/marketing-ai', label: T.layout.nav.marketingAi,
+        icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg>,
       }],
     },
     {
@@ -92,6 +106,8 @@ function SidebarInner() {
   const { lang } = useLang()
   const T = d[lang]
   const [activity, setActivity] = useState<ActivityItem[]>([])
+  const { company } = useCompany()
+  const flags = { jarvis: company?.jarvis_enabled ?? false, agentesMenu: company?.agent_enabled ?? false }
 
   useEffect(() => {
     if (!user) return
@@ -108,7 +124,7 @@ function SidebarInner() {
       })
   }, [user])
 
-  const navSections = makeNavSections(T)
+  const navSections = makeNavSections(T, flags)
   const bottomItems = makeBottomItems(T)
 
   const handleSignOut = async () => { await signOut(); navigate('/') }

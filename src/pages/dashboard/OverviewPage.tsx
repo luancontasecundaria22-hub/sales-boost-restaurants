@@ -22,11 +22,6 @@ interface Company {
   google_place_id: string | null
 }
 
-interface EnzoReport {
-  content: string
-  created_at: string
-}
-
 interface Diagnostic {
   id: string
   status: string | null
@@ -48,14 +43,6 @@ interface Opportunity {
   title: string
   estimated_impact: string | null
   estimated_value: number | null
-  created_at: string
-}
-
-interface BotNotification {
-  id: string
-  bot_name: string
-  event_type: string
-  message: string
   created_at: string
 }
 
@@ -108,11 +95,8 @@ export default function OverviewPage() {
   const [diag, setDiag] = useState<Diagnostic | null>(null)
   const [reviewStats, setReviewStats] = useState<ReviewStats | null>(null)
   const [opportunities, setOpportunities] = useState<Opportunity[]>([])
-  const [enzoReport, setEnzoReport] = useState<EnzoReport | null>(null)
-  const [generatingReport, setGeneratingReport] = useState(false)
   const [loading, setLoading] = useState(true)
   const [noCompany, setNoCompany] = useState(false)
-  const [botNotifications, setBotNotifications] = useState<BotNotification[]>([])
 
   const userName = user?.email?.split('@')[0] ?? T.user
 
@@ -132,7 +116,7 @@ export default function OverviewPage() {
     if (!co) { setNoCompany(true); setLoading(false); return }
     setCompany(co as Company)
 
-    const [diagRes, reviewsRes, oppsRes, enzoRes, botNotifsRes] = await Promise.all([
+    const [diagRes, reviewsRes, oppsRes] = await Promise.all([
       supabase.from('diagnostics')
         .select('id, status, created_at, pagespeed_mobile, pagespeed_desktop')
         .eq('company_id', co.id)
@@ -148,17 +132,6 @@ export default function OverviewPage() {
         .eq('company_id', co.id)
         .eq('status', 'open')
         .order('created_at', { ascending: false }),
-      supabase.from('agent_messages')
-        .select('content, created_at')
-        .eq('company_id', co.id)
-        .eq('role', 'assistant')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase.from('bot_notifications')
-        .select('id, bot_name, event_type, message, created_at')
-        .order('created_at', { ascending: false })
-        .limit(15),
     ])
 
     setDiag(diagRes.data ?? null)
@@ -172,30 +145,11 @@ export default function OverviewPage() {
     })
 
     setOpportunities((oppsRes.data ?? []) as Opportunity[])
-    setEnzoReport(enzoRes.data as EnzoReport | null)
-    setBotNotifications((botNotifsRes.data ?? []) as BotNotification[])
 
     setLoading(false)
   }
 
-  const requestEnzoReport = async () => {
-    if (!company || generatingReport) return
-    setGeneratingReport(true)
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enzo-daily-report`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
-        body: JSON.stringify({ company_id: company.id }),
-      })
-      await loadAll()
-    } finally {
-      setGeneratingReport(false)
-    }
-  }
-
   if (loading) return <div style={{ padding: '28px 32px', color: MUTED, fontSize: '14px' }}>{d[lang].common.loading}</div>
-  if (!company) return null
 
   if (noCompany) return (
     <div>
@@ -219,6 +173,8 @@ export default function OverviewPage() {
     </div>
   )
 
+  if (!company) return null
+
   const mob = diag?.pagespeed_mobile
   const desk = diag?.pagespeed_desktop
   const locale = lang === 'en' ? 'en-US' : 'pt-BR'
@@ -237,7 +193,7 @@ export default function OverviewPage() {
   const healthColor = healthScore != null ? scoreColor(healthScore) : MUTED
 
   const totalOppValue = opportunities.reduce((sum, o) => sum + (o.estimated_value ?? 0), 0)
-  const topOpportunities = opportunities.slice(0, 3)
+  const hasAnyValue = opportunities.some(o => o.estimated_value != null)
 
   return (
     <div>
@@ -247,42 +203,6 @@ export default function OverviewPage() {
       </div>
 
       <div style={{ padding: '28px 32px' }}>
-
-        {/* Daily Report */}
-        <div style={{ background: CARD, border: `1px solid rgba(255,109,41,0.18)`, borderRadius: '16px', overflow: 'hidden', marginBottom: '20px' }}>
-          <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>{T.dailyReport}</span>
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-              {enzoReport && (
-                <span style={{ fontSize: '11px', color: MUTED }}>
-                  {new Date(enzoReport.created_at).toLocaleDateString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                </span>
-              )}
-              <button onClick={requestEnzoReport} disabled={generatingReport}
-                style={{ padding: '6px 14px', background: generatingReport ? 'rgba(255,255,255,0.05)' : 'rgba(255,109,41,0.12)', border: `1px solid rgba(255,109,41,0.25)`, borderRadius: '8px', color: generatingReport ? MUTED : ORANGE, fontSize: '12px', fontWeight: 600, cursor: generatingReport ? 'not-allowed' : 'pointer' }}>
-                {generatingReport ? T.generating : T.generateNow}
-              </button>
-            </div>
-          </div>
-          {enzoReport ? (
-            <div style={{ padding: '20px 24px' }}>
-              {enzoReport.content.split('\n').filter(l => l.trim()).map((line, i) => (
-                <p key={i} style={{ fontSize: '13px', color: line.startsWith('[') ? MUTED : 'rgba(255,255,255,0.85)', lineHeight: 1.7, margin: '0 0 8px', fontStyle: line.startsWith('[') ? 'italic' : 'normal' }}>
-                  {line}
-                </p>
-              ))}
-            </div>
-          ) : (
-            <div style={{ padding: '28px 24px', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
-              {T.reportAuto}<br />
-              {d[lang].common.loading === 'Loading...' ? (
-                <>Click <strong style={{ color: 'white' }}>{T.reportAutoCta}</strong> {T.reportAutoCtaDesc}</>
-              ) : (
-                <>Clique em <strong style={{ color: 'white' }}>{T.reportAutoCta}</strong> {T.reportAutoCtaDesc}</>
-              )}
-            </div>
-          )}
-        </div>
 
         {/* Revenue Opportunities */}
         <div style={{ background: CARD, border: `1px solid rgba(255,109,41,0.25)`, borderRadius: '16px', overflow: 'hidden', marginBottom: '20px' }}>
@@ -301,27 +221,40 @@ export default function OverviewPage() {
                 <div style={{ fontSize: '11px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>
                   {T.recoverable}
                 </div>
-                <div style={{ fontFamily: D, fontSize: '2rem', fontWeight: 900, color: ORANGE, lineHeight: 1, letterSpacing: '-0.02em' }}>
-                  {totalOppValue.toLocaleString(locale, { style: 'currency', currency: lang === 'en' ? 'USD' : 'BRL', maximumFractionDigits: 0 })}
-                </div>
-                <div style={{ fontSize: '11px', color: MUTED, marginTop: '6px' }}>{T.ifResolveAll}</div>
+                {hasAnyValue ? (
+                  <>
+                    <div style={{ fontFamily: D, fontSize: '2rem', fontWeight: 900, color: ORANGE, lineHeight: 1, letterSpacing: '-0.02em' }}>
+                      {totalOppValue.toLocaleString(locale, { style: 'currency', currency: lang === 'en' ? 'USD' : 'BRL', maximumFractionDigits: 0 })}
+                    </div>
+                    <div style={{ fontSize: '11px', color: MUTED, marginTop: '6px' }}>{T.ifResolveAll}</div>
+                  </>
+                ) : (
+                  <button onClick={() => navigate('/dashboard/settings?section=negocio')}
+                    style={{ fontSize: '11px', color: ORANGE, background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.25)', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', lineHeight: 1.5 }}>
+                    Configure seu ticket médio para ver o valor estimado →
+                  </button>
+                )}
               </div>
               <div style={{ padding: '12px 24px' }}>
-                {topOpportunities.map(o => (
-                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: `1px solid ${BORDER}` }}>
-                    <span style={{ fontSize: '16px' }}>{TYPE_ICON[o.type] ?? '💡'}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', color: 'white', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title}</div>
-                      {o.estimated_impact && <div style={{ fontSize: '11px', color: MUTED, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.estimated_impact}</div>}
-                    </div>
-                    {o.estimated_value != null && (
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: ORANGE, flexShrink: 0 }}>
-                        + {o.estimated_value.toLocaleString(locale, { style: 'currency', currency: lang === 'en' ? 'USD' : 'BRL', maximumFractionDigits: 0 })}
+                <div style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                  {opportunities.map(o => (
+                    <div key={o.id} onClick={() => navigate('/dashboard/oportunidades')}
+                      style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 0', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}>
+                      <span style={{ fontSize: '16px' }}>{TYPE_ICON[o.type] ?? '💡'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', color: 'white', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.title}</div>
+                        {o.estimated_impact && <div style={{ fontSize: '11px', color: MUTED, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.estimated_impact}</div>}
                       </div>
-                    )}
-                  </div>
-                ))}
-                <button onClick={() => navigate('/dashboard/posts?tab=oportunidades')}
+                      {o.estimated_value != null && (
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: ORANGE, flexShrink: 0 }}>
+                          + {o.estimated_value.toLocaleString(locale, { style: 'currency', currency: lang === 'en' ? 'USD' : 'BRL', maximumFractionDigits: 0 })}
+                        </div>
+                      )}
+                      <span style={{ fontSize: '13px', color: MUTED, flexShrink: 0 }}>›</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => navigate('/dashboard/oportunidades')}
                   style={{ marginTop: '14px', padding: '10px 18px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
                   {T.resolveNow}
                 </button>
@@ -393,65 +326,6 @@ export default function OverviewPage() {
               )}
             </div>
           </div>
-        </div>
-
-        {/* Bot Activity Feed */}
-        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', overflow: 'hidden', marginTop: '20px' }}>
-          <div style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: 'white' }}>
-              🤖 {lang === 'en' ? 'Bot Activity' : 'Atividade dos Bots'}
-            </span>
-            <span style={{ fontSize: '11px', color: MUTED }}>
-              {lang === 'en' ? 'Telegram · live' : 'Telegram · ao vivo'}
-            </span>
-          </div>
-          {botNotifications.length === 0 ? (
-            <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
-              {lang === 'en'
-                ? 'No bot activity yet. Send /start to @luansoaresribeirobot on Telegram.'
-                : 'Nenhuma atividade ainda. Mande /start para @luansoaresribeirobot no Telegram.'}
-            </div>
-          ) : (
-            <div style={{ padding: '8px 0' }}>
-              {botNotifications.map((notif, i) => {
-                const isMarketing = notif.bot_name === 'marketing'
-                const botColor = isMarketing ? '#60a5fa' : '#4ade80'
-                const botLabel = isMarketing
-                  ? (lang === 'en' ? '📣 Marketing' : '📣 Marketing')
-                  : (lang === 'en' ? '💼 Sales' : '💼 Vendas')
-                const timeAgo = new Date(notif.created_at).toLocaleString(
-                  lang === 'en' ? 'en-US' : 'pt-BR',
-                  { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }
-                )
-                return (
-                  <div key={notif.id} style={{
-                    display: 'flex', gap: '14px', padding: '12px 24px',
-                    borderBottom: i < botNotifications.length - 1 ? `1px solid ${BORDER}` : 'none',
-                    alignItems: 'flex-start',
-                  }}>
-                    <div style={{
-                      width: '32px', height: '32px', borderRadius: '8px', flexShrink: 0,
-                      background: isMarketing ? 'rgba(96,165,250,0.1)' : 'rgba(74,222,128,0.1)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px',
-                    }}>
-                      {isMarketing ? '📣' : '💼'}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-                        <span style={{ fontSize: '10px', fontWeight: 700, color: botColor, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                          {botLabel}
-                        </span>
-                        <span style={{ fontSize: '10px', color: MUTED }}>{timeAgo}</span>
-                      </div>
-                      <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>
-                        {notif.message}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '20px' }}>

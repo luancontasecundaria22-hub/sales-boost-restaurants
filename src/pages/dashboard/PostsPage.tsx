@@ -1,23 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { useAuth } from '../../contexts/AuthContext'
-import { supabase } from '../../lib/supabase'
-import { ViralTrendsTab, CampanhasTab } from './MarketingTabs'
-import AudienciaTab from './AudienciaTab'
-import DiagnosticsPage from './DiagnosticsPage'
-import OpportunitiesPage from './OpportunitiesPage'
-import CompetitorsPage from './CompetitorsPage'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
+import {
+  CARD_GROUPS, CARD_ICONS, GROUP_ICONS, COMING_SOON_KEYS, titleFor, groupTitle,
+  ModuleCard, useAgentCardPreviews, type CardKey, type GroupKey,
+} from './agentCardShared'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
 const MUTED = '#BABABA'
 const D = "'Bricolage Grotesque', system-ui, sans-serif"
 const BORDER = 'rgba(255,255,255,0.06)'
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
-
-const PLAN_LIMITS: Record<string, number> = { free: 5, basic: 15, pro: 35, ultra: 50 }
 
 export type PostStatus = 'rascunho' | 'aprovado' | 'publicado'
 
@@ -187,241 +181,146 @@ export function PostCard({ post, onStatusChange, locked, T }: {
   )
 }
 
-function AgentStatusBar({ generating, lastGeneratedAt, onRequestMore, monthlyCount, monthlyLimit, plan, T }: {
-  generating: boolean; lastGeneratedAt: string | null; onRequestMore: () => void
-  monthlyCount: number; monthlyLimit: number; plan: string; T: typeof d['pt']['posts']
-}) {
-  const [dot, setDot] = useState(0)
-  useEffect(() => {
-    if (!generating) return
-    const t = setInterval(() => setDot(v => (v + 1) % 4), 400)
-    return () => clearInterval(t)
-  }, [generating])
+// ── Card grid (redesign: cada antiga aba virou um card independente) ──
+// Dois modos de visualização, alternáveis por switch — preferência salva no
+// localStorage do navegador (é só uma preferência de exibição, não precisa
+// de coluna no banco nem sincronizar entre dispositivos).
 
-  const atLimit = monthlyCount >= monthlyLimit
-  const quotaPercent = monthlyLimit > 0 ? Math.min(100, (monthlyCount / monthlyLimit) * 100) : 0
-  const quotaColor = quotaPercent >= 100 ? '#f87171' : quotaPercent >= 80 ? '#FBBF24' : '#4ade80'
-  const monthName = new Date().toLocaleDateString(undefined, { month: 'long' })
+const VIEW_MODE_KEY = 'sb_agents_view_mode'
+type ViewMode = 'modules' | 'categories'
 
+function readStoredViewMode(): ViewMode {
+  if (typeof window === 'undefined') return 'modules'
+  return window.localStorage.getItem(VIEW_MODE_KEY) === 'categories' ? 'categories' : 'modules'
+}
+
+function ViewModeSwitch({ mode, onChange, T }: { mode: ViewMode; onChange: (m: ViewMode) => void; T: typeof d['pt']['posts'] }) {
   return (
-    <div style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '24px', background: generating ? 'rgba(255,109,41,0.06)' : 'rgba(255,255,255,0.02)', border: `1px solid ${generating ? 'rgba(255,109,41,0.2)' : BORDER}`, transition: 'all 0.3s' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: generating ? ORANGE : '#4ade80', boxShadow: generating ? `0 0 6px ${ORANGE}` : '0 0 6px #4ade80', animation: generating ? 'pulse 1s infinite' : 'none' }} />
-          <span style={{ fontSize: '12px', color: generating ? ORANGE : MUTED, fontWeight: generating ? 600 : 400 }}>
-            {generating
-              ? `${T.agentCreating}${'.'.repeat(dot)}`
-              : lastGeneratedAt
-                ? `${T.agentLast} ${new Date(lastGeneratedAt).toLocaleDateString(undefined, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`
-                : T.agentActive}
-          </span>
-        </div>
-        {!generating && !atLimit && (
-          <button onClick={onRequestMore} style={{ fontSize: '11px', fontWeight: 600, color: MUTED, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '6px', padding: '4px 10px', cursor: 'pointer' }}>
-            {T.requestMore}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '6px' }}>
+      <span style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{T.cards.viewLabel}</span>
+      <div style={{ display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, borderRadius: '9px', padding: '3px', gap: '2px' }}>
+        {(['modules', 'categories'] as const).map(m => (
+          <button key={m} onClick={() => onChange(m)}
+            style={{ padding: '6px 14px', borderRadius: '7px', border: 'none', cursor: 'pointer', fontSize: '12px', fontWeight: 700, background: mode === m ? ORANGE : 'transparent', color: mode === m ? '#000' : MUTED, transition: 'all 0.15s', fontFamily: D }}>
+            {m === 'modules' ? T.cards.viewModules : T.cards.viewCategories}
           </button>
-        )}
-        {!generating && atLimit && plan !== 'ultra' && (
-          <Link to="/dashboard/settings" style={{ fontSize: '11px', fontWeight: 600, color: ORANGE, background: 'rgba(255,109,41,0.08)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '6px', padding: '4px 10px', textDecoration: 'none' }}>
-            {T.upgrade}
-          </Link>
-        )}
-      </div>
-      <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-        <div style={{ flex: 1, height: '3px', borderRadius: '99px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
-          <div style={{ width: `${quotaPercent}%`, height: '100%', borderRadius: '99px', background: quotaColor, transition: 'width 0.5s ease' }} />
-        </div>
-        <span style={{ fontSize: '11px', color: atLimit ? '#f87171' : MUTED, flexShrink: 0, fontWeight: atLimit ? 600 : 400 }}>
-          {monthlyCount}/{monthlyLimit} {T.postsIn} {monthName}
-        </span>
+        ))}
       </div>
     </div>
   )
 }
 
+function CategorySummaryCard({ group, keys, T, preview, updatedAt, onClick }: {
+  group: GroupKey; keys: CardKey[]; T: typeof d['pt']['posts']; preview: string | null; updatedAt: string | null; onClick: () => void
+}) {
+  const [hover, setHover] = useState(false)
+  const soon = group === 'atendimento'
+  return (
+    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{
+        textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', boxSizing: 'border-box',
+        background: CARD, border: `1px solid ${hover ? 'rgba(255,109,41,0.35)' : BORDER}`,
+        borderRadius: '16px', padding: '22px 24px', cursor: 'pointer', fontFamily: D,
+        transition: 'transform 0.18s, border-color 0.18s, box-shadow 0.18s',
+        transform: hover ? 'translateY(-2px)' : 'none',
+        boxShadow: hover ? '0 8px 24px rgba(0,0,0,0.25)' : 'none',
+      }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '24px' }}>{GROUP_ICONS[group]}</span>
+          <span style={{ fontSize: '16px', fontWeight: 800, color: 'white' }}>{groupTitle(T, group)}</span>
+        </div>
+        {soon && (
+          <span style={{ fontSize: '9.5px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.25)', color: ORANGE, letterSpacing: '0.04em' }}>
+            {T.cards.soon}
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: '12px', color: MUTED, margin: 0, lineHeight: 1.5 }}>{T.cards.groupDesc[group]}</p>
+      {preview && (
+        <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}`, borderRadius: '9px', fontSize: '11.5px', color: 'rgba(255,255,255,0.6)', lineHeight: 1.6, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+          {preview}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', paddingTop: '4px' }}>
+        <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>
+          {keys.length} {T.cards.modulesCount}{updatedAt ? ` · ${T.cards.updatedOn} ${new Date(updatedAt).toLocaleDateString('pt-BR')}` : ''}
+        </span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: hover ? ORANGE : 'rgba(255,255,255,0.25)', fontSize: '11.5px', fontWeight: 600 }}>
+          {T.cards.open} <span style={{ transition: 'transform 0.18s', transform: hover ? 'translateX(3px)' : 'none' }}>→</span>
+        </span>
+      </div>
+    </button>
+  )
+}
+
 export default function PostsPage() {
-  const { user, session } = useAuth()
   const { lang } = useLang()
   const T = d[lang].posts
-  const [posts, setPosts] = useState<Post[]>([])
-  const [loading, setLoading] = useState(true)
-  const [generating, setGenerating] = useState(false)
-  const [genError, setGenError] = useState('')
-  const [filterStatus, setFilterStatus] = useState<PostStatus | 'todos'>('todos')
-  const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null)
-  const [plan, setPlan] = useState('free')
-  const [monthlyCount, setMonthlyCount] = useState(0)
-  const [monthlyLimit, setMonthlyLimit] = useState(5)
-  const autoGenTriggered = useRef(false)
-  const [searchParams] = useSearchParams()
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') ?? 'posts')
+  const navigate = useNavigate()
+  const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode)
+  const { previewFor, groupPreview, groupUpdatedAt } = useAgentCardPreviews(T)
 
-  useEffect(() => {
-    const tab = searchParams.get('tab')
-    if (tab) setActiveTab(tab)
-  }, [searchParams])
-
-  const loadPostsOnly = async () => {
-    if (!user) return
-    const { data: company } = await supabase.from('companies').select('id, plan').eq('user_id', user.id).maybeSingle()
-    if (!company) return
-
-    const startOfMonth = new Date()
-    startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0)
-    const { count } = await supabase.from('posts')
-      .select('id', { count: 'exact', head: true })
-      .eq('company_id', company.id)
-      .gte('created_at', startOfMonth.toISOString())
-
-    const planKey = company.plan ?? 'free'
-    const limit = PLAN_LIMITS[planKey] ?? 5
-    const monthly = count ?? 0
-    setPlan(planKey); setMonthlyCount(monthly); setMonthlyLimit(limit)
-
-    const { data } = await supabase
-      .from('posts')
-      .select('id, content, image_suggestion, image_url, best_time, status, platform, created_at, agent_notes')
-      .eq('company_id', company.id)
-      .order('created_at', { ascending: false })
-    const fetched = (data ?? []) as Post[]
-    setPosts(fetched)
-    setLastGeneratedAt(fetched[0]?.created_at ?? null)
-    return { posts: fetched, planKey, limit, monthly }
+  const changeViewMode = (m: ViewMode) => {
+    setViewMode(m)
+    window.localStorage.setItem(VIEW_MODE_KEY, m)
   }
 
-  const triggerGenerate = async (token: string) => {
-    setGenerating(true)
-    setGenError('')
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-posts`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const data = await res.json()
-      console.log('[generate-posts]', JSON.stringify(data, null, 2))
-      if (data.quota_reached) {
-        setGenError(`Você atingiu o limite de ${data.limit} posts do plano este mês. Aguarde o próximo mês ou faça upgrade.`)
-        setGenerating(false)
-        return
-      }
-      if (!res.ok) throw new Error(data.error ?? 'Erro ao gerar posts')
-      if (!data.generated) throw new Error(data.message ?? 'Não foi possível gerar posts agora.')
-      await loadPostsOnly()
-    } catch (e: unknown) {
-      const msg = String(e instanceof Error ? e.message : e).toLowerCase()
-      if (msg.includes('credit') || msg.includes('balance')) {
-        setGenError('Agente de Marketing temporariamente indisponível. Tente novamente em alguns instantes.')
-      } else if (msg.includes('rate') || msg.includes('429') || msg.includes('overload')) {
-        setGenError('Agente de Marketing muito ocupado agora. Tente novamente em alguns minutos.')
-      } else {
-        setGenError('Agente de Marketing não conseguiu gerar posts agora. Tente novamente em instantes.')
-      }
-    }
-    setGenerating(false)
+  const openGroup = (group: GroupKey, keys: CardKey[]) => {
+    if (keys.length === 1) { navigate(`/dashboard/posts/${keys[0]}`); return }
+    navigate(`/dashboard/posts/categoria/${group}`)
   }
-
-  useEffect(() => {
-    if (!user || !session) return
-    const init = async () => {
-      setLoading(true)
-      const result = await loadPostsOnly()
-      setLoading(false)
-      if (!result) return
-      const { posts: fetched, limit, monthly } = result
-      const hasDrafts = fetched.some(p => p.status === 'rascunho')
-      const quotaRemaining = limit - monthly
-      if (!hasDrafts && !autoGenTriggered.current && quotaRemaining > 0) {
-        autoGenTriggered.current = true
-        await triggerGenerate(session.access_token)
-      }
-    }
-    init()
-  }, [user, session])
-
-  const handleStatusChange = async (id: string, status: PostStatus) => {
-    const { error } = await supabase.from('posts').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
-    if (!error) setPosts(prev => prev.map(p => p.id === id ? { ...p, status } : p))
-  }
-
-  const filtered = filterStatus === 'todos' ? posts : posts.filter(p => p.status === filterStatus)
-  const counts: Record<string, number> = {
-    todos: posts.length,
-    rascunho: posts.filter(p => p.status === 'rascunho').length,
-    aprovado: posts.filter(p => p.status === 'aprovado').length,
-    publicado: posts.filter(p => p.status === 'publicado').length,
-  }
-  const locked = plan === 'free'
-
-  const filterColors: Record<string, string> = { todos: 'white', rascunho: '#FBBF24', aprovado: '#4ade80', publicado: '#A78BFA' }
 
   return (
     <div>
-      <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}` }}>
-        <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
-        <p style={{ color: MUTED, fontSize: '13px' }}>{T.subtitle}</p>
-      </div>
-
-      <div style={{ borderBottom: `1px solid ${BORDER}`, padding: '0 32px' }}>
-        <div style={{ display: 'flex' }}>
-          {T.tabs.map((label, i) => {
-            const id = T.tabIds[i]
-            return (
-              <button key={id} onClick={() => setActiveTab(id)} style={{ padding: '13px 18px', background: 'transparent', border: 'none', borderBottom: activeTab === id ? `2px solid ${ORANGE}` : '2px solid transparent', color: activeTab === id ? 'white' : MUTED, fontSize: '13.5px', fontWeight: activeTab === id ? 600 : 400, cursor: 'pointer', fontFamily: D, transition: 'all 0.15s', marginBottom: '-1px' }}>{label}</button>
-            )
-          })}
+      <div style={{ padding: '28px 32px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: 'white', letterSpacing: '-0.02em', marginBottom: '4px' }}>{T.title}</h1>
+          <p style={{ color: MUTED, fontSize: '13px' }}>{T.subtitle}</p>
         </div>
+        <ViewModeSwitch mode={viewMode} onChange={changeViewMode} T={T} />
       </div>
 
-      {activeTab === 'posts' && <div style={{ padding: '24px 32px' }}>
-        {genError && (
-          <div style={{ background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#FBBF24', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span>⚠️</span><span>{genError}</span>
-            {genError.includes('limite') && (
-              <Link to="/dashboard/settings" style={{ color: ORANGE, marginLeft: 'auto', fontWeight: 700, textDecoration: 'none', fontSize: '12px', flexShrink: 0 }}>Ver planos →</Link>
-            )}
-          </div>
-        )}
-
-        <AgentStatusBar generating={generating} lastGeneratedAt={lastGeneratedAt} onRequestMore={() => session && triggerGenerate(session.access_token)} monthlyCount={monthlyCount} monthlyLimit={monthlyLimit} plan={plan} T={T} />
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '24px' }}>
-          {(['todos', 'rascunho', 'aprovado', 'publicado'] as const).map(k => (
-            <button key={k} onClick={() => setFilterStatus(k as PostStatus | 'todos')}
-              style={{ background: filterStatus === k ? 'rgba(255,109,41,0.08)' : CARD, border: `1px solid ${filterStatus === k ? 'rgba(255,109,41,0.3)' : BORDER}`, borderRadius: '12px', padding: '16px 18px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s' }}>
-              <div style={{ fontSize: '10px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>{T.filterLabels[k]}</div>
-              <div style={{ fontFamily: D, fontSize: '2rem', fontWeight: 900, color: filterColors[k], lineHeight: 1 }}>{counts[k]}</div>
-            </button>
+      {viewMode === 'modules' ? (
+        <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
+          {CARD_GROUPS.map(({ group, keys }) => (
+            <div key={group}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '14px' }}>
+                {T.cards.groupLabels[group]}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '16px' }}>
+                {keys.map(key => (
+                  <ModuleCard
+                    key={key}
+                    title={titleFor(T, key, group)}
+                    desc={T.cards.desc[key]}
+                    preview={previewFor(key)}
+                    icon={CARD_ICONS[key]}
+                    soon={COMING_SOON_KEYS.has(key)}
+                    openLabel={T.cards.open}
+                    soonLabel={T.cards.soon}
+                    onClick={() => navigate(`/dashboard/posts/${key}`)}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
-
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '60px', color: MUTED }}>{d[lang].common.loading}</div>
-        ) : generating && posts.length === 0 ? (
-          <div style={{ background: CARD, border: `1px solid rgba(255,109,41,0.15)`, borderRadius: '16px', padding: '60px', textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', marginBottom: '16px' }}>🤖</div>
-            <div style={{ fontFamily: D, fontSize: '1.2rem', fontWeight: 700, color: 'white', marginBottom: '8px' }}>{T.agentCreatingTitle}</div>
-            <div style={{ color: MUTED, fontSize: '13px', lineHeight: 1.7, maxWidth: '380px', margin: '0 auto' }}>{T.agentCreatingDesc}</div>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '60px', textAlign: 'center' }}>
-            <div style={{ color: MUTED, fontSize: '13px' }}>{T.noFilter}</div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {filtered.map(post => (
-              <PostCard key={post.id} post={post} onStatusChange={handleStatusChange} locked={locked} T={T} />
-            ))}
-          </div>
-        )}
-      </div>}
-
-      {activeTab === 'oportunidades' && <OpportunitiesPage />}
-      {activeTab === 'concorrentes' && <CompetitorsPage />}
-      {activeTab === 'audiencia' && <AudienciaTab />}
-      {activeTab === 'trends' && <ViralTrendsTab />}
-      {activeTab === 'campanhas' && <CampanhasTab />}
-      {activeTab === 'diagnostico' && <DiagnosticsPage />}
+      ) : (
+        <div style={{ padding: '28px 32px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+          {CARD_GROUPS.map(({ group, keys }) => (
+            <CategorySummaryCard
+              key={group}
+              group={group}
+              keys={keys}
+              T={T}
+              preview={groupPreview(group, keys)}
+              updatedAt={groupUpdatedAt(keys)}
+              onClick={() => openGroup(group, keys)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

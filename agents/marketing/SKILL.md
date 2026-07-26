@@ -30,7 +30,18 @@ tudo vira rascunho na aba Posts, esperando aprovação do dono.
 - Pode gerar imagem sugerida via DALL·E 3 se `OPENAI_API_KEY` estiver
   configurada no Supabase.
 
-### 2. Reputação (avaliações do Google)
+### 2. Tendências e campanhas
+- Edge Function `content-intelligence` (`supabase/functions/content-intelligence/index.ts`)
+  identifica tendências do segmento (`type: 'trends'`, aba Viral Trends) e monta
+  campanhas — vários posts agrupados em `campaigns` + `posts.campaign_id`
+  (`type: 'campaign'`, aba Campanhas).
+- Já tem modo cron: uma vez por semana por empresa (mesma janela de 7 dias
+  usada por `map-competitors`), se não há `stale_draft` aberto, o agente
+  identifica a tendência do momento sozinho e já cria a campanha em rascunho,
+  sem o dono precisar clicar em nada. Aparece na aba Campanhas marcada como
+  "🔥 Tendência identificada pelo agente", esperando aprovação em lote.
+
+### 3. Reputação (avaliações do Google)
 - Lê avaliações com `list_reviews` (filtros: nota máxima, só sem resposta).
 - A Edge Function `detect-opportunities` já detecta automaticamente, para
   todas as empresas ativas, os seguintes sinais de reputação/conteúdo:
@@ -47,18 +58,18 @@ tudo vira rascunho na aba Posts, esperando aprovação do dono.
   `reply-google-review`) — nunca acontece sozinho, sempre precisa do clique do
   dono. Requer Google Business Profile conectado para publicar de verdade.
 
-### 3. Concorrência
+### 4. Concorrência
 - Lê concorrentes mapeados via `list_competitors` (nome, nota, nº de reviews,
   distância, faixa de preço).
 - Tela "Concorrentes" do dashboard (`CompetitorsPage.tsx`) já chama este
   agente (`agent_role: 'cmo'`) para gerar um plano estratégico semanal
   comparando o negócio com os concorrentes próximos.
 
-### 4. Diagnóstico do site
+### 5. Diagnóstico do site
 - Lê o último diagnóstico (`get_latest_diagnostic`): performance, SEO,
   resumo da IA — usa isso para embasar sugestões de conteúdo/melhoria.
 
-### 5. Reporter (estado do negócio)
+### 6. Reporter (estado do negócio)
 - Responde perguntas do dono sobre o estado atual usando `get_business_overview`,
   `list_posts` e `list_opportunities` antes de responder de cabeça.
 
@@ -91,7 +102,11 @@ A cada ciclo (30 em 30 min), o agente deve (implementado em
    IA para toda review negativa/sem resposta que ainda não tem `ai_draft`.
 3. Se `no_content` ou `stale_draft` foi detectado para alguma empresa, chamar
    `generate-posts` em modo cron para essa empresa (gera até 4 rascunhos).
-4. Não fazer nada além de gerar rascunho + notificar Telegram. Nunca aprovar
+4. Chamar `content-intelligence` em modo cron (`cron_secret`) — decide sozinho,
+   por empresa, se já faz 7+ dias desde a última campanha e não há
+   `stale_draft` aberto; se sim, identifica a tendência do momento e cria uma
+   campanha nova em rascunho (aba Campanhas).
+5. Não fazer nada além de gerar rascunho + notificar Telegram. Nunca aprovar
    ou publicar nada.
 
 **Regra de alimentação de contexto:** cada execução do ciclo só recebe o que

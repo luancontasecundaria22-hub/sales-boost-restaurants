@@ -10,28 +10,6 @@ const CARD = '#150E08'
 const BG = '#0E0B0A'
 const MUTED = '#BABABA'
 
-const MARKETING_NOTIFY_URL = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
-const TELEGRAM_WEBHOOK_SECRET=Deno.e...
-
-async function notifyMarketing(adminDb: ReturnType<typeof createClient>, companyId: string, event: string, data?: Record<string, unknown>) {
-  if (!MARKETING_NOTIFY_URL || !TELEGRAM_WEBHOOK_SECRET) return
-  const { data: chat } = await adminDb
-    .from('telegram_conversations')
-    .select('telegram_chat_id')
-    .eq('customer_id', companyId)
-    .eq('bot_type', 'marketing')
-    .limit(1)
-    .maybeSingle()
-  if (!chat?.telegram_chat_id) return
-  try {
-    await fetch(MARKETING_NOTIFY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-webhook-secret': TELEGRAM_WEBHOOK_SECRET },
-      body: JSON.stringify({ event, bot_type: 'marketing', chat_id: chat.telegram_chat_id, company_id: companyId, data }),
-    })
-  } catch { /* fire-and-forget */ }
-}
-
 function scoreColor(s: number): string {
   return s >= 75 ? '#4ade80' : s >= 50 ? '#FBBF24' : '#f87171'
 }
@@ -144,15 +122,16 @@ async function generatePdf(html: string, apiKey: string): Promise<string | null>
   }
 }
 
-async function notifyMarketing(chatId: number | null | undefined, event: string, data?: Record<string, unknown>) {
-  if (!chatId) return
-  const url = Deno.env.get('MARKETING_BOT_NOTIFY_URL')
-  const secret = Deno.env.get('TELEGRAM_WEBHOOK_SECRET')
-  if (!url) return
-  fetch(url, {
+async function notifyMarketing(chatId: number | null | undefined, companyId: string, event: string, data?: Record<string, unknown>) {
+  // Sempre grava na aba Atividades, mesmo sem Telegram conectado — o envio
+  // ao Telegram (dentro de log-bot-event) é só um bônus quando existe chatId.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const secret = Deno.env.get('BOT_WEBHOOK_SECRET')
+  if (!supabaseUrl) return
+  fetch(`${supabaseUrl}/functions/v1/log-bot-event`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-webhook-secret': secret ?? '' },
-    body: JSON.stringify({ event, chat_id: chatId, data }),
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ secret: secret ?? '', bot_name: 'marketing', event_type: event, company_id: companyId, telegram_chat_id: chatId ?? null, data }),
   }).catch(() => {})
 }
 
@@ -362,7 +341,7 @@ Responda SOMENTE com o JSON, sem texto adicional. As ações devem ser específi
 
     await supabase.from('actions').insert(actionRows)
 
-    notifyMarketing((company as Record<string, unknown>).telegram_chat_id as number | null, 'REPORT_READY', {
+    notifyMarketing((company as Record<string, unknown>).telegram_chat_id as number | null, company.id, 'REPORT_READY', {
       period: periodLabel,
       health_score: reportData.health_score,
     })

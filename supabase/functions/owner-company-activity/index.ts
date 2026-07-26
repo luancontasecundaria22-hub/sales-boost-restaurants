@@ -23,8 +23,9 @@ Deno.serve(async (req) => {
 
     const admin = createClient(supabaseUrl, serviceKey)
 
-    // Owner role check
-    const { data: roleRow } = await admin.from('user_roles').select('role').eq('user_id', user.id).maybeSingle()
+    // Owner role check — user_roles não tem coluna user_id, só email (ver
+    // owner-companies, que já usava o padrão certo).
+    const { data: roleRow } = await admin.from('user_roles').select('role').eq('email', user.email!).maybeSingle()
     if (roleRow?.role !== 'owner') return json({ error: 'Forbidden' }, 403)
 
     const body = await req.json() as { company_id: string; limit?: number; action?: string; updates?: Record<string, unknown> }
@@ -34,7 +35,7 @@ Deno.serve(async (req) => {
 
     // Update company settings (owner edit)
     if (action === 'update' && updates) {
-      const allowed = ['business_name', 'business_type', 'city', 'goal', 'plan']
+      const allowed = ['business_name', 'business_type', 'city', 'goal', 'plan', 'business_dna', 'jarvis_enabled', 'agent_enabled']
       const safe: Record<string, unknown> = {}
       for (const key of allowed) {
         if (key in updates) safe[key] = updates[key]
@@ -46,7 +47,7 @@ Deno.serve(async (req) => {
     // Fetch company detail + agent messages + telegram conversations
     const [companyRes, messagesRes, telegramRes] = await Promise.all([
       admin.from('companies')
-        .select('id, business_name, business_type, city, goal, plan, instagram_url, website_url, google_rating, google_review_count, telegram_chat_id, created_at')
+        .select('id, business_name, business_type, city, goal, plan, instagram_url, website_url, google_rating, google_review_count, telegram_chat_id, business_dna, jarvis_enabled, agent_enabled, created_at')
         .eq('id', company_id)
         .single(),
       admin.from('agent_messages')

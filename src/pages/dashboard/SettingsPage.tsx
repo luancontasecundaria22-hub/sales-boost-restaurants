@@ -7,6 +7,8 @@ import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
 import NotificationsCard from './settings/NotificationsCard'
 import IntegrationsTab from './settings/IntegrationsTab'
+import MarketingAiSettingsCard from './settings/MarketingAiSettingsCard'
+import type { MarketingAiConfig } from './marketingAi/shared'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -21,6 +23,7 @@ const BUSINESS_TYPES = [
   'Varejo / E-commerce',
   'Serviços',
   'Beleza & Estética',
+  'Barbearia',
   'Saúde & Bem-estar',
   'Outro',
 ]
@@ -91,6 +94,13 @@ interface PlaceCandidate {
   lat?: number | null; lng?: number | null
 }
 
+interface SyncStep {
+  key: string; label: string; status: 'pending' | 'running' | 'done' | 'error'; message?: string
+}
+interface SyncJob {
+  id: string; status: 'running' | 'done' | 'error'; steps: SyncStep[]
+}
+
 const PLANS = [
   {
     key: 'basic',
@@ -122,14 +132,20 @@ export default function SettingsPage() {
   const { lang } = useLang()
   const T = d[lang].settings
 
-  const [tab, setTab] = useState<'info' | 'integrations'>(searchParams.get('tab') === 'integracoes' ? 'integrations' : 'info')
+  const tabFromParam = (v: string | null): 'info' | 'integrations' | 'marketing-ai' =>
+    v === 'integracoes' ? 'integrations' : v === 'marketing-ai' ? 'marketing-ai' : 'info'
+  const [tab, setTab] = useState<'info' | 'integrations' | 'marketing-ai'>(tabFromParam(searchParams.get('tab')))
 
   useEffect(() => {
-    if (searchParams.get('tab') === 'integracoes') setTab('integrations')
+    const paramTab = searchParams.get('tab')
+    if (paramTab === 'integracoes' || paramTab === 'marketing-ai') setTab(tabFromParam(paramTab))
     const section = searchParams.get('section')
     if (!section) return
     setTimeout(() => document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
   }, [searchParams])
+
+  const [marketingAiConfig, setMarketingAiConfig] = useState<MarketingAiConfig | null>(null)
+  const [marketingAiLoaded, setMarketingAiLoaded] = useState(false)
 
   // Company fields
   const [companyId, setCompanyId] = useState<string | null>(null)
@@ -154,10 +170,17 @@ export default function SettingsPage() {
   const [googlePlaceId, setGooglePlaceId] = useState<string | null>(null)
   const [googleRating, setGoogleRating] = useState<number | null>(null)
   const [googleReviewCount, setGoogleReviewCount] = useState<number | null>(null)
+  const [avgTicket, setAvgTicket] = useState('')
 
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+
+  // Sync job — lives in the `sync_jobs` table, not just component state, so
+  // progress survives a closed tab and shows up again in any tab that reopens
+  // Settings, since we always load the latest job for this company on mount.
+  const [syncJob, setSyncJob] = useState<SyncJob | null>(null)
+  const syncPollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Places search
   const [placeQuery, setPlaceQuery] = useState('')
@@ -167,10 +190,16 @@ export default function SettingsPage() {
   const placeSearchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
+    if (!companyId) return
+    supabase.from('marketing_ai_config').select('*').eq('company_id', companyId).maybeSingle()
+      .then(({ data }) => { setMarketingAiConfig((data as MarketingAiConfig | null) ?? null); setMarketingAiLoaded(true) })
+  }, [companyId])
+
+  useEffect(() => {
     if (!user) return
     supabase
       .from('companies')
-      .select('id, business_name, business_type, city, phone, contact_email, goal, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, tripadvisor_url, reclame_aqui_url, ifood_url, google_place_id, google_rating, google_review_count, plan, agent_messages_used')
+      .select('id, business_name, business_type, city, phone, contact_email, goal, website_url, instagram_url, facebook_url, tiktok_url, google_maps_url, tripadvisor_url, reclame_aqui_url, ifood_url, google_place_id, google_rating, google_review_count, avg_ticket, plan, agent_messages_used')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -193,11 +222,44 @@ export default function SettingsPage() {
           setGooglePlaceId(data.google_place_id ?? null)
           setGoogleRating(data.google_rating ?? null)
           setGoogleReviewCount(data.google_review_count ?? null)
+          setAvgTicket(data.avg_ticket != null ? String(data.avg_ticket) : '')
           setCurrentPlan(data.plan ?? 'free')
           setAgentUsed(data.agent_messages_used ?? 0)
+
+          // Pick up a sync that's already running (started from this tab, another
+          // tab, or before a tab was closed) — the job lives in the DB, so any
+          // tab that opens Settings finds and resumes watching the same job.
+          supabase.from('sync_jobs').select('id, status, steps')
+            .eq('company_id', data.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+            .then(({ data: job }) => {
+              if (!job) return
+              setSyncJob(job as SyncJob)
+              if (job.status === 'running') startPolling(job.id)
+            })
         }
       })
   }, [user])
+
+  const startPolling = (jobId: string) => {
+    if (syncPollRef.current) clearInterval(syncPollRef.current)
+    const poll = async () => {
+      const { data: job } = await supabase.from('sync_jobs').select('id, status, steps').eq('id', jobId).maybeSingle()
+      if (!job) return
+      setSyncJob(job as SyncJob)
+      if (job.status !== 'running' && syncPollRef.current) {
+        clearInterval(syncPollRef.current)
+        syncPollRef.current = null
+        void refreshCompany()
+      }
+    }
+    void poll()
+    syncPollRef.current = setInterval(poll, 2000)
+  }
+
+  useEffect(() => () => { if (syncPollRef.current) clearInterval(syncPollRef.current) }, [])
 
   const searchPlaces = async (q: string) => {
     if (!q.trim() || !session) return
@@ -241,14 +303,48 @@ export default function SettingsPage() {
       const parts = p.address.split(',')
       setCity(parts[parts.length - 2]?.trim() ?? '')
     }
-    // Save place_id immediately if company exists
+    // Save place_id immediately if company exists — the same fields are also
+    // included in handleSave's payload so a fresh company (created via the
+    // insert branch below) never ends up with a place_id but no rating/count.
     if (companyId) {
-      await supabase.from('companies').update({
+      const changingPlace = googlePlaceId && googlePlaceId !== p.place_id
+      const { error } = await supabase.from('companies').update({
         google_place_id: p.place_id,
         google_rating: p.rating,
         google_review_count: p.review_count,
         ...(p.lat != null ? { lat: p.lat, lng: p.lng } : {}),
       }).eq('id', companyId)
+      if (error) { setSaveError(error.message); return }
+      // Switching to a different Google business — reviews already fetched
+      // for the old place have no place-level column to filter by, so they'd
+      // otherwise sit mixed in with the new place's reviews forever. Clear
+      // them out now; apify-sync will refetch fresh ones for the new place.
+      if (changingPlace) {
+        await supabase.from('reviews').delete().eq('company_id', companyId).eq('source', 'google')
+      }
+      void refreshCompany()
+    }
+  }
+
+  const unlinkGoogle = async () => {
+    setGooglePlaceId(null)
+    setGoogleRating(null)
+    setGoogleReviewCount(null)
+    // Persist right away — leaving this until the "Salvar alterações" button
+    // is pressed lets background review sync keep pulling from the old
+    // (now-hidden) place_id, causing reviews from the wrong business to show up.
+    if (companyId) {
+      const { error } = await supabase.from('companies').update({
+        google_place_id: null,
+        google_rating: null,
+        google_review_count: null,
+      }).eq('id', companyId)
+      if (error) { setSaveError(error.message); return }
+      // Same reasoning as selectPlace — reviews aren't tagged with the place
+      // they came from, so unlinking must also clear them or they'd linger
+      // and get mixed in if a different Google business is linked later.
+      await supabase.from('reviews').delete().eq('company_id', companyId).eq('source', 'google')
+      void refreshCompany()
     }
   }
 
@@ -278,6 +374,31 @@ export default function SettingsPage() {
     setUpgrading(null)
   }
 
+  // Fires right after a successful save — kicks off a background sync job that
+  // refreshes everything platform-wide (reviews, competitors, opportunities,
+  // the AI profile that Campanhas/Viral Trends/posts read from, and the site
+  // diagnostic), so "Salvar" is the one action that keeps everything in sync.
+  // The edge function returns immediately with a job id and keeps working
+  // server-side (EdgeRuntime.waitUntil) even if this tab closes; we just poll
+  // `sync_jobs` to show progress.
+  const triggerAutoSync = async () => {
+    if (!session) return
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/apify-sync`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      const data = await res.json()
+      if (res.ok && data.job_id) {
+        setSyncJob({ id: data.job_id, status: 'running', steps: data.steps ?? [] })
+        startPolling(data.job_id)
+      }
+    } catch {
+      // best-effort — dá pra rodar de novo manualmente em Marketing > Avaliações/Concorrentes
+    }
+  }
+
   const handleSave = async () => {
     if (!user || !businessName.trim()) { setSaveError('Nome do negócio é obrigatório.'); return }
     setSaving(true)
@@ -299,6 +420,9 @@ export default function SettingsPage() {
         reclame_aqui_url: reclameAquiUrl || null,
         ifood_url: ifoodUrl || null,
         google_place_id: googlePlaceId || null,
+        google_rating: googlePlaceId ? googleRating : null,
+        google_review_count: googlePlaceId ? googleReviewCount : null,
+        avg_ticket: avgTicket ? Number(avgTicket) : null,
         updated_at: new Date().toISOString(),
       }
       if (companyId) {
@@ -314,12 +438,18 @@ export default function SettingsPage() {
       }
       setSaved(true)
       void refreshCompany()
+      void triggerAutoSync()
       setTimeout(() => setSaved(false), 2500)
     } catch (e: unknown) {
       setSaveError(e instanceof Error ? e.message : String(e))
     }
     setSaving(false)
   }
+
+  const syncTotal = syncJob?.steps.length ?? 0
+  const syncDone = syncJob?.steps.filter(s => s.status === 'done' || s.status === 'error').length ?? 0
+  const syncPct = syncTotal ? Math.round((syncDone / syncTotal) * 100) : 0
+  const syncCurrentStep = syncJob?.steps.find(s => s.status === 'running')
 
   return (
     <div>
@@ -332,7 +462,7 @@ export default function SettingsPage() {
 
         {/* Tab switcher */}
         <div style={{ display: 'flex', gap: '6px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '5px', marginBottom: '24px', width: 'fit-content' }}>
-          {([['info', 'Informações da empresa'], ['integrations', 'Integrações']] as const).map(([key, label]) => (
+          {([['info', 'Informações da empresa'], ['integrations', 'Integrações'], ['marketing-ai', '✨ Marketing AI']] as const).map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)}
               style={{ padding: '9px 18px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, background: tab === key ? ORANGE : 'transparent', color: tab === key ? '#000' : MUTED, transition: 'all 0.15s' }}>
               {label}
@@ -353,6 +483,14 @@ export default function SettingsPage() {
           </>
         )}
 
+        {/* Fica montado mesmo trocando de aba — o formulário nunca perde o
+            que já foi digitado só porque o dono foi olhar outra aba. */}
+        {marketingAiLoaded && companyId && (
+          <div style={{ display: tab === 'marketing-ai' ? 'block' : 'none' }}>
+            <MarketingAiSettingsCard companyId={companyId} config={marketingAiConfig} onSaved={setMarketingAiConfig} />
+          </div>
+        )}
+
         {tab === 'info' && (
         <>
         {/* Google Places search */}
@@ -363,7 +501,7 @@ export default function SettingsPage() {
                 <div style={{ fontSize: '13px', color: '#4ade80', fontWeight: 600 }}>✓ Negócio vinculado ao Google</div>
                 {googleRating && <div style={{ fontSize: '12px', color: MUTED, marginTop: '2px' }}>Nota: {googleRating}★ · {googleReviewCount ?? '?'} avaliações</div>}
               </div>
-              <button onClick={() => { setGooglePlaceId(null); setGoogleRating(null); setGoogleReviewCount(null) }}
+              <button onClick={unlinkGoogle}
                 style={{ fontSize: '11px', color: MUTED, background: 'none', border: 'none', cursor: 'pointer' }}>Desvincular</button>
             </div>
           ) : (
@@ -409,6 +547,8 @@ export default function SettingsPage() {
           <Field label="Telefone / WhatsApp" value={phone} onChange={setPhone} placeholder="(21) 99999-9999" />
           <Field label="E-mail de contato" value={contactEmail} onChange={setContactEmail} placeholder="voce@seunegocio.com.br" type="email" />
           <SelectField label="Principal objetivo" value={goal} onChange={setGoal} options={GOALS} hint="Guia a IA para gerar conteúdo e plano de ação relevantes" />
+          <Field label="Ticket médio (R$)" value={avgTicket} onChange={setAvgTicket} placeholder="Ex: 80" type="number"
+            hint="Valor médio que um cliente gasta numa compra/visita. Usamos isso para calcular a receita recuperável real de cada oportunidade — sem preencher, esse valor não aparece." />
         </SectionCard>
 
         <SectionCard id="section-presenca" title="Presença digital">
@@ -434,6 +574,32 @@ export default function SettingsPage() {
             style={{ padding: '11px 24px', background: saved ? '#4ade80' : ORANGE, color: '#000', fontWeight: 700, fontSize: '14px', borderRadius: '10px', border: 'none', cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.2s', opacity: saving ? 0.7 : 1 }}>
             {saved ? '✓ Salvo com sucesso!' : saving ? 'Salvando...' : companyId ? 'Salvar alterações' : 'Criar perfil do negócio →'}
           </button>
+
+          {syncJob && (
+            <div style={{ marginTop: '16px', maxWidth: '440px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '7px' }}>
+                <span style={{ fontSize: '12px', color: syncJob.status === 'error' ? '#f87171' : syncJob.status === 'done' ? '#4ade80' : MUTED, fontWeight: 600 }}>
+                  {syncJob.status === 'running'
+                    ? `🔄 Sincronizando: ${syncCurrentStep?.label ?? '...'}`
+                    : syncJob.status === 'error'
+                    ? '⚠ Sincronização concluída com alguns erros'
+                    : '✓ Avaliações e concorrentes atualizados'}
+                </span>
+                <span style={{ fontSize: '11px', color: MUTED }}>{syncDone}/{syncTotal}</span>
+              </div>
+              <div style={{ height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                <div style={{
+                  width: `${syncPct}%`, height: '100%', borderRadius: '99px', transition: 'width 0.5s ease',
+                  background: syncJob.status === 'error' ? '#f87171' : syncJob.status === 'done' ? '#4ade80' : ORANGE,
+                }} />
+              </div>
+              {syncJob.status === 'running' && (
+                <div style={{ fontSize: '11px', color: MUTED, marginTop: '8px', lineHeight: 1.5 }}>
+                  Pode fechar esta aba tranquilo — a sincronização continua rodando e você vê o progresso da próxima vez que abrir Configurações.
+                </div>
+              )}
+            </div>
+          )}
         </SectionCard>
 
         <SectionCard id="section-conta" title="Conta">

@@ -5,22 +5,34 @@ import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './contexts/AuthContext.tsx'
 import { useAuth } from './contexts/AuthContext.tsx'
-import { CompanyProvider } from './contexts/CompanyContext.tsx'
+import { CompanyProvider, useCompany } from './contexts/CompanyContext.tsx'
 import LoginPage from './pages/auth/LoginPage.tsx'
 import SignupPage from './pages/auth/SignupPage.tsx'
 import GscCallbackPage from './pages/auth/GscCallbackPage.tsx'
 import GbpCallbackPage from './pages/auth/GbpCallbackPage.tsx'
 import DashboardLayout from './pages/dashboard/DashboardLayout.tsx'
 import OverviewPage from './pages/dashboard/OverviewPage.tsx'
+import ActivityPage from './pages/dashboard/ActivityPage.tsx'
 import DiagnosticsPage from './pages/dashboard/DiagnosticsPage.tsx'
 import InsightsPage from './pages/dashboard/InsightsPage.tsx'
 import SettingsPage from './pages/dashboard/SettingsPage.tsx'
 import PostsPage from './pages/dashboard/PostsPage.tsx'
+import AgentSectionPage from './pages/dashboard/AgentSectionPage.tsx'
+import AgentCategoryPage from './pages/dashboard/AgentCategoryPage.tsx'
+import OpportunitiesPage from './pages/dashboard/OpportunitiesPage.tsx'
 import AgentePage from './pages/dashboard/AgentePage.tsx'
+import MarketingAiPage from './pages/dashboard/MarketingAiPage.tsx'
 import ApprovalsPage from './pages/dashboard/ApprovalsPage.tsx'
 import ReportPage from './pages/dashboard/ReportPage.tsx'
 import JarvisPage from './pages/jarvis/JarvisPage.tsx'
 import OwnerPage from './pages/owner/OwnerPage.tsx'
+import CompanyDetailPage from './pages/owner/CompanyDetailPage.tsx'
+import ProspectsPage from './pages/owner/ProspectsPage.tsx'
+import LeadDiscoverySettingsPage from './pages/owner/LeadDiscoverySettingsPage.tsx'
+import HermesControlCenterPage from './pages/owner/HermesControlCenterPage.tsx'
+import HermesStrategyPage from './pages/owner/HermesStrategyPage.tsx'
+import AgentsControlCenterPage from './pages/owner/AgentsControlCenterPage.tsx'
+import OwnerSettingsPage from './pages/owner/OwnerSettingsPage.tsx'
 import OnboardingPage from './pages/onboarding/OnboardingPage.tsx'
 import DiagnosticoPage from './pages/diagnostico/DiagnosticoPage.tsx'
 
@@ -33,9 +45,15 @@ const Spinner = () => (
 
 function ClientRoute({ children }: { children: React.ReactNode }) {
   const { user, role, loading } = useAuth()
+  const { company, loading: companyLoading } = useCompany()
   if (loading) return <Spinner />
   if (!user) return <Navigate to="/login" replace />
   if (role === 'owner') return <Navigate to="/owner" replace />
+  if (companyLoading) return <Spinner />
+  // Every client account must have a business profile — this is the one
+  // place that gate is enforced, so it can't be skipped regardless of how
+  // the account was created (signup, magic link, abandoned onboarding...).
+  if (!company) return <Navigate to="/onboarding" replace />
   return <>{children}</>
 }
 
@@ -58,6 +76,13 @@ function RouterRoot() {
 
       {/* Owner-only */}
       <Route path="/owner" element={<OwnerRoute><OwnerPage /></OwnerRoute>} />
+      <Route path="/owner/company/:id" element={<OwnerRoute><CompanyDetailPage /></OwnerRoute>} />
+      <Route path="/owner/prospects" element={<OwnerRoute><ProspectsPage /></OwnerRoute>} />
+      <Route path="/owner/prospects/settings" element={<OwnerRoute><LeadDiscoverySettingsPage /></OwnerRoute>} />
+      <Route path="/owner/hermes" element={<OwnerRoute><HermesControlCenterPage /></OwnerRoute>} />
+      <Route path="/owner/hermes/estrategia" element={<OwnerRoute><HermesStrategyPage /></OwnerRoute>} />
+      <Route path="/owner/agentes" element={<OwnerRoute><AgentsControlCenterPage /></OwnerRoute>} />
+      <Route path="/owner/settings" element={<OwnerRoute><OwnerSettingsPage /></OwnerRoute>} />
 
       {/* Client dashboard */}
       <Route
@@ -69,13 +94,17 @@ function RouterRoot() {
         }
       >
         <Route index element={<OverviewPage />} />
+        <Route path="atividades" element={<ActivityPage />} />
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="insights" element={<InsightsPage />} />
         <Route path="integrations" element={<Navigate to="/dashboard/settings?tab=integracoes" replace />} />
         <Route path="posts" element={<PostsPage />} />
+        <Route path="posts/categoria/:group" element={<AgentCategoryPage />} />
+        <Route path="posts/:section" element={<AgentSectionPage />} />
         <Route path="agente" element={<AgentePage />} />
-        <Route path="oportunidades" element={<Navigate to="/dashboard/posts?tab=oportunidades" replace />} />
-        <Route path="concorrentes" element={<Navigate to="/dashboard/posts?tab=concorrentes" replace />} />
+        <Route path="marketing-ai" element={<MarketingAiPage />} />
+        <Route path="oportunidades" element={<OpportunitiesPage />} />
+        <Route path="concorrentes" element={<Navigate to="/dashboard/posts/concorrentes" replace />} />
         <Route path="aprovacoes" element={<ApprovalsPage />} />
         <Route path="relatorio" element={<ReportPage />} />
         <Route path="settings" element={<SettingsPage />} />

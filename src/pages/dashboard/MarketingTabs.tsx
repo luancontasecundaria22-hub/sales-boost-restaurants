@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { supabase } from '../../lib/supabase'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
@@ -140,102 +141,121 @@ export function ViralTrendsTab() {
 
 // ── Campanhas ──────────────────────────────────────────────────
 
-interface CampaignPost {
-  day: number
-  day_name: string
-  theme: string
-  caption_hook: string
-  format: string
-  channel: string
-  best_time: string
+interface SavedCampaign {
+  id: string
+  name: string
+  goal: string
+  brief: string | null
+  source: 'manual' | 'auto_trend'
+  created_at: string
+  posts: { id: string; content: string; best_time: string | null; platform: string | null; status: 'rascunho' | 'aprovado' | 'publicado' }[]
 }
 
-interface CampaignPlan {
-  brief: string
-  posts: CampaignPost[]
+const CAMPAIGN_STATUS_COLORS: Record<string, string> = {
+  rascunho: '#FBBF24', aprovado: '#4ade80', publicado: '#A78BFA',
 }
 
-const CHANNEL_COLORS: Record<string, string> = {
-  Instagram: '#E1306C',
-  WhatsApp: '#25D366',
+function SavedCampaignCard({ campaign, onApproveAll }: { campaign: SavedCampaign; onApproveAll: (id: string) => void }) {
+  const pendingCount = campaign.posts.filter(p => p.status === 'rascunho').length
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '20px 22px', marginBottom: '14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', marginBottom: '14px', flexWrap: 'wrap' as const }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ fontFamily: D, fontWeight: 700, color: 'white', fontSize: '1rem' }}>{campaign.name}</div>
+            {campaign.source === 'auto_trend' && (
+              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.25)', color: ORANGE }}>🔥 Tendência identificada pelo agente</span>
+            )}
+          </div>
+          {campaign.brief && <p style={{ color: MUTED, fontSize: '12.5px', marginTop: '4px', lineHeight: 1.6, maxWidth: '560px' }}>{campaign.brief}</p>}
+        </div>
+        {pendingCount > 0 && (
+          <button onClick={() => onApproveAll(campaign.id)} style={{ padding: '8px 16px', background: 'rgba(74,222,128,0.1)', color: '#4ade80', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(74,222,128,0.25)', cursor: 'pointer', fontFamily: D, flexShrink: 0 }}>
+            Aprovar {pendingCount} {pendingCount === 1 ? 'post' : 'posts'}
+          </button>
+        )}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '8px' }}>
+        {campaign.posts.map(p => (
+          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}`, borderRadius: '10px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 700, padding: '3px 9px', borderRadius: '99px', flexShrink: 0, background: `${CAMPAIGN_STATUS_COLORS[p.status ?? 'rascunho']}22`, color: CAMPAIGN_STATUS_COLORS[p.status ?? 'rascunho'] }}>
+              {p.status === 'aprovado' ? 'Aprovado' : p.status === 'publicado' ? 'Publicado' : 'Rascunho'}
+            </span>
+            <div style={{ flex: 1, minWidth: 0, fontSize: '12.5px', color: 'white', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.content}</div>
+            {p.best_time && <div style={{ fontSize: '11px', color: MUTED, flexShrink: 0 }}>{p.best_time}</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 export function CampanhasTab() {
   const { session } = useAuth()
-  const [plan, setPlan] = useState<CampaignPlan | null>(null)
+  const [saved, setSaved] = useState<SavedCampaign[] | null>(null)
+  const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [loadingList, setLoadingList] = useState(true)
   const [error, setError] = useState('')
   const [name, setName] = useState('')
   const [goal, setGoal] = useState('')
   const [duration, setDuration] = useState('7')
+
+  const loadCampaigns = async () => {
+    const { data } = await supabase
+      .from('campaigns')
+      .select('id, name, goal, brief, source, created_at, posts(id, content, best_time, platform, status)')
+      .order('created_at', { ascending: false })
+      .limit(10)
+    setSaved((data ?? []) as unknown as SavedCampaign[])
+    setLoadingList(false)
+  }
+
+  useEffect(() => { loadCampaigns() }, [])
+
+  const approveAll = async (campaignId: string) => {
+    await supabase.from('posts').update({ status: 'aprovado' }).eq('campaign_id', campaignId).eq('status', 'rascunho')
+    await loadCampaigns()
+  }
 
   const create = async () => {
     if (!session || !name.trim() || !goal.trim()) return
     setLoading(true)
     setError('')
     try {
-      const result = await callContentIntelligence(session.access_token, {
+      await callContentIntelligence(session.access_token, {
         type: 'campaign',
         name: name.trim(),
         goal: goal.trim(),
         duration_days: Number(duration),
         channels: ['Instagram', 'WhatsApp'],
       })
-      setPlan(result)
+      setName(''); setGoal(''); setDuration('7'); setShowForm(false)
+      await loadCampaigns()
     } catch {
       setError('Não foi possível criar o plano agora. Tente novamente.')
     }
     setLoading(false)
   }
 
-  if (plan) {
-    return (
-      <div style={{ padding: '24px 32px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
-          <div>
-            <div style={{ fontFamily: D, fontWeight: 700, color: 'white', fontSize: '1rem' }}>{name}</div>
-            <p style={{ color: MUTED, fontSize: '13px', marginTop: '4px', lineHeight: 1.6, maxWidth: '560px' }}>{plan.brief}</p>
-          </div>
-          <button onClick={() => { setPlan(null); setName(''); setGoal(''); setDuration('7') }} style={{ padding: '7px 14px', background: 'transparent', color: MUTED, border: `1px solid ${BORDER}`, borderRadius: '8px', fontSize: '12px', cursor: 'pointer', fontFamily: D, flexShrink: 0 }}>
-            Nova campanha
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '10px' }}>
-          {plan.posts?.map((p, i) => (
-            <div key={i} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '16px 20px', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-              <div style={{ flexShrink: 0, textAlign: 'center', minWidth: '52px' }}>
-                <div style={{ fontFamily: D, fontWeight: 900, color: ORANGE, fontSize: '1.5rem', lineHeight: 1 }}>D{p.day}</div>
-                <div style={{ fontSize: '10px', color: MUTED, marginTop: '2px' }}>{p.day_name}</div>
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' as const }}>
-                  <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 9px', borderRadius: '6px', background: `${CHANNEL_COLORS[p.channel] ?? ORANGE}22`, color: CHANNEL_COLORS[p.channel] ?? ORANGE }}>
-                    {p.channel}
-                  </span>
-                  <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 9px', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', color: MUTED }}>{p.format}</span>
-                  <span style={{ fontSize: '11px', fontWeight: 600, padding: '3px 9px', borderRadius: '6px', background: 'rgba(255,255,255,0.04)', color: MUTED }}>{p.best_time}</span>
-                </div>
-                <div style={{ fontFamily: D, fontWeight: 600, color: 'white', fontSize: '13.5px', marginBottom: '5px' }}>{p.theme}</div>
-                <div style={{ color: MUTED, fontSize: '12.5px', fontStyle: 'italic' }}>"{p.caption_hook}"</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div style={{ padding: '24px 32px' }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      <div style={{ maxWidth: '560px' }}>
-        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '28px' }}>
-          <div style={{ fontFamily: D, fontSize: '1.1rem', fontWeight: 700, color: 'white', marginBottom: '4px' }}>Nova campanha</div>
-          <p style={{ color: MUTED, fontSize: '13px', marginBottom: '24px', lineHeight: 1.6 }}>
-            O Agente de Marketing cria um calendário de conteúdo completo para Instagram e WhatsApp baseado no seu objetivo.
-          </p>
 
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div>
+          <div style={{ fontFamily: D, fontWeight: 700, color: 'white', fontSize: '1rem' }}>Campanhas</div>
+          <p style={{ color: MUTED, fontSize: '12.5px', marginTop: '2px' }}>
+            Toda semana o Agente de Marketing identifica uma tendência do seu segmento sozinho e já deixa os posts em rascunho aqui.
+          </p>
+        </div>
+        <button onClick={() => setShowForm(v => !v)} style={{ padding: '9px 16px', background: showForm ? 'transparent' : ORANGE, color: showForm ? MUTED : '#000', border: `1px solid ${showForm ? BORDER : 'transparent'}`, borderRadius: '10px', fontWeight: 700, fontSize: '12.5px', cursor: 'pointer', fontFamily: D, flexShrink: 0 }}>
+          {showForm ? 'Cancelar' : '+ Nova campanha'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '24px', marginBottom: '24px', maxWidth: '560px' }}>
           <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '16px' }}>
             <div>
               <label style={{ fontSize: '11px', color: MUTED, textTransform: 'uppercase' as const, letterSpacing: '0.07em', display: 'block', marginBottom: '6px' }}>Nome da campanha</label>
@@ -282,7 +302,20 @@ export function CampanhasTab() {
               : 'Criar plano de campanha'}
           </button>
         </div>
-      </div>
+      )}
+
+      {loadingList ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: MUTED, fontSize: '13px' }}>Carregando...</div>
+      ) : !saved || saved.length === 0 ? (
+        <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '60px', textAlign: 'center' }}>
+          <div style={{ fontSize: '2rem', marginBottom: '16px' }}>📣</div>
+          <div style={{ color: MUTED, fontSize: '13px', maxWidth: '380px', margin: '0 auto' }}>
+            Nenhuma campanha ainda. Toda semana o agente cria uma automaticamente com base nas tendências do seu segmento — ou clique em "Nova campanha" para pedir uma agora.
+          </div>
+        </div>
+      ) : (
+        saved.map(c => <SavedCampaignCard key={c.id} campaign={c} onApproveAll={approveAll} />)
+      )}
     </div>
   )
 }

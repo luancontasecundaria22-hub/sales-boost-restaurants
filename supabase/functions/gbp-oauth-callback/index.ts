@@ -68,33 +68,40 @@ Deno.serve(async (req) => {
     const accountsData = await accountsRes.json()
     const accounts: Array<{ name: string; accountName?: string }> = accountsData.accounts ?? []
 
-    let accountId = ''
-    let locationId = ''
-    let accountName = ''
-
-    if (accounts.length > 0) {
-      accountId = accounts[0].name.replace('accounts/', '')
-      accountName = accounts[0].accountName ?? ''
-
-      // Find matching location
-      const locRes = await fetch(
-        `https://mybusinessbusinessinformation.googleapis.com/v1/accounts/${accountId}/locations?pageSize=100&readMask=name,metadata`,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      )
-      const locData = await locRes.json()
-      const locations: Array<{ name: string; metadata?: { placeId?: string } }> = locData.locations ?? []
-
-      // Try to match by placeId
-      const matched = company?.google_place_id
-        ? locations.find(l => l.metadata?.placeId === company.google_place_id)
-        : null
-
-      const targetLocation = matched ?? locations[0]
-      if (targetLocation) {
-        // name is like "locations/NUMBER"
-        locationId = targetLocation.name.replace('locations/', '')
-      }
+    // Fail loudly here instead of silently saving a "connected" row with empty
+    // account_id/location_id — that used to only surface as a confusing error
+    // much later, when someone actually tried to reply to a review.
+    if (accounts.length === 0) {
+      return json({
+        error: 'Essa conta Google não administra nenhum perfil de negócio (Google Business Profile). Peça para o dono do perfil no Google conectar usando a própria conta Google dele.',
+      }, 400)
     }
+
+    const accountId = accounts[0].name.replace('accounts/', '')
+    const accountName = accounts[0].accountName ?? ''
+
+    // Find matching location
+    const locRes = await fetch(
+      `https://mybusinessbusinessinformation.googleapis.com/v1/accounts/${accountId}/locations?pageSize=100&readMask=name,metadata`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    )
+    const locData = await locRes.json()
+    const locations: Array<{ name: string; metadata?: { placeId?: string } }> = locData.locations ?? []
+
+    if (locations.length === 0) {
+      return json({
+        error: `A conta Google "${accountName}" não tem nenhum local (location) de negócio cadastrado no Google Business Profile.`,
+      }, 400)
+    }
+
+    // Try to match by placeId
+    const matched = company?.google_place_id
+      ? locations.find(l => l.metadata?.placeId === company.google_place_id)
+      : null
+
+    const targetLocation = matched ?? locations[0]
+    // name is like "locations/NUMBER"
+    const locationId = targetLocation.name.replace('locations/', '')
 
     // Store in company_integrations
     const { error: upsertErr } = await admin

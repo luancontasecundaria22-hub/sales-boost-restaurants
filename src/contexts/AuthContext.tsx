@@ -53,7 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!mounted) return
       setSession(session)
-      setUser(session?.user ?? null)
+      // Keep the same `user` object reference when it's still the same account —
+      // Supabase fires this on every silent token refresh (incl. on tab focus),
+      // and a fresh reference here re-triggers every `useEffect(..., [user])`
+      // across the app, silently re-fetching and blowing away unsaved edits.
+      setUser(prev => (prev?.id === session?.user?.id ? prev : session?.user ?? null))
       if (session?.user?.email) {
         const r = await fetchRole(session.user.email)
         if (mounted) setRole(r)

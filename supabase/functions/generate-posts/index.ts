@@ -9,6 +9,8 @@ const PLAN_LIMITS: Record<string, number> = {
   free: 5, basic: 15, pro: 35, ultra: 50,
 }
 
+const OWNER_EMAIL = 'luancontasecundaria22@gmail.com'
+
 interface PostDraft {
   legenda: string; hashtags: string; image_suggestion: string
   best_time: string; platform: string; type: string; reasoning: string
@@ -19,6 +21,19 @@ interface ImageResult {
   step: string
   error: string | null
   url: string | null
+}
+
+async function notifyMarketing(chatId: number | null | undefined, companyId: string, event: string, data?: Record<string, unknown>) {
+  // Sempre grava na aba Atividades, mesmo sem Telegram conectado — o envio
+  // ao Telegram (dentro de log-bot-event) é só um bônus quando existe chatId.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const secret = Deno.env.get('BOT_WEBHOOK_SECRET')
+  if (!supabaseUrl) return
+  fetch(`${supabaseUrl}/functions/v1/log-bot-event`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ secret: secret ?? '', bot_name: 'marketing', event_type: event, company_id: companyId, telegram_chat_id: chatId ?? null, data }),
+  }).catch(() => {})
 }
 
 async function buildProfile(db: ReturnType<typeof createClient>, authHeader: string, supabaseUrl: string): Promise<void> {
@@ -48,14 +63,12 @@ async function callClaude(prompt: string, anthropicKey: string): Promise<string>
   throw new Error(`Claude API: ${lastError}`)
 }
 
-async function generateAndStoreImage(
+async function generateImage(
   imageSuggestion: string,
-  openaiKey: string,
-  supabaseUrl: string,
-  serviceKey: string
-): Promise<{ url: string | null; step: string; error: string | null }> {
+  replicateKey: string,
+): Promise<{ url: string | null; error: string | null }> {
   try {
-    const dallePrompt = [
+    const prompt = [
       'Professional Instagram marketing photo for a Brazilian small business.',
       'Commercial photography style, high quality, warm lighting, vibrant colors, clean composition.',
       'Absolutely NO people, NO faces, NO children in the image.',
@@ -63,54 +76,28 @@ async function generateAndStoreImage(
       'No text overlays. No logos. Square format.',
     ].join(' ')
 
-    const dalleRes = await fetch('https://api.openai.com/v1/images/generations', {
+    const repRes = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${openaiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'dall-e-3', prompt: dallePrompt, n: 1, size: '1024x1024', quality: 'standard', response_format: 'url' }),
+      headers: { 'Authorization': `Bearer ${replicateKey}`, 'Content-Type': 'application/json', 'Prefer': 'wait' },
+      body: JSON.stringify({ input: { prompt, num_outputs: 1, aspect_ratio: '1:1', output_format: 'webp', output_quality: 85 } }),
     })
-    if (!dalleRes.ok) {
-      const errText = await dalleRes.text()
-      console.error('DALL-E error:', dalleRes.status, errText)
-      return { url: null, step: 'dalle_call', error: `DALL-E ${dalleRes.status}: ${errText.slice(0, 300)}` }
+    if (!repRes.ok) {
+      const errText = await repRes.text()
+      console.error('Replicate error:', repRes.status, errText)
+      return { url: null, error: `Replicate ${repRes.status}: ${errText.slice(0, 200)}` }
     }
 
-    const dalleData = await dalleRes.json()
-    const tempUrl = dalleData.data?.[0]?.url
-    if (!tempUrl) {
-      console.error('DALL-E: no URL in response', JSON.stringify(dalleData).slice(0, 200))
-      return { url: null, step: 'dalle_parse', error: 'No URL in DALL-E response' }
+    const pred = await repRes.json() as { status?: string; output?: string[]; error?: string }
+    const url = pred.status === 'succeeded' ? (pred.output?.[0] ?? null) : null
+    if (!url) {
+      console.error('Replicate: no URL', JSON.stringify(pred).slice(0, 200))
+      return { url: null, error: pred.error ?? 'No output URL from Replicate' }
     }
-
-    const imgRes = await fetch(tempUrl)
-    if (!imgRes.ok) {
-      console.error('Image download failed:', imgRes.status)
-      return { url: null, step: 'img_download', error: `Download failed: ${imgRes.status}` }
-    }
-    const imgBuffer = await imgRes.arrayBuffer()
-
-    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.png`
-    const uploadUrl = `${supabaseUrl}/storage/v1/object/post-images/${fileName}`
-    const uploadRes = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${serviceKey}`,
-        'Content-Type': 'image/png',
-        'x-upsert': 'true',
-      },
-      body: imgBuffer,
-    })
-    if (!uploadRes.ok) {
-      const errText = await uploadRes.text()
-      console.error('Storage upload error:', uploadRes.status, errText)
-      return { url: null, step: 'storage_upload', error: `Storage ${uploadRes.status}: ${errText.slice(0, 300)}` }
-    }
-
-    const publicUrl = `${supabaseUrl}/storage/v1/object/public/post-images/${fileName}`
-    return { url: publicUrl, step: 'done', error: null }
+    return { url, error: null }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
-    console.error('generateAndStoreImage exception:', msg)
-    return { url: null, step: 'exception', error: msg.slice(0, 300) }
+    console.error('generateImage exception:', msg)
+    return { url: null, error: msg.slice(0, 200) }
   }
 }
 
@@ -122,23 +109,40 @@ async function countMonthlyPosts(db: ReturnType<typeof createClient>, companyId:
   return count ?? 0
 }
 
+const PENDING_DRAFT_LIMIT = 12
+
+async function countPendingDrafts(db: ReturnType<typeof createClient>, companyId: string): Promise<number> {
+  const { count } = await db.from('posts').select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId).eq('status', 'rascunho')
+  return count ?? 0
+}
+
 async function runForCompany(
   db: ReturnType<typeof createClient>,
   companyId: string,
   anthropicKey: string,
-  openaiKey: string | null,
-  supabaseUrl: string,
-  serviceKey: string
-): Promise<{ generated: number; quota_reached: boolean; monthly_count: number; limit: number; image_results?: ImageResult[] }> {
+  replicateKey: string | null,
+  unlimited = false
+): Promise<{ generated: number; quota_reached: boolean; monthly_count: number; limit: number; image_results?: ImageResult[]; sample?: string | null; pileup_blocked?: boolean }> {
   const { data: co } = await db.from('companies').select('ai_profile, plan').eq('id', companyId).single()
   if (!co?.ai_profile) throw new Error('Perfil vazio')
 
   const plan = (co.plan ?? 'free') as string
-  const limit = PLAN_LIMITS[plan] ?? PLAN_LIMITS.free
+  const limit = unlimited ? Infinity : (PLAN_LIMITS[plan] ?? PLAN_LIMITS.free)
   const monthlyCount = await countMonthlyPosts(db, companyId)
   const remaining = Math.max(0, limit - monthlyCount)
 
   if (remaining === 0) return { generated: 0, quota_reached: true, monthly_count: monthlyCount, limit }
+
+  // Safety valve: no matter who's calling this (cron, frontend, a stray retry),
+  // never keep piling drafts on top of a backlog the owner hasn't reviewed yet.
+  // This is a hard floor independent of the cron-only no_content/stale_draft
+  // gate below, since that gate can be bypassed by calling this authenticated
+  // (non-cron) path directly.
+  const pendingCount = await countPendingDrafts(db, companyId)
+  if (pendingCount >= PENDING_DRAFT_LIMIT) {
+    return { generated: 0, quota_reached: false, monthly_count: monthlyCount, limit, pileup_blocked: true }
+  }
 
   const toGenerate = Math.min(4, remaining)
 
@@ -193,33 +197,25 @@ Regras: legenda pronta (sem colchetes), dados reais, tom natural, CTA alinhado, 
 
   const imageResults: ImageResult[] = []
 
-  if (openaiKey && inserted && inserted.length > 0) {
-    const settled = await Promise.allSettled(
+  if (replicateKey && inserted && inserted.length > 0) {
+    await Promise.allSettled(
       inserted.map(async (row: { id: string; image_suggestion: string | null }) => {
         if (!row.image_suggestion) {
           imageResults.push({ post_id: row.id, step: 'skipped', error: 'no image_suggestion', url: null })
           return
         }
-        const result = await generateAndStoreImage(row.image_suggestion, openaiKey, supabaseUrl, serviceKey)
-        imageResults.push({ post_id: row.id, ...result })
-        if (!result.url) return
-        const { error: updErr } = await db.from('posts').update({ image_url: result.url }).eq('id', row.id)
-        if (updErr) {
-          console.error('update image_url:', updErr.message)
-          imageResults[imageResults.length - 1].error = `DB update: ${updErr.message}`
-        }
+        const { url, error } = await generateImage(row.image_suggestion, replicateKey)
+        imageResults.push({ post_id: row.id, step: url ? 'done' : 'replicate_failed', error, url })
+        if (!url) return
+        const { error: updErr } = await db.from('posts').update({ image_url: url }).eq('id', row.id)
+        if (updErr) console.error('update image_url:', updErr.message)
       })
     )
-    settled.forEach((r, i) => {
-      if (r.status === 'rejected') {
-        imageResults[i] = imageResults[i] ?? { post_id: inserted[i]?.id, step: 'promise_rejected', error: String(r.reason), url: null }
-      }
-    })
-  } else if (!openaiKey) {
-    imageResults.push({ post_id: '', step: 'skipped', error: 'OPENAI_API_KEY not set', url: null })
+  } else if (!replicateKey) {
+    imageResults.push({ post_id: '', step: 'skipped', error: 'REPLICATE_API_KEY not set', url: null })
   }
 
-  return { generated: rows.length, quota_reached: false, monthly_count: monthlyCount + rows.length, limit, image_results: imageResults }
+  return { generated: rows.length, quota_reached: false, monthly_count: monthlyCount + rows.length, limit, image_results: imageResults, sample: rows[0]?.content ?? null }
 }
 
 Deno.serve(async (req) => {
@@ -230,7 +226,7 @@ Deno.serve(async (req) => {
     const anonKey    = Deno.env.get('SUPABASE_ANON_KEY')!
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
-    const openaiKey = Deno.env.get('OPENAI_API_KEY') ?? null
+    const replicateKey = Deno.env.get('REPLICATE_API_KEY') ?? null
     const cronSecretEnv = Deno.env.get('CRON_SECRET')
 
     if (!anthropicKey) return json({ error: 'Serviço indisponível.', generated: 0 }, 200)
@@ -241,13 +237,41 @@ Deno.serve(async (req) => {
     const db = createClient(supabaseUrl, serviceKey)
 
     if (isCron) {
-      const { data: companies } = await db.from('companies').select('id').not('ai_profile', 'is', null)
+      const { data: companies } = await db.from('companies')
+        .select('id, telegram_chat_id, notification_prefs')
+        .not('ai_profile', 'is', null)
       let total = 0, skipped = 0
       for (const c of (companies ?? [])) {
         try {
-          const r = await runForCompany(db, c.id, anthropicKey, openaiKey, supabaseUrl, serviceKey)
+          // Decide antes de agir: só gera post novo quando detect-opportunities já sinalizou
+          // falta real de conteúdo (no_content) — e nunca se já existe pilha de rascunhos
+          // parados sem aprovação (stale_draft). Sem essa checagem o cron gerava até 4 posts
+          // a cada 30 min, sem parar, mesmo com dezenas de rascunhos já esperando aprovação.
+          const { data: openOpps } = await db.from('opportunities')
+            .select('type')
+            .eq('company_id', c.id)
+            .eq('status', 'open')
+            .in('type', ['no_content', 'stale_draft'])
+
+          const needsContent = (openOpps ?? []).some(o => o.type === 'no_content')
+          const alreadyPilingUp = (openOpps ?? []).some(o => o.type === 'stale_draft')
+          if (!needsContent || alreadyPilingUp) continue
+
+          const r = await runForCompany(db, c.id, anthropicKey, replicateKey)
           total += r.generated
           if (r.quota_reached) skipped++
+
+          if (r.generated > 0) {
+            const prefs = (c.notification_prefs as Record<string, boolean> | null) ?? {}
+            if (prefs.agent_actions !== false) {
+              notifyMarketing(c.telegram_chat_id as number | null, c.id as string, 'AGENT_ACTION', {
+                action: 'posts_created',
+                count: r.generated,
+                reason: 'Nenhum conteúdo havia sido publicado nos últimos 7 dias',
+                sample: r.sample ?? null,
+              })
+            }
+          }
         } catch (e) { console.error('cron company error:', e) }
       }
       return json({ generated: total, quota_reached_count: skipped })
@@ -270,8 +294,9 @@ Deno.serve(async (req) => {
       buildProfile(db, authHeader, supabaseUrl)
     }
 
-    const result = await runForCompany(db, company.id, anthropicKey, openaiKey, supabaseUrl, serviceKey)
-    return json({ ...result, openai_configured: openaiKey !== null })
+    const result = await runForCompany(db, company.id, anthropicKey, replicateKey, user.email === OWNER_EMAIL)
+    const message = result.pileup_blocked ? 'Você já tem muitos rascunhos esperando aprovação. Aprove ou recuse alguns antes de gerar mais.' : undefined
+    return json({ ...result, images_configured: replicateKey !== null, message })
 
   } catch (err) {
     console.error('top-level error:', err)

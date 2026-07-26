@@ -7,9 +7,32 @@ import { PostCard, type Post, type PostStatus } from './PostsPage'
 import { OppCard, type Opportunity } from './OpportunitiesPage'
 
 const ORANGE = '#FF6D29'
+const CARD = '#150E08'
 const MUTED = '#BABABA'
 const D = "'Bricolage Grotesque', system-ui, sans-serif"
 const BORDER = 'rgba(255,255,255,0.06)'
+
+function CategoryGroup({ icon, label, count, children }: { icon: string; label: string; count: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', padding: '16px 20px', background: CARD, border: `1px solid ${open ? 'rgba(255,109,41,0.25)' : BORDER}`, borderRadius: open ? '14px 14px 0 0' : '14px', cursor: 'pointer', textAlign: 'left' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '18px' }}>{icon}</span>
+          <span style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>{label}</span>
+          <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 9px', borderRadius: '99px', background: 'rgba(255,109,41,0.12)', color: ORANGE }}>{count}</span>
+        </div>
+        <span style={{ fontSize: '12px', color: MUTED, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
+      </button>
+      {open && (
+        <div style={{ padding: '16px', background: 'rgba(255,255,255,0.015)', border: `1px solid ${BORDER}`, borderTop: 'none', borderRadius: '0 0 14px 14px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function ApprovalsPage() {
   const { user, session } = useAuth()
@@ -74,29 +97,19 @@ export default function ApprovalsPage() {
         ) : (
           <>
             {reviewOpps.length > 0 && (
-              <div style={{ marginBottom: '32px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: ORANGE, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '14px' }}>
-                  {T.reviewsSection} ({reviewOpps.length})
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {reviewOpps.map(opp => (
-                    <OppCard key={opp.id} opp={opp} session={session} onResolve={handleOppResolve} onDismiss={handleOppDismiss} T={TO} />
-                  ))}
-                </div>
-              </div>
+              <CategoryGroup icon="⭐" label={T.reviewsSection} count={reviewOpps.length}>
+                {reviewOpps.map(opp => (
+                  <OppCard key={opp.id} opp={opp} session={session} onResolve={handleOppResolve} onDismiss={handleOppDismiss} T={TO} />
+                ))}
+              </CategoryGroup>
             )}
 
             {posts.length > 0 && (
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: ORANGE, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '14px' }}>
-                  {T.postsSection} ({posts.length})
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                  {posts.map(post => (
-                    <PostCard key={post.id} post={post} onStatusChange={handlePostStatusChange} locked={false} T={TP} />
-                  ))}
-                </div>
-              </div>
+              <CategoryGroup icon="📝" label={T.postsSection} count={posts.length}>
+                {posts.map(post => (
+                  <PostCard key={post.id} post={post} onStatusChange={handlePostStatusChange} locked={false} T={TP} />
+                ))}
+              </CategoryGroup>
             )}
           </>
         )}

@@ -18,6 +18,27 @@ const CHANNELS: { key: Channel; name: string; emoji: string; available: boolean 
   { key: 'whatsapp', name: 'WhatsApp', emoji: '💬', available: false },
 ]
 
+type NotificationPrefs = {
+  opportunities: boolean; negative_reviews: boolean; new_competitor: boolean; agent_actions: boolean
+  daily_report: boolean; weekly_report: boolean; monthly_report: boolean; annual_report: boolean
+}
+
+const DEFAULT_PREFS: NotificationPrefs = {
+  opportunities: true, negative_reviews: true, new_competitor: true, agent_actions: true,
+  daily_report: true, weekly_report: true, monthly_report: true, annual_report: true,
+}
+
+const PREF_OPTIONS: { key: keyof NotificationPrefs; label: string; hint: string }[] = [
+  { key: 'daily_report', label: 'Relatório diário', hint: 'Um resumo do dia, enviado toda noite pelo Agente Secretário.' },
+  { key: 'weekly_report', label: 'Relatório semanal', hint: 'Panorama da semana — só chega se o dono da plataforma tiver ligado essa categoria.' },
+  { key: 'monthly_report', label: 'Relatório mensal', hint: 'Panorama do mês.' },
+  { key: 'annual_report', label: 'Relatório anual', hint: 'Panorama do ano.' },
+  { key: 'agent_actions', label: 'Execuções do agente', hint: 'Quando o agente cria um post ou rascunha uma resposta sozinho — e por quê.' },
+  { key: 'negative_reviews', label: 'Avaliações negativas / sem resposta', hint: 'Quando o agente encontra uma review ruim ou parada há dias.' },
+  { key: 'opportunities', label: 'Outras oportunidades', hint: 'Rascunhos parados, sem posts novos, engajamento baixo.' },
+  { key: 'new_competitor', label: 'Novos concorrentes', hint: 'Quando um concorrente novo aparece no raio monitorado.' },
+]
+
 export default function NotificationsCard() {
   const { user, session } = useAuth()
   const [companyId, setCompanyId] = useState<string | null>(null)
@@ -26,19 +47,31 @@ export default function NotificationsCard() {
   const [telegramGenerating, setTelegramGenerating] = useState(false)
   const [disconnecting, setDisconnecting] = useState(false)
   const [picking, setPicking] = useState(false)
+  const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS)
+  const [savingPref, setSavingPref] = useState<keyof NotificationPrefs | null>(null)
 
   useEffect(() => {
     if (!user) return
     supabase.from('companies')
-      .select('id, telegram_chat_id')
+      .select('id, telegram_chat_id, notification_prefs')
       .eq('user_id', user.id)
       .maybeSingle()
       .then(({ data }) => {
         if (!data) return
         setCompanyId(data.id)
         setTelegramChatId(data.telegram_chat_id ?? null)
+        setPrefs({ ...DEFAULT_PREFS, ...(data.notification_prefs as Partial<NotificationPrefs> | null ?? {}) })
       })
   }, [user])
+
+  const togglePref = async (key: keyof NotificationPrefs) => {
+    if (!companyId) return
+    const next = { ...prefs, [key]: !prefs[key] }
+    setPrefs(next)
+    setSavingPref(key)
+    await supabase.from('companies').update({ notification_prefs: next }).eq('id', companyId)
+    setSavingPref(null)
+  }
 
   const generateTelegramCode = async () => {
     if (!session) return
@@ -78,17 +111,41 @@ export default function NotificationsCard() {
         </p>
 
         {connected ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px' }}>
-            <span style={{ fontSize: '18px' }}>✈️</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '13px', color: '#4ade80', fontWeight: 600 }}>✓ Telegram conectado</div>
-              <div style={{ fontSize: '11px', color: MUTED, marginTop: '1px' }}>Você vai receber os avisos por lá.</div>
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.2)', borderRadius: '10px', marginBottom: '18px' }}>
+              <span style={{ fontSize: '18px' }}>✈️</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '13px', color: '#4ade80', fontWeight: 600 }}>✓ Telegram conectado</div>
+                <div style={{ fontSize: '11px', color: MUTED, marginTop: '1px' }}>Você vai receber os avisos por lá.</div>
+              </div>
+              <button onClick={disconnectTelegram} disabled={disconnecting}
+                style={{ padding: '7px 14px', background: 'transparent', color: '#f87171', fontWeight: 600, fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', cursor: disconnecting ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
+                {disconnecting ? 'Desconectando...' : 'Desconectar'}
+              </button>
             </div>
-            <button onClick={disconnectTelegram} disabled={disconnecting}
-              style={{ padding: '7px 14px', background: 'transparent', color: '#f87171', fontWeight: 600, fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', cursor: disconnecting ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
-              {disconnecting ? 'Desconectando...' : 'Desconectar'}
-            </button>
-          </div>
+
+            <div style={{ fontSize: '11px', fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '12px' }}>
+              O que avisar
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {PREF_OPTIONS.map(opt => (
+                <label key={opt.key}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={prefs[opt.key]}
+                    onChange={() => togglePref(opt.key)}
+                    disabled={savingPref === opt.key}
+                    style={{ width: '16px', height: '16px', accentColor: ORANGE, cursor: 'pointer', flexShrink: 0 }}
+                  />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{opt.label}</div>
+                    <div style={{ fontSize: '11px', color: MUTED, marginTop: '1px' }}>{opt.hint}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </>
         ) : !picking ? (
           <button onClick={() => setPicking(true)} disabled={!companyId}
             style={{ width: '100%', padding: '16px 20px', background: ORANGE, borderRadius: '12px', color: '#000', fontSize: '15px', fontWeight: 800, textAlign: 'center', border: 'none', cursor: companyId ? 'pointer' : 'not-allowed', opacity: companyId ? 1 : 0.6, letterSpacing: '-0.01em' }}>

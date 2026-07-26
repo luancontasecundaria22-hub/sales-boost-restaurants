@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { InsightReport } from '../../components/InsightReport'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
@@ -225,6 +226,8 @@ export default function AudienciaTab() {
 
   return (
     <div style={{ padding: '24px 32px' }}>
+      <InsightReport tabKey="audiencia" />
+
       <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', overflow: 'hidden' }}>
         <div style={{ padding: '16px 22px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <div>

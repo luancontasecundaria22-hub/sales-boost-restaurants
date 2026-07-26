@@ -85,7 +85,7 @@ export default function AgentePage() {
 
     try {
       const history = newMessages.slice(0, -1).slice(-10)
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/agent-chat`, {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/hermes-proxy`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${session.access_token}`,

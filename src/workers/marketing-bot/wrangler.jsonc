@@ -10,6 +10,7 @@
     "COMPETITORS_EDGE_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/map-competitors",
     "REPORT_EDGE_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/generate-report",
     "TELEGRAM_CONNECT_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/telegram-connect",
-    "TELEGRAM_CHAT_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/telegram-chat"
+    "TELEGRAM_CHAT_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/telegram-chat",
+    "LOG_BOT_EVENT_URL": "https://miwcxakzyforbahpnpst.supabase.co/functions/v1/log-bot-event"
   }
 }

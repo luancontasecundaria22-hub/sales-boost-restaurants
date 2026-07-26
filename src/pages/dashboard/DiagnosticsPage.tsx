@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
 import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
+import { InsightReport } from '../../components/InsightReport'
 
 const ORANGE = '#FF6D29'
 const CARD = '#150E08'
@@ -183,6 +184,8 @@ export default function DiagnosticsPage() {
       </div>
 
       <div style={{ padding: '28px 32px' }}>
+        <InsightReport tabKey="performance" />
+
         {runError && (
           <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#f87171', lineHeight: 1.5 }}>
             {runError}

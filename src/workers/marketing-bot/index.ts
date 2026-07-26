@@ -29,6 +29,20 @@ function buildNotificationText(payload: {
     }
     case 'REPORT_READY':
       return `📊 Relatório disponível!\nPeríodo: ${(data?.period as string) ?? ''}\nScore: ${(data?.health_score as number) ?? ''}\nUse /relatorio para acessar.`;
+    case 'AGENT_ACTION': {
+      const action = (data?.action as string) ?? '';
+      const count = (data?.count as number) ?? 0;
+      const reason = (data?.reason as string) ?? '';
+      const sample = (data?.sample as string) ?? '';
+      if (action === 'posts_created') {
+        const preview = sample ? `\n\nExemplo: "${sample.slice(0, 140)}${sample.length > 140 ? '…' : ''}"` : '';
+        return `📝 O agente criou ${count} post(s) novo(s)\nMotivo: ${reason}${preview}\n\nAprove em Posts.`;
+      }
+      if (action === 'replies_drafted') {
+        return `💬 O agente rascunhou ${count} resposta(s) de avaliação\nMotivo: ${reason}\n\nAprove em Oportunidades.`;
+      }
+      return `🤖 O agente executou uma ação${reason ? `: ${reason}` : ''}.`;
+    }
     default:
       return (payload.message as string) ?? 'Nova atualização do Sales Boost.';
   }
@@ -108,6 +122,23 @@ export default {
 
         const text = buildNotificationText(payload);
         const sent = await sendTelegramMessage(token, chatId, text);
+
+        // Grava a mesma mensagem que foi pro Telegram na aba Atividades do
+        // dashboard — texto idêntico, sem duplicar a lógica de formatação.
+        if (sent && env.LOG_BOT_EVENT_URL) {
+          fetch(env.LOG_BOT_EVENT_URL, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              secret: env.BOT_WEBHOOK_SECRET ?? '',
+              bot_name: env.BOT_TYPE ?? 'marketing',
+              event_type: payload.event,
+              message: text,
+              telegram_chat_id: chatId,
+              company_id: payload.company_id ?? null,
+            }),
+          }).catch(() => {});
+        }
 
         return new Response(JSON.stringify({ ok: sent }), {
           headers: { 'content-type': 'application/json' },

@@ -28,6 +28,7 @@ const BUSINESS_TYPES = [
   'Varejo / E-commerce',
   'Serviços',
   'Beleza & Estética',
+  'Barbearia',
   'Saúde & Bem-estar',
   'Outro',
 ]

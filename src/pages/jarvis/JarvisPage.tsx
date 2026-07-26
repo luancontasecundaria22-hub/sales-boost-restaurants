@@ -10,7 +10,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
 type VoiceState = 'idle' | 'listening' | 'thinking' | 'speaking'
 type Lang = 'pt' | 'en'
-type AgentRole = 'cmo' | 'sales'
+type AgentRole = 'marketing'
 
 const VOICE_IDS: Record<Lang, string> = {
   pt: 'pNInz6obpgDQGcFmaJgB', // Adam — multilingual v2, works on all ElevenLabs accounts
@@ -23,13 +23,14 @@ const STATUS_LABELS: Record<Lang, Record<VoiceState, string>> = {
   en: { idle: 'Ready', listening: '● Listening', thinking: '◌ Processing', speaking: '▶ Responding' },
 }
 
+// O Agente de Vendas foi excluído (decisão do dono) — o que sobrou virou o
+// "Agente Geral", único papel hoje, cobrindo o negócio inteiro.
 const AGENTS: { role: AgentRole; emoji: string; label: { pt: string; en: string } }[] = [
-  { role: 'cmo',        emoji: '📣', label: { pt: 'Marketing',  en: 'Marketing'  } },
-  { role: 'sales',      emoji: '💼', label: { pt: 'Vendas',     en: 'Sales'      } },
+  { role: 'marketing',  emoji: '📣', label: { pt: 'Geral',  en: 'General'  } },
 ]
 
 const AGENT_NAMES: Record<AgentRole, string> = {
-  cmo: 'Agente de Marketing', sales: 'Agente de Vendas',
+  marketing: 'Agente Geral',
 }
 
 // Atmospheric glow behind orb per state
@@ -62,7 +63,7 @@ export default function JarvisPage() {
   const [userText, setUserText]       = useState('')
   const [agentText, setAgentText]     = useState('')
   const [interimText, setInterimText] = useState('')
-  const [agentRole, setAgentRole]     = useState<AgentRole>('cmo')
+  const [agentRole, setAgentRole]     = useState<AgentRole>('marketing')
 
   const recognitionRef = useRef<ISpeechRecognition | null>(null)
   const audioRef       = useRef<HTMLAudioElement | null>(null)
@@ -152,7 +153,7 @@ export default function JarvisPage() {
     setUserText(message)
     setAgentText('')
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/agent-chat`, {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/hermes-proxy`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ message, history: [], agent_role: agentRoleRef.current }),
@@ -346,7 +347,8 @@ export default function JarvisPage() {
           )}
         </AnimatePresence>
 
-        {/* Agent selector */}
+        {/* Agent selector — só aparece quando há mais de 1 agente disponível */}
+        {AGENTS.length > 1 && (
         <div style={{ width: '100%', padding: '0 28px', boxSizing: 'border-box' }}>
           <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.15)', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 10, textAlign: 'center' }}>
             {lang === 'pt' ? 'Agentes' : 'Agents'}
@@ -379,6 +381,7 @@ export default function JarvisPage() {
             })}
           </div>
         </div>
+        )}
 
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.12)', letterSpacing: '0.04em', minHeight: 16, paddingBottom: 28 }}>
           {autoListen

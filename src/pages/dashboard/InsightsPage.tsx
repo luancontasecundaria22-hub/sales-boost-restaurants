@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
+import { topWords } from '../../lib/wordFrequency'
+import { InsightReport } from '../../components/InsightReport'
 
 const CARD = '#150E08'
 const MUTED = '#BABABA'
@@ -40,6 +42,8 @@ function StarRow({ rating }: { rating: number | null }) {
 export default function InsightsPage() {
   const { user, session } = useAuth()
   const [companyId, setCompanyId] = useState<string | null>(null)
+  const [googleRating, setGoogleRating] = useState<number | null>(null)
+  const [googleReviewCount, setGoogleReviewCount] = useState<number | null>(null)
   const [reviews, setReviews] = useState<Review[]>([])
   const [loading, setLoading] = useState(true)
   const [importing, setImporting] = useState(false)
@@ -58,12 +62,14 @@ export default function InsightsPage() {
     setLoading(true)
     const { data: company } = await supabase
       .from('companies')
-      .select('id')
+      .select('id, google_rating, google_review_count')
       .eq('user_id', user.id)
       .maybeSingle()
 
     if (!company) { setLoading(false); return }
     setCompanyId(company.id)
+    setGoogleRating(company.google_rating)
+    setGoogleReviewCount(company.google_review_count)
 
     const [{ data }, { data: gbpInteg }] = await Promise.all([
       supabase
@@ -100,8 +106,19 @@ export default function InsightsPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Erro desconhecido')
-      const reviewsResult = data.synced?.includes('reviews') ? `Reviews importadas.` : data.synced?.includes('reviews_error') ? `Erro ao importar reviews: ${data.results?.reviews_error ?? ''}` : 'Sincronização concluída.'
-      setActionMsg(reviewsResult)
+      // apify-sync kicks off a background job and returns right away — poll
+      // until it's done instead of assuming the old synchronous response shape.
+      if (data.job_id) {
+        setActionMsg('Sincronizando em segundo plano...')
+        for (let i = 0; i < 60; i++) {
+          await new Promise(r => setTimeout(r, 3000))
+          const { data: job } = await supabase.from('sync_jobs').select('status').eq('id', data.job_id).maybeSingle()
+          if (job && job.status !== 'running') {
+            setActionMsg(job.status === 'error' ? 'Sincronização concluída com alguns erros.' : 'Avaliações importadas e classificadas.')
+            break
+          }
+        }
+      }
       await loadReviews()
     } catch (e: unknown) {
       setActionErr(e instanceof Error ? e.message : String(e))
@@ -157,9 +174,15 @@ export default function InsightsPage() {
   const negative = analyzed.filter(r => r.sentiment === 'negative').length
   const neutral = analyzed.filter(r => r.sentiment === 'neutral').length
   const withRating = reviews.filter(r => r.rating)
-  const avgRating = withRating.length
+  const localAvgRating = withRating.length
     ? (withRating.reduce((s, r) => s + (r.rating ?? 0), 0) / withRating.length).toFixed(1)
     : null
+  // Prefer the real Google Business rating over an average computed from the
+  // reviews we've imported — Apify only pulls a recent batch (not the full
+  // history Google uses), so a locally-computed average always drifts from
+  // what shows up on Google itself.
+  const avgRating = googleRating != null ? googleRating.toFixed(1) : localAvgRating
+  const avgRatingIsGoogle = googleRating != null
   const unanalyzed = reviews.filter(r => !r.sentiment).length
 
   // Theme counts
@@ -168,6 +191,7 @@ export default function InsightsPage() {
     for (const t of r.themes ?? []) themeCounts[t] = (themeCounts[t] ?? 0) + 1
   }
   const topThemes = Object.entries(themeCounts).sort((a, b) => b[1] - a[1]).slice(0, 8)
+  const topWordsList = topWords(reviews.map(r => r.text), 10)
 
   const filtered = sentimentFilter === 'all' ? reviews : reviews.filter(r => r.sentiment === sentimentFilter)
 
@@ -197,6 +221,8 @@ export default function InsightsPage() {
       </div>
 
       <div style={{ padding: '24px 32px' }}>
+        <InsightReport tabKey="avaliacoes" />
+
         {(actionMsg || actionErr) && (
           <div style={{ marginBottom: '16px', padding: '12px 16px', background: actionErr ? 'rgba(248,113,113,0.08)' : 'rgba(74,222,128,0.08)', border: `1px solid ${actionErr ? 'rgba(248,113,113,0.2)' : 'rgba(74,222,128,0.2)'}`, borderRadius: '10px', fontSize: '13px', color: actionErr ? '#f87171' : '#4ade80', lineHeight: 1.5 }}>
             {actionErr || actionMsg}
@@ -220,14 +246,15 @@ export default function InsightsPage() {
             {/* Stats */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '24px' }}>
               {[
-                { label: 'Nota média', value: avgRating ? `${avgRating}★` : '—', color: '#FBBF24' },
-                { label: 'Positivas', value: String(positive), color: '#4ade80' },
-                { label: 'Neutras', value: String(neutral), color: MUTED },
-                { label: 'Negativas', value: String(negative), color: '#f87171' },
+                { label: 'Nota média', value: avgRating ? `${avgRating}★` : '—', color: '#FBBF24', hint: avgRatingIsGoogle ? `oficial do Google${googleReviewCount ? ` · ${googleReviewCount} avaliações` : ''}` : null },
+                { label: 'Positivas', value: String(positive), color: '#4ade80', hint: null },
+                { label: 'Neutras', value: String(neutral), color: MUTED, hint: null },
+                { label: 'Negativas', value: String(negative), color: '#f87171', hint: null },
               ].map(s => (
                 <div key={s.label} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '18px 20px' }}>
                   <div style={{ fontSize: '10px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '8px' }}>{s.label}</div>
                   <div style={{ fontFamily: D, fontSize: '2rem', fontWeight: 900, color: s.color }}>{s.value}</div>
+                  {s.hint && <div style={{ fontSize: '10px', color: MUTED, marginTop: '4px' }}>{s.hint}</div>}
                 </div>
               ))}
             </div>
@@ -242,6 +269,25 @@ export default function InsightsPage() {
                       <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: THEME_COLORS[i % THEME_COLORS.length], flexShrink: 0 }} />
                       <span style={{ fontSize: '12px', color: 'white', textTransform: 'capitalize' }}>{theme}</span>
                       <span style={{ fontSize: '11px', color: MUTED }}>{count}x</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Word frequency */}
+            {topWordsList.length > 0 && (
+              <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '20px 24px', marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'white', marginBottom: '4px' }}>Palavras mais citadas</div>
+                <div style={{ fontSize: '11px', color: MUTED, marginBottom: '14px' }}>% de avaliações que mencionam a palavra</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
+                  {topWordsList.map(w => (
+                    <div key={w.word} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                      <div style={{ width: '110px', fontSize: '12.5px', color: 'white', textTransform: 'capitalize', flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{w.word}</div>
+                      <div style={{ flex: 1, height: '6px', borderRadius: '99px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                        <div style={{ width: `${w.docPercent}%`, height: '100%', borderRadius: '99px', background: ORANGE, opacity: 0.75 }} />
+                      </div>
+                      <div style={{ width: '40px', fontSize: '11.5px', color: MUTED, textAlign: 'right', flexShrink: 0 }}>{w.docPercent}%</div>
                     </div>
                   ))}
                 </div>

@@ -40,16 +40,29 @@ async function callClaude(anthropicKey: string, prompt: string): Promise<string>
 
 type SupaClient = ReturnType<typeof createClient>
 
-async function draftPendingReviewReplies(admin: SupaClient, anthropicKey: string, companyId: string): Promise<number> {
+async function notifyMarketing(chatId: number | null | undefined, companyId: string, event: string, data?: Record<string, unknown>) {
+  // Sempre grava na aba Atividades, mesmo sem Telegram conectado — o envio
+  // ao Telegram (dentro de log-bot-event) é só um bônus quando existe chatId.
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const secret = Deno.env.get('BOT_WEBHOOK_SECRET')
+  if (!supabaseUrl) return
+  fetch(`${supabaseUrl}/functions/v1/log-bot-event`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ secret: secret ?? '', bot_name: 'marketing', event_type: event, company_id: companyId, telegram_chat_id: chatId ?? null, data }),
+  }).catch(() => {})
+}
+
+async function draftPendingReviewReplies(admin: SupaClient, anthropicKey: string, companyId: string): Promise<{ drafted: number; negative: number; stale: number }> {
   const { data: opps } = await admin
     .from('opportunities')
-    .select('id, ref_id')
+    .select('id, ref_id, type')
     .eq('company_id', companyId)
     .eq('ref_type', 'review')
     .eq('status', 'open')
     .is('ai_draft', null)
 
-  let drafted = 0
+  let drafted = 0, negative = 0, stale = 0
   for (const opp of opps ?? []) {
     if (!opp.ref_id) continue
     try {
@@ -59,11 +72,13 @@ async function draftPendingReviewReplies(admin: SupaClient, anthropicKey: string
       const draft = await callClaude(anthropicKey, buildReviewReplyPrompt(company, review))
       await admin.from('opportunities').update({ ai_draft: draft }).eq('id', opp.id)
       drafted++
+      if (opp.type === 'negative_review') negative++
+      else if (opp.type === 'unanswered_review') stale++
     } catch (e) {
       console.error(`draft-reply cron: opportunity ${opp.id} error:`, e)
     }
   }
-  return drafted
+  return { drafted, negative, stale }
 }
 
 Deno.serve(async (req) => {
@@ -83,10 +98,24 @@ Deno.serve(async (req) => {
     // Cron mode: auto-draft replies for every open review-type opportunity, across all active companies
     const bodyForCron = req.method === 'POST' ? await req.json().catch(() => ({})) as Record<string, unknown> : {}
     if (cronSecretEnv && bodyForCron.cron_secret === cronSecretEnv) {
-      const { data: companies } = await admin.from('companies').select('id').eq('active', true)
+      const { data: companies } = await admin.from('companies').select('id, telegram_chat_id, notification_prefs').eq('active', true)
       let total = 0
       for (const c of companies ?? []) {
-        total += await draftPendingReviewReplies(admin, anthropicKey, c.id)
+        const r = await draftPendingReviewReplies(admin, anthropicKey, c.id)
+        total += r.drafted
+        if (r.drafted > 0) {
+          const prefs = (c.notification_prefs as Record<string, boolean> | null) ?? {}
+          if (prefs.agent_actions !== false) {
+            const reasonParts: string[] = []
+            if (r.negative > 0) reasonParts.push(`${r.negative} avaliação(ões) negativa(s) sem resposta`)
+            if (r.stale > 0) reasonParts.push(`${r.stale} avaliação(ões) parada(s) há +14 dias sem resposta`)
+            notifyMarketing(c.telegram_chat_id as number | null, c.id as string, 'AGENT_ACTION', {
+              action: 'replies_drafted',
+              count: r.drafted,
+              reason: reasonParts.join(' e ') || 'avaliações sem resposta detectadas',
+            })
+          }
+        }
       }
       return json({ ok: true, cron: true, companies: companies?.length ?? 0, drafted: total })
     }
