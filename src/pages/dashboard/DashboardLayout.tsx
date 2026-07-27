@@ -15,7 +15,7 @@ const iconStroke = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, str
 type NavItem = { to: string; label: string; icon: React.ReactNode; end?: boolean }
 type NavSection = { section?: string; accent?: boolean; items: NavItem[] }
 
-function makeNavSections(T: typeof d[keyof typeof d], flags: { jarvis: boolean; agentesMenu: boolean }): NavSection[] {
+function makeNavSections(T: typeof d[keyof typeof d], flags: { jarvis: boolean; agentesMenu: boolean; marketingAi: boolean }): NavSection[] {
   return [
     {
       items: [
@@ -39,13 +39,13 @@ function makeNavSections(T: typeof d[keyof typeof d], flags: { jarvis: boolean; 
         icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>,
       }],
     }] : []),
-    {
+    ...(flags.marketingAi ? [{
       section: T.layout.sections.marketingAi, accent: true,
       items: [{
         to: '/dashboard/marketing-ai', label: T.layout.nav.marketingAi,
         icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg>,
       }],
-    },
+    }] : []),
     {
       items: [{
         to: '/dashboard/aprovacoes', label: T.layout.nav.approvals,
@@ -97,7 +97,7 @@ function SidebarInner() {
   const { lang } = useLang()
   const T = d[lang]
   const { company } = useCompany()
-  const flags = { jarvis: company?.jarvis_enabled ?? false, agentesMenu: company?.agent_enabled ?? false }
+  const flags = { jarvis: company?.jarvis_enabled ?? false, agentesMenu: company?.agent_enabled ?? false, marketingAi: company?.marketing_ai_enabled ?? true }
 
   const navSections = makeNavSections(T, flags)
   const bottomItems = makeBottomItems(T)

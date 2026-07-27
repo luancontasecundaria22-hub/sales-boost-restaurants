@@ -18,6 +18,7 @@ export interface CompanyData {
   plan: string | null
   jarvis_enabled: boolean
   agent_enabled: boolean
+  marketing_ai_enabled: boolean
 }
 
 interface CompanyContextType {
@@ -41,7 +42,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     if (!user) { setCompany(null); setLoading(false); return }
     const { data } = await supabase
       .from('companies')
-      .select('id, business_name, business_type, city, phone, website_url, instagram_url, facebook_url, google_place_id, google_rating, google_review_count, instagram_user_id, plan, jarvis_enabled, agent_enabled')
+      .select('id, business_name, business_type, city, phone, website_url, instagram_url, facebook_url, google_place_id, google_rating, google_review_count, instagram_user_id, plan, jarvis_enabled, agent_enabled, marketing_ai_enabled')
       .eq('user_id', user.id)
       .maybeSingle()
     setCompany(data as CompanyData | null)

@@ -43,6 +43,14 @@ const Spinner = () => (
   </div>
 )
 
+// Página inicial do dashboard: cai no Marketing AI (agente principal). Se o
+// owner desligou o Marketing AI dessa empresa, cai em Atividades.
+function DashboardIndex() {
+  const { company, loading } = useCompany()
+  if (loading) return <Spinner />
+  return <Navigate to={company?.marketing_ai_enabled === false ? '/dashboard/atividades' : '/dashboard/marketing-ai'} replace />
+}
+
 function ClientRoute({ children }: { children: React.ReactNode }) {
   const { user, role, loading } = useAuth()
   const { company, loading: companyLoading } = useCompany()
@@ -93,7 +101,7 @@ function RouterRoot() {
           </ClientRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard/marketing-ai" replace />} />
+        <Route index element={<DashboardIndex />} />
         <Route path="atividades" element={<ActivityPage />} />
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="insights" element={<InsightsPage />} />

@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
     // Update company settings (owner edit)
     if (action === 'update' && updates) {
-      const allowed = ['business_name', 'business_type', 'city', 'goal', 'plan', 'business_dna', 'jarvis_enabled', 'agent_enabled']
+      const allowed = ['business_name', 'business_type', 'city', 'goal', 'plan', 'business_dna', 'jarvis_enabled', 'agent_enabled', 'marketing_ai_enabled']
       const safe: Record<string, unknown> = {}
       for (const key of allowed) {
         if (key in updates) safe[key] = updates[key]
@@ -72,7 +72,7 @@ Deno.serve(async (req) => {
     // Fetch company detail + agent messages + telegram conversations
     const [companyRes, messagesRes, telegramRes, marketingAiRes] = await Promise.all([
       admin.from('companies')
-        .select('id, business_name, business_type, city, goal, plan, instagram_url, website_url, google_rating, google_review_count, telegram_chat_id, business_dna, jarvis_enabled, agent_enabled, created_at')
+        .select('id, business_name, business_type, city, goal, plan, instagram_url, website_url, google_rating, google_review_count, telegram_chat_id, business_dna, jarvis_enabled, agent_enabled, marketing_ai_enabled, created_at')
         .eq('id', company_id)
         .single(),
       admin.from('agent_messages')
