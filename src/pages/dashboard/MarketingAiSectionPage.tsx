@@ -16,6 +16,7 @@ import ConnectionsTab from './marketingAi/ConnectionsTab'
 import MetaAdsTab from './marketingAi/MetaAdsTab'
 import FunnelTab from './marketingAi/FunnelTab'
 import WhatsAppTab from './marketingAi/WhatsAppTab'
+import FeedbackLoopTab from './marketingAi/FeedbackLoopTab'
 import { buildGrowthDemo } from './marketingAi/growthDemo'
 
 const ORANGE = '#FF6D29'
@@ -23,17 +24,17 @@ const ORANGE = '#FF6D29'
 const SECTION_TITLE: Record<string, string> = {
   tracking: 'Tracking', content: 'Conteúdo', competitors: 'Inteligência de Mercado', brain: 'Aprendizado',
   overview: 'Visão Geral', chat: 'Chat', experiments: 'Experimentos', tools: 'Configuração', timeline: 'Central de Execução', reports: 'Relatórios',
-  conexoes: 'Conexões', 'meta-ads': 'Agente de Meta Ads', funil: 'Funil de Vendas', whatsapp: 'Atendimento WhatsApp',
+  conexoes: 'Conexões', 'meta-ads': 'Agente de Meta Ads', funil: 'Funil de Vendas', whatsapp: 'Atendimento WhatsApp', feedback: 'Feedback Loop',
 }
 const SECTION_ICON: Record<string, string> = {
   tracking: '📈', content: '✍️', competitors: '🧭', brain: '🧠',
   overview: '🏠', chat: '✨', experiments: '🧪', tools: '🛠️', timeline: '🕓', reports: '📊',
-  conexoes: '🔌', 'meta-ads': '🎯', funil: '🔀', whatsapp: '💬',
+  conexoes: '🔌', 'meta-ads': '🎯', funil: '🔀', whatsapp: '💬', feedback: '🔁',
 }
 
 // Seções do Growth OS que funcionam em modo demonstração, sem depender da
 // ativação/config do Marketing AI feita pela equipe.
-const DEMO_SECTIONS = new Set(['overview', 'conexoes', 'meta-ads', 'funil', 'whatsapp'])
+const DEMO_SECTIONS = new Set(['overview', 'conexoes', 'meta-ads', 'funil', 'whatsapp', 'feedback'])
 
 export default function MarketingAiSectionPage() {
   const { section } = useParams<{ section: string }>()
@@ -101,6 +102,8 @@ export default function MarketingAiSectionPage() {
         return <FunnelTab company={company} />
       case 'whatsapp':
         return <WhatsAppTab company={company} />
+      case 'feedback':
+        return <FeedbackLoopTab company={company} />
       default:
         return null
     }

@@ -23,8 +23,9 @@ const GROWTH_MODULES: ModuleDef[] = [
 
 // Ferramentas de apoio — inteligência, aprendizado e histórico.
 const SUPPORT_MODULES: { section: string; label: string; icon: string; soon?: boolean }[] = [
+  { section: 'feedback', label: 'Feedback Loop', icon: '🔁' },
   { section: 'tracking', label: 'Tracking', icon: '📈' },
-  { section: 'brain', label: 'Aprendizado', icon: '🧠' },
+  { section: 'brain', label: 'Marketing Brain', icon: '🧠' },
   { section: 'experiments', label: 'Experimentos', icon: '🧪' },
   { section: 'timeline', label: 'Central de Execução', icon: '🕓' },
   { section: 'reports', label: 'Relatórios', icon: '📊' },
