@@ -528,22 +528,46 @@ ${contextBlock}`
   return { reply }
 }
 
+// ── Enforcement de ferramentas (Camada 2) ──────────────────────────────────
+// Cada ação do Growth OS mapeia pra uma linha do capability_registry. O owner
+// liga/desliga essas linhas no Agents Control Center; aqui a gente respeita
+// isso de verdade — se a ferramenta está desligada, a ação não roda (nem no
+// chat, nem no ciclo automático). Estratégia e chat são núcleo (não gateados).
+const ACTION_TOOL_ID: Record<string, string> = {
+  run_tracking: 'mai_tracking',
+  run_competitors: 'mai_competitors',
+  run_content: 'mai_content',
+  run_trends: 'mai_trends',
+  generate_report: 'mai_reports',
+  run_experiment: 'mai_experiments',
+  conclude_experiment: 'mai_experiments',
+}
+
+async function getDisabledMarketingAiTools(admin: SupaClient): Promise<Set<string>> {
+  const disabled = new Set<string>()
+  const { data } = await admin.from('capability_registry').select('id, enabled').contains('used_by', ['marketing_ai'])
+  for (const r of (data ?? []) as { id: string; enabled: boolean }[]) {
+    if (!r.enabled) disabled.add(r.id)
+  }
+  return disabled
+}
+
 // ── Decision Pipeline (modo cron) ──────────────────────────────────────────
 // 1 Tracking → 2 Competitors → 3 Strategy → 4 Content (só se fizer sentido).
 // Só roda pra empresas que têm marketing_ai_config (opt-in explícito nas
 // Configurações do Marketing AI — nunca liga sozinho pra ninguém).
-async function runPipelineForCompany(admin: SupaClient, company: Company, apifyToken: string | null, anthropicKey: string, replicateKey: string | null, hermesUrl: string | null, hermesApiKey: string | null): Promise<void> {
+async function runPipelineForCompany(admin: SupaClient, company: Company, apifyToken: string | null, anthropicKey: string, replicateKey: string | null, hermesUrl: string | null, hermesApiKey: string | null, disabled: Set<string>): Promise<void> {
   const config = await getConfig(admin, company.id)
   if (!config) return // não fez onboarding do Marketing AI ainda
 
   if (apifyToken) {
-    await runTracking(admin, company, config, apifyToken, anthropicKey).catch(e => console.error('pipeline tracking error:', e))
-    await runCompetitors(admin, company, config, apifyToken, anthropicKey).catch(e => console.error('pipeline competitor error:', e))
+    if (!disabled.has('mai_tracking')) await runTracking(admin, company, config, apifyToken, anthropicKey).catch(e => console.error('pipeline tracking error:', e))
+    if (!disabled.has('mai_competitors')) await runCompetitors(admin, company, config, apifyToken, anthropicKey).catch(e => console.error('pipeline competitor error:', e))
   }
   // "Hermes decide. Marketing AI executa." — só gera conteúdo se o Hermes
   // decidiu isso agora, não mais por conta própria toda rodada.
   const strategyResult = await runStrategy(admin, company, config, hermesUrl, hermesApiKey).catch(e => { console.error('pipeline strategy error:', e); return null })
-  if (strategyResult?.action === 'generate_content' && config.content_pillars.length > 0) {
+  if (strategyResult?.action === 'generate_content' && config.content_pillars.length > 0 && !disabled.has('mai_content')) {
     await runContent(admin, company, config, anthropicKey, replicateKey).catch(e => console.error('pipeline content error:', e))
   }
 }
@@ -569,11 +593,12 @@ Deno.serve(async (req) => {
     const isCron = cronSecretEnv && body.cron_secret === cronSecretEnv
 
     if (isCron) {
+      const disabled = await getDisabledMarketingAiTools(admin)
       const { data: companies } = await admin.from('companies').select('id, business_name, business_type, city, instagram_url, goal').eq('active', true)
       let processed = 0
       for (const company of (companies ?? []) as Company[]) {
         try {
-          await runPipelineForCompany(admin, company, apifyToken, anthropicKey, replicateKey, hermesUrl, hermesApiKey)
+          await runPipelineForCompany(admin, company, apifyToken, anthropicKey, replicateKey, hermesUrl, hermesApiKey, disabled)
           processed++
         } catch (e) {
           console.error(`marketing-ai cron: company ${company.id} error:`, e)
@@ -594,6 +619,14 @@ Deno.serve(async (req) => {
     const action = body.action as string
     const config = await getConfig(admin, company.id)
     if (!config) return json({ error: 'Configure o Marketing AI primeiro (aba Configurações).' }, 400)
+
+    // Camada 2: respeita o liga/desliga de ferramentas do Agents Control Center.
+    // Estratégia e chat são núcleo e não entram no mapa — nunca são bloqueados.
+    const toolId = ACTION_TOOL_ID[action]
+    if (toolId) {
+      const disabled = await getDisabledMarketingAiTools(admin)
+      if (disabled.has(toolId)) return json({ error: 'Esta ferramenta foi desativada pelo administrador no Agents Control Center.' }, 403)
+    }
 
     if (action === 'run_tracking') {
       if (!apifyToken) return json({ error: 'APIFY_TOKEN não configurado.' }, 503)

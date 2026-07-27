@@ -29,23 +29,6 @@ const APPROVAL_OPTIONS: { key: string; label: string; hint: string }[] = [
   { key: 'can_send_emails', label: 'Enviar e-mail em nome do negócio', hint: 'Ex: confirmação de reserva, resposta a cliente.' },
 ]
 
-// Ferramentas reais do Growth OS (Agente de Marketing) — cada uma é uma ação
-// concreta da edge function `marketing-ai`. Diferente do Agente Geral, essas
-// não vivem no capability_registry (aquela tabela é o mapa de tools do Hermes/
-// hermes-proxy) — são fixas no código do próprio agente. Por isso a lista fica
-// aqui, como visão de LEITURA: mostra o que o Growth OS sabe fazer hoje. Ligar/
-// desligar e adicionar tool manualmente é a próxima etapa (Camada 2).
-const MARKETING_AI_TOOLS: { name: string; description: string; category: string; requires?: string; status: 'live' | 'partial' | 'planned' }[] = [
-  { name: 'Análise de tracking', description: 'Coleta métricas do Instagram (seguidores, curtidas, engajamento) e gera insights.', category: 'analytics', requires: 'Apify', status: 'live' },
-  { name: 'Análise de concorrentes', description: 'Puxa dados dos concorrentes e compara com o negócio, gerando insights.', category: 'concorrentes', requires: 'Apify', status: 'live' },
-  { name: 'Geração de conteúdo', description: 'Escreve posts com IA (e a imagem, se o Replicate estiver configurado) — sempre como rascunho.', category: 'marketing', status: 'live' },
-  { name: 'Tendências virais', description: 'Identifica tendências atuais do segmento pra inspirar conteúdo.', category: 'marketing', status: 'live' },
-  { name: 'Estratégia', description: 'Decide a próxima ação do agente com base nos dados reais da empresa.', category: 'outros', requires: 'Hermes', status: 'live' },
-  { name: 'Relatórios', description: 'Gera relatórios (semanal, mensal, campanha, executivo...) citando só dados reais.', category: 'analytics', status: 'live' },
-  { name: 'Chat', description: 'Conversa com o dono respondendo com os dados reais da empresa, sem inventar número.', category: 'outros', status: 'live' },
-  { name: 'Experimentos A/B', description: 'Propõe, inicia e conclui testes A/B — quem decide o vencedor é sempre o dono.', category: 'marketing', status: 'live' },
-]
-
 // Ordenação do seletor "Agentes Ativos": Growth OS (principal) primeiro,
 // Agente Geral (legado) por último, o resto no meio.
 const roleRank = (role: string) => (role === 'marketing_ai' ? 0 : role === 'marketing' ? 100 : 50)
@@ -153,6 +136,13 @@ export default function AgentsControlCenterPage() {
   const [saved, setSaved] = useState(false)
   const [savingGlobal, setSavingGlobal] = useState(false)
 
+  // "Adicionar ferramenta" do Growth OS — cria um placeholder honesto
+  // (planned, sem execução) até existir código por trás.
+  const [showAddTool, setShowAddTool] = useState(false)
+  const [newToolName, setNewToolName] = useState('')
+  const [newToolDesc, setNewToolDesc] = useState('')
+  const [addingTool, setAddingTool] = useState(false)
+
   // Lista de empresas — usada pelo seletor que aparece quando o card
   // "Agente de Marketing" é escolhido em "Agentes Ativos" (config real de
   // cada uma fica na ficha da empresa, junto do Business DNA).
@@ -215,6 +205,25 @@ export default function AgentsControlCenterPage() {
   const toggleCapability = async (id: string, enabled: boolean) => {
     setCapabilities(prev => prev.map(c => c.id === id ? { ...c, enabled } : c))
     await supabase.from('capability_registry').update({ enabled, updated_at: new Date().toISOString() }).eq('id', id)
+  }
+
+  const addMarketingAiTool = async () => {
+    const name = newToolName.trim()
+    if (!name) return
+    setAddingTool(true)
+    const slug = name.toLowerCase().normalize('NFD').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40)
+    const id = `custom_${slug || 'tool'}_${Date.now()}`
+    const { error } = await supabase.from('capability_registry').insert({
+      id, name, description: newToolDesc.trim() || 'Ferramenta adicionada manualmente.', category: 'outros',
+      edge_function: null, used_by: ['marketing_ai'], requires: [], requires_approval: false,
+      hermes_callable: false, toggleable: false, enabled: false, status: 'planned',
+      notes: 'Adicionada manualmente pelo owner — sem execução até ter código por trás.',
+    })
+    setAddingTool(false)
+    if (!error) {
+      setNewToolName(''); setNewToolDesc(''); setShowAddTool(false)
+      await loadAll()
+    }
   }
 
   const toggleAgentRole = async (role: string, active: boolean) => {
@@ -363,33 +372,70 @@ export default function AgentsControlCenterPage() {
 
             {isMarketingAi ? (
               <>
-              <SettingsSection title="Ferramentas do Growth OS" description="Tudo que o agente principal sabe fazer hoje. Cada linha é uma ação real da plataforma — não é promessa.">
+              <SettingsSection title="Ferramentas do Growth OS" description="Tudo que o agente principal sabe fazer. Ligue ou desligue cada ferramenta — vale pro chat e pro ciclo automático.">
                 <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', marginBottom: '16px', lineHeight: 1.6 }}>
-                  Por enquanto é uma visão de <strong>leitura</strong> (🔒 = ferramenta do núcleo, sempre ligada). Ligar/desligar cada uma e adicionar ferramentas manualmente é a próxima etapa.
+                  Desligar uma ferramenta impede o Growth OS de executá-la de verdade (tela → banco → função). <strong>🔒 = núcleo</strong>, sempre ligada. Mudanças salvam na hora.
                 </div>
-                {CATEGORY_ORDER.filter(cat => MARKETING_AI_TOOLS.some(t => t.category === cat)).map(cat => (
-                  <div key={cat} style={{ marginBottom: '18px' }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>{CATEGORY_LABELS[cat] ?? cat}</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {MARKETING_AI_TOOLS.filter(t => t.category === cat).map(t => {
-                        const badge = STATUS_BADGE[t.status] ?? STATUS_BADGE.planned
-                        return (
-                          <div key={t.name} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 14px', borderRadius: '9px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)' }}>
-                            <span title="Núcleo — sempre ligada" style={{ fontSize: '13px', flexShrink: 0, paddingTop: '2px' }}>🔒</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                                <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'white' }}>{t.name}</span>
-                                <span style={{ fontSize: '9.5px', fontWeight: 700, color: badge.color, padding: '1px 7px', borderRadius: '99px', border: `1px solid ${badge.color}44` }}>{badge.label}</span>
+                {(() => {
+                  const maiTools = capabilities.filter(c => c.used_by.includes('marketing_ai'))
+                  if (maiTools.length === 0) {
+                    return <div style={{ color: MUTED, fontSize: '12.5px', marginBottom: '8px' }}>Ferramentas ainda não registradas — aplique a migration 035_marketing_ai_capabilities.sql.</div>
+                  }
+                  return CATEGORY_ORDER.filter(cat => maiTools.some(c => c.category === cat)).map(cat => (
+                    <div key={cat} style={{ marginBottom: '18px' }}>
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>{CATEGORY_LABELS[cat] ?? cat}</div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        {maiTools.filter(c => c.category === cat).map(c => {
+                          const badge = STATUS_BADGE[c.status] ?? STATUS_BADGE.planned
+                          return (
+                            <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 14px', borderRadius: '9px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)' }}>
+                              <div style={{ flexShrink: 0, paddingTop: '2px' }}>
+                                {c.toggleable ? (
+                                  <input type="checkbox" checked={c.enabled} onChange={e => toggleCapability(c.id, e.target.checked)} style={{ width: '16px', height: '16px', accentColor: ORANGE, cursor: 'pointer' }} />
+                                ) : (
+                                  <span title="Núcleo — sempre ligada" style={{ fontSize: '13px' }}>🔒</span>
+                                )}
                               </div>
-                              <div style={{ fontSize: '11.5px', color: MUTED, marginTop: '2px', lineHeight: 1.5 }}>{t.description}</div>
-                              {t.requires && <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.3)', marginTop: '3px' }}>Requer: {t.requires}</div>}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'white' }}>{c.name}</span>
+                                  <span style={{ fontSize: '9.5px', fontWeight: 700, color: badge.color, padding: '1px 7px', borderRadius: '99px', border: `1px solid ${badge.color}44` }}>{badge.label}</span>
+                                  {c.toggleable && !c.enabled && <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#f87171' }}>desligada</span>}
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: MUTED, marginTop: '2px', lineHeight: 1.5 }}>{c.description}</div>
+                                {c.requires.length > 0 && <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.3)', marginTop: '3px' }}>Requer: {c.requires.join(', ')}</div>}
+                              </div>
                             </div>
-                          </div>
-                        )
-                      })}
+                          )
+                        })}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                })()}
+
+                <div style={{ marginTop: '8px', paddingTop: '16px', borderTop: `1px solid ${BORDER}` }}>
+                  {!showAddTool ? (
+                    <button onClick={() => setShowAddTool(true)} style={{ padding: '8px 14px', background: 'transparent', border: `1px dashed ${BORDER}`, borderRadius: '9px', color: MUTED, fontSize: '12.5px', cursor: 'pointer' }}>
+                      + Adicionar ferramenta
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '480px' }}>
+                      <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+                        Cria uma ferramenta como <strong>planejada</strong> (marca de roadmap) — aparece na lista, mas só executa quando tiver código por trás. Isso evita "existir na tela sem fazer nada".
+                      </div>
+                      <input value={newToolName} onChange={e => setNewToolName(e.target.value)} placeholder="Nome da ferramenta" style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
+                      <input value={newToolDesc} onChange={e => setNewToolDesc(e.target.value)} placeholder="O que ela faz" style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button onClick={addMarketingAiTool} disabled={!newToolName.trim() || addingTool} style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12.5px', borderRadius: '8px', border: 'none', cursor: newToolName.trim() ? 'pointer' : 'not-allowed', opacity: newToolName.trim() ? 1 : 0.5 }}>
+                          {addingTool ? 'Adicionando...' : 'Adicionar como planejada'}
+                        </button>
+                        <button onClick={() => { setShowAddTool(false); setNewToolName(''); setNewToolDesc('') }} style={{ padding: '8px 16px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: MUTED, fontSize: '12.5px', cursor: 'pointer' }}>
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </SettingsSection>
               <SettingsSection title="Empresas" description="O Agente de Marketing é configurado por empresa — escolha uma abaixo pra abrir a ficha dela (voz, público, pilares de conteúdo, concorrentes...).">
                 <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', marginBottom: '16px', lineHeight: 1.6 }}>
