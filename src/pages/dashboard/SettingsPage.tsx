@@ -6,6 +6,7 @@ import { useCompany } from '../../contexts/CompanyContext'
 import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
 import NotificationsCard from './settings/NotificationsCard'
+import AgentConfigTab from './marketingAi/AgentConfigTab'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -130,10 +131,12 @@ export default function SettingsPage() {
   const { lang } = useLang()
   const T = d[lang].settings
 
-  const [tab, setTab] = useState<'info' | 'integrations'>(searchParams.get('tab') === 'integracoes' ? 'integrations' : 'info')
+  const initialTab = searchParams.get('tab') === 'integracoes' ? 'integrations' : searchParams.get('tab') === 'agentes' ? 'agentes' : 'info'
+  const [tab, setTab] = useState<'info' | 'integrations' | 'agentes'>(initialTab)
 
   useEffect(() => {
     if (searchParams.get('tab') === 'integracoes') setTab('integrations')
+    if (searchParams.get('tab') === 'agentes') setTab('agentes')
     const section = searchParams.get('section')
     if (!section) return
     setTimeout(() => document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
@@ -448,7 +451,7 @@ export default function SettingsPage() {
 
         {/* Tab switcher */}
         <div style={{ display: 'flex', gap: '6px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '5px', marginBottom: '24px', width: 'fit-content' }}>
-          {([['info', 'Informações da empresa'], ['integrations', 'Integrações']] as const).map(([key, label]) => (
+          {([['info', 'Informações da empresa'], ['agentes', 'Agentes'], ['integrations', 'Integrações']] as const).map(([key, label]) => (
             <button key={key} onClick={() => setTab(key)}
               style={{ padding: '9px 18px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, background: tab === key ? ORANGE : 'transparent', color: tab === key ? '#000' : MUTED, transition: 'all 0.15s' }}>
               {label}
@@ -460,6 +463,16 @@ export default function SettingsPage() {
           <div style={{ background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '12px', padding: '14px 18px', marginBottom: '20px', fontSize: '13px', color: MUTED, lineHeight: 1.6 }}>
             👋 <strong style={{ color: 'white' }}>Bem-vindo!</strong> Preencha as informações abaixo para configurar seu painel. Depois de salvar, o dashboard mostrará seus dados.
           </div>
+        )}
+
+        {tab === 'agentes' && (
+          companyId ? (
+            <AgentConfigTab company={{ id: companyId }} />
+          ) : (
+            <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '22px', fontSize: '13px', color: MUTED, lineHeight: 1.6 }}>
+              Crie o perfil do seu negócio primeiro (aba <strong style={{ color: 'white' }}>Informações da empresa</strong>) pra configurar os agentes.
+            </div>
+          )
         )}
 
         {tab === 'integrations' && (

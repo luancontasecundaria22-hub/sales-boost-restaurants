@@ -17,7 +17,6 @@ import MetaAdsTab from './marketingAi/MetaAdsTab'
 import FunnelTab from './marketingAi/FunnelTab'
 import WhatsAppTab from './marketingAi/WhatsAppTab'
 import FeedbackLoopTab from './marketingAi/FeedbackLoopTab'
-import AgentConfigTab from './marketingAi/AgentConfigTab'
 import { buildGrowthDemo } from './marketingAi/growthDemo'
 
 const ORANGE = '#FF6D29'
@@ -49,6 +48,10 @@ export default function MarketingAiSectionPage() {
   }
 
   if (!section || !SECTION_TITLE[section]) return <Navigate to="/dashboard/marketing-ai" replace />
+  // A configuração dos agentes (autonomia/objetivo) foi consolidada em
+  // Configurações → Agentes, o lar único de config do cliente. Deep links
+  // antigos pra cá redirecionam pra lá.
+  if (section === 'configuracao') return <Navigate to="/dashboard/settings?tab=agentes" replace />
 
   const accessToken = session?.access_token ?? ''
   const pendingContent = data.content.filter(c => c.status === 'idea' || c.status === 'draft').length
@@ -105,8 +108,6 @@ export default function MarketingAiSectionPage() {
         return <WhatsAppTab company={company} />
       case 'feedback':
         return <FeedbackLoopTab company={company} />
-      case 'configuracao':
-        return <AgentConfigTab company={company} />
       default:
         return null
     }
