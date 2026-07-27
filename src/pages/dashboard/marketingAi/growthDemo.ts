@@ -36,7 +36,7 @@ function mulberry32(seed: number): () => number {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 }
-function seededRng(key: string): () => number {
+export function seededRng(key: string): () => number {
   return mulberry32(xmur3(key)())
 }
 
