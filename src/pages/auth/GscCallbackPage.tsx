@@ -50,7 +50,7 @@ export default function GscCallbackPage() {
         } else {
           setStatus('success')
           setMessage(data.domain ? `Conectado: ${data.domain}` : 'Google Search Console conectado!')
-          setTimeout(() => navigate('/dashboard/settings?tab=integracoes'), 2000)
+          setTimeout(() => navigate('/dashboard/marketing-ai/conexoes'), 2000)
         }
       } catch (err) {
         setStatus('error')
@@ -85,10 +85,10 @@ export default function GscCallbackPage() {
             <div style={{ fontSize: '16px', fontWeight: 600, color: 'white', marginBottom: '8px' }}>Erro ao conectar</div>
             <div style={{ fontSize: '13px', color: MUTED, marginBottom: '20px' }}>{message}</div>
             <button
-              onClick={() => navigate('/dashboard/settings?tab=integracoes')}
+              onClick={() => navigate('/dashboard/marketing-ai/conexoes')}
               style={{ padding: '10px 20px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '10px', border: 'none', cursor: 'pointer' }}
             >
-              Voltar às Integrações
+              Voltar às Conexões
             </button>
           </>
         )}

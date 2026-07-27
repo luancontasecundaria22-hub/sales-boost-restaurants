@@ -98,7 +98,7 @@ function RouterRoot() {
         <Route path="atividades" element={<ActivityPage />} />
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="insights" element={<InsightsPage />} />
-        <Route path="integrations" element={<Navigate to="/dashboard/settings?tab=integracoes" replace />} />
+        <Route path="integrations" element={<Navigate to="/dashboard/marketing-ai/conexoes" replace />} />
         <Route path="posts" element={<PostsPage />} />
         <Route path="posts/categoria/:group" element={<AgentCategoryPage />} />
         <Route path="posts/:section" element={<AgentSectionPage />} />

@@ -20,15 +20,15 @@ Deno.serve(async (req) => {
   const state = url.searchParams.get('state')
   const errorMsg = url.searchParams.get('error_description')
 
-  if (errorMsg) return htmlRedirect(`/dashboard/settings?tab=integracoes&error=${encodeURIComponent(errorMsg)}`)
-  if (!code || !state) return htmlRedirect('/dashboard/settings?tab=integracoes&error=missing_params')
+  if (errorMsg) return htmlRedirect(`/dashboard/marketing-ai/conexoes?error=${encodeURIComponent(errorMsg)}`)
+  if (!code || !state) return htmlRedirect('/dashboard/marketing-ai/conexoes?error=missing_params')
 
   let companyId: string
   try {
     const parsed = JSON.parse(atob(state))
     companyId = parsed.company_id
   } catch {
-    return htmlRedirect('/dashboard/settings?tab=integracoes&error=invalid_state')
+    return htmlRedirect('/dashboard/marketing-ai/conexoes?error=invalid_state')
   }
 
   const appId = Deno.env.get('META_APP_ID')!
@@ -97,10 +97,10 @@ Deno.serve(async (req) => {
 
     if (updateErr) throw new Error(updateErr.message)
 
-    return htmlRedirect('/dashboard/settings?tab=integracoes&instagram=connected')
+    return htmlRedirect('/dashboard/marketing-ai/conexoes?instagram=connected')
   } catch (err) {
     console.error('Instagram OAuth error:', err)
-    return htmlRedirect(`/dashboard/settings?tab=integracoes&error=${encodeURIComponent(String(err))}`)
+    return htmlRedirect(`/dashboard/marketing-ai/conexoes?error=${encodeURIComponent(String(err))}`)
   }
 })
 

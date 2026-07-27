@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { supabase } from '../../lib/supabase'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useCompany } from '../../contexts/CompanyContext'
 import { useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
 import NotificationsCard from './settings/NotificationsCard'
-import IntegrationsTab from './settings/IntegrationsTab'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -126,6 +125,7 @@ const PLANS = [
 export default function SettingsPage() {
   const { user, session } = useAuth()
   const { refreshCompany } = useCompany()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { lang } = useLang()
   const T = d[lang].settings
@@ -465,7 +465,19 @@ export default function SettingsPage() {
         {tab === 'integrations' && (
           <>
             <NotificationsCard />
-            <IntegrationsTab />
+            <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '22px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: 'white', marginBottom: '4px' }}>🔌 Conexões de canais</div>
+                <div style={{ fontSize: '12.5px', color: MUTED, lineHeight: 1.6, maxWidth: '420px' }}>
+                  Instagram, Google Search Console, Google Business Profile e os demais canais agora ficam num lugar só, dentro do Marketing AI.
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/dashboard/marketing-ai/conexoes')}
+                style={{ padding: '10px 18px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '10px', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+                Abrir Conexões →
+              </button>
+            </div>
           </>
         )}
 

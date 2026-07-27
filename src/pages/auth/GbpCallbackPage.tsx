@@ -44,7 +44,7 @@ export default function GbpCallbackPage() {
         if (!res.ok) throw new Error(data.error ?? 'Erro desconhecido')
         setStatus('success')
         setMessage(`Google Business Profile conectado! Conta: ${data.account_name || 'OK'}`)
-        setTimeout(() => navigate('/dashboard/settings?tab=integracoes'), 2000)
+        setTimeout(() => navigate('/dashboard/marketing-ai/conexoes'), 2000)
       } catch (e: unknown) {
         setStatus('error')
         setMessage(e instanceof Error ? e.message : String(e))
@@ -88,9 +88,9 @@ export default function GbpCallbackPage() {
             <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>✗</div>
             <div style={{ color: '#f87171', fontSize: '15px', fontWeight: 700, marginBottom: '8px' }}>Erro na conexão</div>
             <div style={{ color: '#BABABA', fontSize: '13px', marginBottom: '24px' }}>{message}</div>
-            <button onClick={() => navigate('/dashboard/settings?tab=integracoes')}
+            <button onClick={() => navigate('/dashboard/marketing-ai/conexoes')}
               style={{ padding: '10px 24px', background: '#FF6D29', color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '10px', border: 'none', cursor: 'pointer' }}>
-              Voltar para Integrações
+              Voltar para Conexões
             </button>
           </>
         )}
