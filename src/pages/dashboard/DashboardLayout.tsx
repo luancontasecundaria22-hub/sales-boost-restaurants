@@ -20,10 +20,6 @@ function makeNavSections(T: typeof d[keyof typeof d], flags: { jarvis: boolean; 
     {
       items: [
         {
-          to: '/dashboard', label: T.layout.nav.overview, end: true,
-          icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>,
-        },
-        {
           to: '/dashboard/atividades', label: T.layout.nav.activities,
           icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M2.25 12c0-1.146.294-2.257.85-3.24a.75.75 0 0 1 1.32.72A5.98 5.98 0 0 0 3.75 12a5.98 5.98 0 0 0 .67 2.52.75.75 0 0 1-1.32.72A7.48 7.48 0 0 1 2.25 12ZM8.03 5.47a.75.75 0 0 1 0 1.06 5.98 5.98 0 0 0-1.75 4.22 5.98 5.98 0 0 0 1.75 4.22.75.75 0 1 1-1.06 1.06A7.48 7.48 0 0 1 4.78 10.75c0-2.07.84-3.95 2.19-5.3a.75.75 0 0 1 1.06.02Z" /><path d="M9.75 10.75a2.25 2.25 0 1 1 4.5 0 2.25 2.25 0 0 1-4.5 0Z" /><path d="M15.97 5.45a.75.75 0 0 1 1.06-.02 7.48 7.48 0 0 1 2.19 5.3 7.48 7.48 0 0 1-2.19 5.3.75.75 0 1 1-1.06-1.06 5.98 5.98 0 0 0 1.75-4.22 5.98 5.98 0 0 0-1.75-4.22.75.75 0 0 1 0-1.06ZM19.58 9.48a.75.75 0 0 1 1.32-.72c.556.983.85 2.094.85 3.24a7.48 7.48 0 0 1-.85 3.24.75.75 0 1 1-1.32-.72A5.98 5.98 0 0 0 20.25 12a5.98 5.98 0 0 0-.67-2.52Z" /></svg>,
         },

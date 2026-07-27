@@ -11,7 +11,6 @@ import SignupPage from './pages/auth/SignupPage.tsx'
 import GscCallbackPage from './pages/auth/GscCallbackPage.tsx'
 import GbpCallbackPage from './pages/auth/GbpCallbackPage.tsx'
 import DashboardLayout from './pages/dashboard/DashboardLayout.tsx'
-import OverviewPage from './pages/dashboard/OverviewPage.tsx'
 import ActivityPage from './pages/dashboard/ActivityPage.tsx'
 import DiagnosticsPage from './pages/dashboard/DiagnosticsPage.tsx'
 import InsightsPage from './pages/dashboard/InsightsPage.tsx'
@@ -94,7 +93,7 @@ function RouterRoot() {
           </ClientRoute>
         }
       >
-        <Route index element={<OverviewPage />} />
+        <Route index element={<Navigate to="/dashboard/marketing-ai" replace />} />
         <Route path="atividades" element={<ActivityPage />} />
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="insights" element={<InsightsPage />} />
