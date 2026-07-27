@@ -12,16 +12,32 @@ import ReportsTab from './marketingAi/ReportsTab'
 import ChatTab from './marketingAi/ChatTab'
 import ExperimentsTab from './marketingAi/ExperimentsTab'
 import ToolsTab from './marketingAi/ToolsTab'
+import ConnectionsTab from './marketingAi/ConnectionsTab'
+import { buildGrowthDemo } from './marketingAi/growthDemo'
 
 const ORANGE = '#FF6D29'
 
 const SECTION_TITLE: Record<string, string> = {
-  tracking: 'Tracking', content: 'Conteúdo', competitors: 'Concorrentes', brain: 'Marketing Brain',
-  overview: 'Visão Geral', chat: 'Chat', experiments: 'Experiments', tools: 'Tools', timeline: 'Atividades', reports: 'Relatórios',
+  tracking: 'Tracking', content: 'Conteúdo', competitors: 'Inteligência de Mercado', brain: 'Aprendizado',
+  overview: 'Visão Geral', chat: 'Chat', experiments: 'Experimentos', tools: 'Configuração', timeline: 'Central de Execução', reports: 'Relatórios',
+  conexoes: 'Conexões', 'meta-ads': 'Agente de Meta Ads', funil: 'Funil de Vendas', whatsapp: 'Atendimento WhatsApp',
 }
 const SECTION_ICON: Record<string, string> = {
-  tracking: '📈', content: '✍️', competitors: '🔍', brain: '🧠',
+  tracking: '📈', content: '✍️', competitors: '🧭', brain: '🧠',
   overview: '🏠', chat: '✨', experiments: '🧪', tools: '🛠️', timeline: '🕓', reports: '📊',
+  conexoes: '🔌', 'meta-ads': '🎯', funil: '🔀', whatsapp: '💬',
+}
+
+// Seções do Growth OS que funcionam em modo demonstração, sem depender da
+// ativação/config do Marketing AI feita pela equipe.
+const DEMO_SECTIONS = new Set(['overview', 'conexoes', 'meta-ads', 'funil', 'whatsapp'])
+
+// Módulos ainda em construção (fases 2-4) — mostram um placeholder honesto do
+// que vem por aí em vez de uma tela vazia.
+const COMING_SOON: Record<string, { phase: string; bullets: string[] }> = {
+  'meta-ads': { phase: 'Fase 2', bullets: ['Analisar campanhas, públicos e criativos (CTR, CPC, CPA, ROAS)', 'Sugerir orçamento e pausar anúncios ruins', 'Botão "Executar recomendação da IA"'] },
+  funil: { phase: 'Fase 3', bullets: ['Pipeline visual: Novo lead → Contato → Qualificado → Proposta → Venda', 'Captura de leads do WhatsApp e follow-up automático', 'Notificar vendedores e agendar reuniões'] },
+  whatsapp: { phase: 'Fase 3', bullets: ['Responder dúvidas e apresentar produtos', 'Qualificar interesse e transferir para humano quando precisar', 'Aprender com histórico de conversas e FAQ da empresa'] },
 }
 
 export default function MarketingAiSectionPage() {
@@ -41,7 +57,7 @@ export default function MarketingAiSectionPage() {
   const pendingContent = data.content.filter(c => c.status === 'idea' || c.status === 'draft').length
   const proposedStrategy = data.strategyLog.filter(s => s.status === 'proposed').length
 
-  const requiresActivation = section !== 'overview' && !data.config
+  const requiresActivation = !DEMO_SECTIONS.has(section) && !data.config
   const goHome = () => navigate('/dashboard/marketing-ai')
 
   const render = () => {
@@ -82,6 +98,12 @@ export default function MarketingAiSectionPage() {
         return <TimelineTab activity={data.activity} />
       case 'reports':
         return <ReportsTab accessToken={accessToken} insights={data.insights} strategyLog={data.strategyLog} reports={data.reports} onRefresh={data.refresh} />
+      case 'conexoes':
+        return <ConnectionsTab connections={buildGrowthDemo(company).connections} />
+      case 'meta-ads':
+      case 'funil':
+      case 'whatsapp':
+        return <ComingSoonSection section={section} />
       default:
         return null
     }
@@ -159,6 +181,33 @@ function OverviewSection({
             </div>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ComingSoonSection({ section }: { section: string }) {
+  const info = COMING_SOON[section]
+  if (!info) return null
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '32px 28px', maxWidth: '620px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+        <span style={{ fontSize: '26px' }}>{SECTION_ICON[section]}</span>
+        <div>
+          <div style={{ fontSize: '16px', fontWeight: 800, color: 'white' }}>{SECTION_TITLE[section]}</div>
+          <span style={{ fontSize: '10.5px', fontWeight: 700, color: ORANGE, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Em construção · {info.phase}</span>
+        </div>
+      </div>
+      <p style={{ fontSize: '12.5px', color: MUTED, lineHeight: 1.6, marginBottom: '16px' }}>
+        Esse agente já está no mapa. Ele vai entrar em funcionamento quando as integrações da Meta forem verificadas — e você já consegue ver o fluxo completo no modo demonstração da Visão Geral. O que ele vai fazer:
+      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {info.bullets.map((b, i) => (
+          <div key={i} style={{ display: 'flex', gap: '9px', alignItems: 'flex-start' }}>
+            <span style={{ color: ORANGE, fontSize: '13px', flexShrink: 0 }}>→</span>
+            <span style={{ fontSize: '12.5px', color: 'white', lineHeight: 1.5 }}>{b}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
