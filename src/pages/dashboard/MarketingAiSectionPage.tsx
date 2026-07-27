@@ -4,8 +4,8 @@ import { useCompany } from '../../contexts/CompanyContext'
 import { useMarketingAiData } from './marketingAi/useMarketingAiData'
 import { CARD, MUTED, BORDER, D, PILLAR_ICON, IMPACT_COLOR, IMPACT_LABEL, timeAgo, type ActivityLogRow, type Insight, type TrackingSnapshot, type MarketingAiConfig } from './marketingAi/shared'
 import TrackingTab from './marketingAi/TrackingTab'
-import ContentTab from './marketingAi/ContentTab'
-import CompetitorsTab from './marketingAi/CompetitorsTab'
+import ContentAgentTab from './marketingAi/ContentAgentTab'
+import MarketIntelTab from './marketingAi/MarketIntelTab'
 import BrainTab from './marketingAi/BrainTab'
 import TimelineTab from './marketingAi/TimelineTab'
 import ReportsTab from './marketingAi/ReportsTab'
@@ -34,7 +34,7 @@ const SECTION_ICON: Record<string, string> = {
 
 // Seções do Growth OS que funcionam em modo demonstração, sem depender da
 // ativação/config do Marketing AI feita pela equipe.
-const DEMO_SECTIONS = new Set(['overview', 'conexoes', 'meta-ads', 'funil', 'whatsapp', 'feedback'])
+const DEMO_SECTIONS = new Set(['overview', 'conexoes', 'meta-ads', 'funil', 'whatsapp', 'feedback', 'content', 'competitors'])
 
 export default function MarketingAiSectionPage() {
   const { section } = useParams<{ section: string }>()
@@ -79,9 +79,9 @@ export default function MarketingAiSectionPage() {
       case 'tracking':
         return <TrackingTab accessToken={accessToken} snapshots={data.snapshots} insights={data.insights.filter(i => i.pillar === 'tracking')} hasInstagram={!!company.instagram_url} onRefresh={data.refresh} />
       case 'content':
-        return <ContentTab companyId={company.id} accessToken={accessToken} content={data.content} campaigns={data.campaigns} trends={data.trends} onRefresh={data.refresh} />
+        return <ContentAgentTab company={company} />
       case 'competitors':
-        return <CompetitorsTab accessToken={accessToken} competitors={data.competitors} insights={data.insights.filter(i => i.pillar === 'competitor')} hasCompetitorsConfigured={(data.config?.competitors.length ?? 0) > 0} onRefresh={data.refresh} />
+        return <MarketIntelTab company={company} />
       case 'brain':
         return <BrainTab nodes={data.brainNodes} accessToken={accessToken} strategyLog={data.strategyLog} onRefresh={data.refresh} />
       case 'chat':
