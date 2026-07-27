@@ -29,6 +29,27 @@ const APPROVAL_OPTIONS: { key: string; label: string; hint: string }[] = [
   { key: 'can_send_emails', label: 'Enviar e-mail em nome do negócio', hint: 'Ex: confirmação de reserva, resposta a cliente.' },
 ]
 
+// Ferramentas reais do Growth OS (Agente de Marketing) — cada uma é uma ação
+// concreta da edge function `marketing-ai`. Diferente do Agente Geral, essas
+// não vivem no capability_registry (aquela tabela é o mapa de tools do Hermes/
+// hermes-proxy) — são fixas no código do próprio agente. Por isso a lista fica
+// aqui, como visão de LEITURA: mostra o que o Growth OS sabe fazer hoje. Ligar/
+// desligar e adicionar tool manualmente é a próxima etapa (Camada 2).
+const MARKETING_AI_TOOLS: { name: string; description: string; category: string; requires?: string; status: 'live' | 'partial' | 'planned' }[] = [
+  { name: 'Análise de tracking', description: 'Coleta métricas do Instagram (seguidores, curtidas, engajamento) e gera insights.', category: 'analytics', requires: 'Apify', status: 'live' },
+  { name: 'Análise de concorrentes', description: 'Puxa dados dos concorrentes e compara com o negócio, gerando insights.', category: 'concorrentes', requires: 'Apify', status: 'live' },
+  { name: 'Geração de conteúdo', description: 'Escreve posts com IA (e a imagem, se o Replicate estiver configurado) — sempre como rascunho.', category: 'marketing', status: 'live' },
+  { name: 'Tendências virais', description: 'Identifica tendências atuais do segmento pra inspirar conteúdo.', category: 'marketing', status: 'live' },
+  { name: 'Estratégia', description: 'Decide a próxima ação do agente com base nos dados reais da empresa.', category: 'outros', requires: 'Hermes', status: 'live' },
+  { name: 'Relatórios', description: 'Gera relatórios (semanal, mensal, campanha, executivo...) citando só dados reais.', category: 'analytics', status: 'live' },
+  { name: 'Chat', description: 'Conversa com o dono respondendo com os dados reais da empresa, sem inventar número.', category: 'outros', status: 'live' },
+  { name: 'Experimentos A/B', description: 'Propõe, inicia e conclui testes A/B — quem decide o vencedor é sempre o dono.', category: 'marketing', status: 'live' },
+]
+
+// Ordenação do seletor "Agentes Ativos": Growth OS (principal) primeiro,
+// Agente Geral (legado) por último, o resto no meio.
+const roleRank = (role: string) => (role === 'marketing_ai' ? 0 : role === 'marketing' ? 100 : 50)
+
 interface Routines { [k: string]: boolean }
 interface Approvals { [k: string]: boolean }
 
@@ -169,13 +190,14 @@ export default function AgentsControlCenterPage() {
     if (data) setMaxActiveAgents(data.max_active_agents ?? FACTORY_DEFAULTS.maxActiveAgents)
     setCapabilities((capRows ?? []) as CapabilityRow[])
     setIntegrationCatalog((integrationRows ?? []) as IntegrationRow[])
-    const roles = (roleRows ?? []) as AgentRoleRow[]
+    const roles = ((roleRows ?? []) as AgentRoleRow[]).sort((a, b) => roleRank(a.role) - roleRank(b.role))
     setAgentRoles(roles)
     if (reportRow) setReportConfig(reportRow as ReportConfig)
     setTelegramStats({ connected: telegramConnected ?? 0, total: telegramTotal ?? 0 })
 
     if (roles.length > 0) {
-      const initial = roles.find(r => r.active) ?? roles[0]
+      // Growth OS é o agente principal — abre selecionado por padrão.
+      const initial = roles.find(r => r.role === 'marketing_ai') ?? roles.find(r => r.active) ?? roles[0]
       selectRole(initial.role, roles)
     }
 
@@ -284,8 +306,10 @@ export default function AgentsControlCenterPage() {
                         style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 14px', borderRadius: '10px', cursor: 'pointer', border: `1px solid ${isSelected ? 'rgba(255,109,41,0.5)' : r.active ? 'rgba(74,222,128,0.25)' : BORDER}`, background: isSelected ? 'rgba(255,109,41,0.06)' : r.active ? 'rgba(74,222,128,0.04)' : 'rgba(255,255,255,0.02)' }}>
                         <span style={{ fontSize: '18px', flexShrink: 0 }}>{r.emoji}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                             <span style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>{r.label}</span>
+                            {r.role === 'marketing_ai' && <span style={{ fontSize: '9.5px', fontWeight: 800, color: ORANGE, padding: '1px 7px', borderRadius: '99px', background: 'rgba(255,109,41,0.12)', border: '1px solid rgba(255,109,41,0.4)' }}>PRINCIPAL</span>}
+                            {r.role === 'marketing' && <span style={{ fontSize: '9.5px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', padding: '1px 7px', borderRadius: '99px', border: `1px solid ${BORDER}` }}>LEGADO</span>}
                             {isSelected && <span style={{ fontSize: '9.5px', fontWeight: 700, color: ORANGE, padding: '1px 7px', borderRadius: '99px', border: '1px solid rgba(255,109,41,0.4)' }}>SELECIONADO</span>}
                             <span style={{ fontSize: '9.5px', fontWeight: 700, color: r.active ? '#4ade80' : 'rgba(255,255,255,0.35)', padding: '1px 7px', borderRadius: '99px', border: `1px solid ${r.active ? 'rgba(74,222,128,0.3)' : BORDER}` }}>{r.active ? 'ATIVO' : 'DESATIVADO'}</span>
                           </div>
@@ -338,6 +362,35 @@ export default function AgentsControlCenterPage() {
             )}
 
             {isMarketingAi ? (
+              <>
+              <SettingsSection title="Ferramentas do Growth OS" description="Tudo que o agente principal sabe fazer hoje. Cada linha é uma ação real da plataforma — não é promessa.">
+                <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', marginBottom: '16px', lineHeight: 1.6 }}>
+                  Por enquanto é uma visão de <strong>leitura</strong> (🔒 = ferramenta do núcleo, sempre ligada). Ligar/desligar cada uma e adicionar ferramentas manualmente é a próxima etapa.
+                </div>
+                {CATEGORY_ORDER.filter(cat => MARKETING_AI_TOOLS.some(t => t.category === cat)).map(cat => (
+                  <div key={cat} style={{ marginBottom: '18px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>{CATEGORY_LABELS[cat] ?? cat}</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {MARKETING_AI_TOOLS.filter(t => t.category === cat).map(t => {
+                        const badge = STATUS_BADGE[t.status] ?? STATUS_BADGE.planned
+                        return (
+                          <div key={t.name} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 14px', borderRadius: '9px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)' }}>
+                            <span title="Núcleo — sempre ligada" style={{ fontSize: '13px', flexShrink: 0, paddingTop: '2px' }}>🔒</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '12.5px', fontWeight: 600, color: 'white' }}>{t.name}</span>
+                                <span style={{ fontSize: '9.5px', fontWeight: 700, color: badge.color, padding: '1px 7px', borderRadius: '99px', border: `1px solid ${badge.color}44` }}>{badge.label}</span>
+                              </div>
+                              <div style={{ fontSize: '11.5px', color: MUTED, marginTop: '2px', lineHeight: 1.5 }}>{t.description}</div>
+                              {t.requires && <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.3)', marginTop: '3px' }}>Requer: {t.requires}</div>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </SettingsSection>
               <SettingsSection title="Empresas" description="O Agente de Marketing é configurado por empresa — escolha uma abaixo pra abrir a ficha dela (voz, público, pilares de conteúdo, concorrentes...).">
                 <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', marginBottom: '16px', lineHeight: 1.6 }}>
                   Não existe configuração global pra esse agente — Rotinas, Limites, Aprovações e Capacidades daqui não se aplicam a ele. Cada empresa tem seu próprio Marketing AI, configurado junto do Business DNA dela.
@@ -358,6 +411,7 @@ export default function AgentsControlCenterPage() {
                   </div>
                 )}
               </SettingsSection>
+              </>
             ) : (
             <>
             <SettingsSection title="Rotinas" description={selectedRoleRow ? `Liga/desliga pedaços do ciclo automático de ${selectedRoleRow.label}.` : 'Selecione um agente acima.'}>
