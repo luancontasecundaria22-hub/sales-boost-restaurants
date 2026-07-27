@@ -13,6 +13,7 @@ import ChatTab from './marketingAi/ChatTab'
 import ExperimentsTab from './marketingAi/ExperimentsTab'
 import ToolsTab from './marketingAi/ToolsTab'
 import ConnectionsTab from './marketingAi/ConnectionsTab'
+import MetaAdsTab from './marketingAi/MetaAdsTab'
 import { buildGrowthDemo } from './marketingAi/growthDemo'
 
 const ORANGE = '#FF6D29'
@@ -35,7 +36,6 @@ const DEMO_SECTIONS = new Set(['overview', 'conexoes', 'meta-ads', 'funil', 'wha
 // Módulos ainda em construção (fases 2-4) — mostram um placeholder honesto do
 // que vem por aí em vez de uma tela vazia.
 const COMING_SOON: Record<string, { phase: string; bullets: string[] }> = {
-  'meta-ads': { phase: 'Fase 2', bullets: ['Analisar campanhas, públicos e criativos (CTR, CPC, CPA, ROAS)', 'Sugerir orçamento e pausar anúncios ruins', 'Botão "Executar recomendação da IA"'] },
   funil: { phase: 'Fase 3', bullets: ['Pipeline visual: Novo lead → Contato → Qualificado → Proposta → Venda', 'Captura de leads do WhatsApp e follow-up automático', 'Notificar vendedores e agendar reuniões'] },
   whatsapp: { phase: 'Fase 3', bullets: ['Responder dúvidas e apresentar produtos', 'Qualificar interesse e transferir para humano quando precisar', 'Aprender com histórico de conversas e FAQ da empresa'] },
 }
@@ -101,6 +101,7 @@ export default function MarketingAiSectionPage() {
       case 'conexoes':
         return <ConnectionsTab connections={buildGrowthDemo(company).connections} />
       case 'meta-ads':
+        return <MetaAdsTab company={company} />
       case 'funil':
       case 'whatsapp':
         return <ComingSoonSection section={section} />

@@ -15,7 +15,7 @@ interface ModuleDef { section: string; title: string; desc: string; icon: string
 const GROWTH_MODULES: ModuleDef[] = [
   { section: 'competitors', title: 'Inteligência de Mercado', desc: 'Concorrentes, tendências e oportunidades do seu segmento.', icon: '🧭' },
   { section: 'content', title: 'Agente de Conteúdo', desc: 'Calendário, ideias, roteiros de Reels, legendas e criativos.', icon: '✍️' },
-  { section: 'meta-ads', title: 'Agente de Meta Ads', desc: 'Analisa campanhas, otimiza orçamento e cria testes de criativo.', icon: '🎯', soon: true },
+  { section: 'meta-ads', title: 'Agente de Meta Ads', desc: 'Analisa campanhas, otimiza orçamento e cria testes de criativo.', icon: '🎯' },
   { section: 'funil', title: 'Funil de Vendas', desc: 'CRM inteligente: captura, qualifica e faz follow-up dos leads.', icon: '🔀', soon: true },
   { section: 'whatsapp', title: 'Atendimento WhatsApp', desc: 'Responde, qualifica interesse e passa pro humano quando precisa.', icon: '💬', soon: true },
   { section: 'conexoes', title: 'Conexões', desc: 'Ligue Meta, WhatsApp, Google, site e loja ao Growth OS.', icon: '🔌' },

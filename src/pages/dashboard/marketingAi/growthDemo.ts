@@ -170,6 +170,114 @@ export function buildGrowthDemo(company: Pick<CompanyData, 'id' | 'business_name
   return { kpis, connections, funnel, agents, insights }
 }
 
+// ── Meta Ads (demo) ──────────────────────────────────────────────────────
+// Mesma forma que a Meta Marketing API vai preencher quando a conta for
+// verificada. Seed distinto (':ads') pra números estáveis e próprios.
+export type AdStatus = 'active' | 'paused' | 'learning'
+
+export interface DemoAdCampaign {
+  id: string; name: string; objective: string; status: AdStatus
+  spend: number; roas: number; ctr: number; cpc: number; cpa: number; conversions: number
+}
+export interface DemoAudience { name: string; cpl: number; conversions: number; share: number }
+export interface DemoCreative { name: string; type: string; roas: number; ctr: number; status: AdStatus; share: number }
+
+export type AdRecoKind = 'pausar' | 'orcamento' | 'criativo' | 'publico' | 'campanha'
+export interface AdRecommendation {
+  id: string; kind: AdRecoKind; title: string; description: string
+  impact: 'high' | 'medium' | 'low'; executedNote: string
+}
+
+export interface MetaAdsDemo {
+  totals: { spend: number; roas: number; ctr: number; cpc: number; cpa: number; conversions: number; revenue: number }
+  campaigns: DemoAdCampaign[]
+  audiences: DemoAudience[]
+  creatives: DemoCreative[]
+  recommendations: AdRecommendation[]
+}
+
+export const AD_STATUS_META: Record<AdStatus, { label: string; color: string }> = {
+  active: { label: 'Ativo', color: '#4ade80' },
+  paused: { label: 'Pausado', color: 'rgba(255,255,255,0.4)' },
+  learning: { label: 'Aprendizado', color: '#FBBF24' },
+}
+
+export const AD_RECO_META: Record<AdRecoKind, { icon: string; label: string }> = {
+  pausar: { icon: '⏸️', label: 'Pausar anúncio' },
+  orcamento: { icon: '💰', label: 'Ajustar orçamento' },
+  criativo: { icon: '🎬', label: 'Novo criativo' },
+  publico: { icon: '👥', label: 'Público' },
+  campanha: { icon: '🚀', label: 'Nova campanha' },
+}
+
+export function buildMetaAdsDemo(company: Pick<CompanyData, 'id' | 'business_name'>): MetaAdsDemo {
+  const rng = seededRng((company.id || company.business_name || 'demo') + ':ads')
+  const between = (min: number, max: number) => min + rng() * (max - min)
+  const iBetween = (min: number, max: number) => Math.round(between(min, max))
+  const pick = <T,>(arr: T[]): T => arr[Math.floor(rng() * arr.length)]
+
+  const CAMPAIGN_SPECS: { name: string; objective: string }[] = [
+    { name: 'Conversões · Prova social', objective: 'Conversões' },
+    { name: 'Remarketing · Visitantes do site', objective: 'Remarketing' },
+    { name: 'Tráfego · Reels de bastidores', objective: 'Tráfego' },
+    { name: 'Mensagens · WhatsApp direto', objective: 'Mensagens' },
+    { name: 'Alcance · Reconhecimento local', objective: 'Alcance' },
+  ]
+
+  const campaigns: DemoAdCampaign[] = CAMPAIGN_SPECS.map((spec, i) => {
+    const spend = iBetween(300, 2600)
+    const roas = Number(between(0.8, 6.5).toFixed(1))
+    const ctr = Number(between(0.6, 3.4).toFixed(2))
+    const cpc = Number(between(0.4, 2.8).toFixed(2))
+    const cpa = iBetween(6, 48)
+    const conversions = Math.max(1, Math.round(spend / cpa))
+    const status: AdStatus = roas < 1.4 ? 'paused' : i === 2 ? 'learning' : 'active'
+    return { id: `cmp_${i}`, name: spec.name, objective: spec.objective, status, spend, roas, ctr, cpc, cpa, conversions }
+  })
+
+  const spend = campaigns.reduce((s, c) => s + c.spend, 0)
+  const revenue = Math.round(campaigns.reduce((s, c) => s + c.spend * c.roas, 0))
+  const conversions = campaigns.reduce((s, c) => s + c.conversions, 0)
+  const totals = {
+    spend, revenue, conversions,
+    roas: Number((revenue / Math.max(spend, 1)).toFixed(1)),
+    ctr: Number((campaigns.reduce((s, c) => s + c.ctr, 0) / campaigns.length).toFixed(2)),
+    cpc: Number((campaigns.reduce((s, c) => s + c.cpc, 0) / campaigns.length).toFixed(2)),
+    cpa: Math.round(spend / Math.max(conversions, 1)),
+  }
+
+  const audiences: DemoAudience[] = [
+    { name: '25-34 · interesse no segmento', cpl: iBetween(5, 12), conversions: iBetween(30, 90), share: 0 },
+    { name: '35-44 · lookalike de clientes', cpl: iBetween(9, 18), conversions: iBetween(20, 60), share: 0 },
+    { name: '18-24 · geolocalizado', cpl: iBetween(12, 26), conversions: iBetween(8, 30), share: 0 },
+    { name: 'Remarketing · visitou o site', cpl: iBetween(3, 9), conversions: iBetween(25, 70), share: 0 },
+  ]
+  const audTotal = audiences.reduce((s, a) => s + a.conversions, 0)
+  audiences.forEach(a => { a.share = Math.round((a.conversions / audTotal) * 100) })
+
+  const creatives: DemoCreative[] = [
+    { name: 'Depoimento da cliente Ana', type: 'Vídeo (depoimento)', roas: Number(between(3.5, 6.8).toFixed(1)), ctr: Number(between(1.8, 3.6).toFixed(2)), status: 'active', share: 0 },
+    { name: 'Carrossel · antes e depois', type: 'Carrossel', roas: Number(between(2.2, 4.5).toFixed(1)), ctr: Number(between(1.1, 2.4).toFixed(2)), status: 'active', share: 0 },
+    { name: 'Reels · bastidores', type: 'Reels', roas: Number(between(1.6, 3.4).toFixed(1)), ctr: Number(between(0.9, 2.1).toFixed(2)), status: 'learning', share: 0 },
+    { name: 'Imagem única · promoção', type: 'Imagem única', roas: Number(between(0.7, 1.6).toFixed(1)), ctr: Number(between(0.4, 1.2).toFixed(2)), status: 'paused', share: 0 },
+  ]
+  const totalRoas = creatives.reduce((s, c) => s + c.roas, 0)
+  creatives.forEach(c => { c.share = Math.round((c.roas / totalRoas) * 100) })
+
+  const worst = [...campaigns].sort((a, b) => a.roas - b.roas)[0]
+  const best = [...campaigns].sort((a, b) => b.roas - a.roas)[0]
+  const recommendations: AdRecommendation[] = [
+    { id: 'r_pause', kind: 'pausar', title: `Pausar "${worst.name}"`, description: `ROAS de ${worst.roas}x — abaixo do ponto de equilíbrio. Está queimando verba sem retorno.`, impact: 'high', executedNote: `Campanha "${worst.name}" pausada. Verba realocada para as de melhor desempenho.` },
+    { id: 'r_budget', kind: 'orcamento', title: `Aumentar orçamento de "${best.name}"`, description: `ROAS de ${best.roas}x — a mais eficiente. Escalar aos poucos (+20%) tende a manter o retorno.`, impact: 'high', executedNote: `Orçamento de "${best.name}" aumentado em 20%. Monitorando o ROAS nas próximas 48h.` },
+    { id: 'r_creative', kind: 'criativo', title: 'Criar 3 variações do vídeo de depoimento', description: `O criativo de depoimento tem o melhor ROAS (${creatives[0].roas}x). Novas variações combatem a fadiga de anúncio.`, impact: 'medium', executedNote: '3 variações do vídeo de depoimento criadas como rascunho, aguardando sua aprovação.' },
+    { id: 'r_audience', kind: 'publico', title: 'Concentrar verba no público 25-34', description: `Menor custo por lead (R$ ${audiences[0].cpl}) e ${audiences[0].share}% das conversões. Vale priorizar.`, impact: 'medium', executedNote: 'Distribuição de verba ajustada para priorizar o público 25-34.' },
+    { id: 'r_campaign', kind: 'campanha', title: 'Criar campanha de remarketing', description: 'Impactar de novo quem visitou o site e não comprou — costuma ter o melhor ROAS do funil.', impact: 'medium', executedNote: 'Campanha de remarketing montada como rascunho, aguardando sua aprovação para publicar.' },
+  ]
+  void pick
+
+  return { totals, campaigns, audiences, creatives, recommendations }
+}
+
 // ── Modo demo por empresa (localStorage) ─────────────────────────────────
 // Fase 1 usa localStorage pra não depender de migration no banco. Quando a
 // Meta live entrar (fase 5), isso vira uma coluna real por empresa e o mesmo
