@@ -298,7 +298,10 @@ export default function CompanyDetailPage() {
 
           <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '22px' }}>
             <div style={{ fontSize: '13px', fontWeight: 700, color: 'white', marginBottom: '4px' }}>🧬 Business DNA</div>
-            <div style={{ fontSize: '11px', color: MUTED, marginBottom: '16px', lineHeight: 1.5 }}>Quem esse negócio é de verdade — missão, voz, público e diferenciais. Base pra qualquer módulo que precisar entender a marca.</div>
+            <div style={{ fontSize: '11px', color: MUTED, marginBottom: '10px', lineHeight: 1.5 }}>Quem esse negócio é de verdade — missão, voz, público e diferenciais. Base pra qualquer módulo que precisar entender a marca.</div>
+            <div style={{ fontSize: '10.5px', color: '#FBBF24', marginBottom: '16px', lineHeight: 1.5, padding: '8px 11px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: '8px' }}>
+              ⏳ Em breve isto vira o <strong>Core da empresa</strong>, preenchido sozinho a partir do Meta (Feedback Loop). Por enquanto, preenchimento manual.
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Missão</label>

@@ -68,14 +68,60 @@ function LearningCard({ l }: { l: Learning }) {
   )
 }
 
-export default function FeedbackLoopTab({ company }: { company: Pick<CompanyData, 'id' | 'business_name'> }) {
+// Campos do Core que o Meta preenche sozinho quando a conta conectar.
+const CORE_FIELDS: { label: string; hint: string; icon: string }[] = [
+  { label: 'Voz da marca', hint: 'Derivada do tom dos posts reais', icon: '🗣️' },
+  { label: 'Público-alvo', hint: 'De quem segue e interage', icon: '🎯' },
+  { label: 'Temas de conteúdo', hint: 'Os assuntos que mais engajam', icon: '🧩' },
+  { label: 'Melhores horários', hint: 'Quando o público está online', icon: '⏰' },
+  { label: 'Tom visual', hint: 'Estilo dos criativos que funcionam', icon: '🎨' },
+]
+
+// O "Core da empresa" — o perfil que todos os agentes usam. A ideia é que ele
+// se preencha sozinho a partir do Meta (Instagram/Facebook) assim que a conta
+// conectar, tirando o preenchimento manual da ficha do cliente no owner.
+function CompanyCore({ metaConnected }: { metaConnected: boolean }) {
+  return (
+    <section>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '13px', fontWeight: 800, color: 'white' }}>🧬 Core da empresa</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '9.5px', fontWeight: 700, color: metaConnected ? GREEN : '#FBBF24', border: `1px solid ${metaConnected ? 'rgba(74,222,128,0.3)' : 'rgba(251,191,36,0.3)'}`, borderRadius: '99px', padding: '2px 9px' }}>
+          <span style={{ width: '6px', height: '6px', borderRadius: '99px', background: metaConnected ? GREEN : '#FBBF24' }} />
+          {metaConnected ? 'Meta conectado' : 'Aguardando Meta'}
+        </span>
+      </div>
+      <div style={{ fontSize: '11px', color: MUTED, marginBottom: '13px', lineHeight: 1.6, maxWidth: '640px' }}>
+        O perfil que todos os agentes usam pra entender o negócio. {metaConnected
+          ? 'O Meta está conectado — o Core é montado a partir dos seus dados reais do Instagram/Facebook e se atualiza sozinho.'
+          : 'Assim que o Meta conectar, isto se preenche sozinho a partir do Instagram/Facebook — sem ninguém digitar nada.'}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
+        {CORE_FIELDS.map(f => (
+          <div key={f.label} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '13px 14px' }}>
+            <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'white', marginBottom: '4px' }}>{f.icon} {f.label}</div>
+            {metaConnected ? (
+              <div style={{ fontSize: '10.5px', color: MUTED, lineHeight: 1.4 }}>{f.hint}</div>
+            ) : (
+              <div style={{ fontSize: '10.5px', color: '#FBBF24', lineHeight: 1.4 }}>Preenche com o Meta</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+export default function FeedbackLoopTab({ company }: { company: Pick<CompanyData, 'id' | 'business_name' | 'instagram_user_id'> }) {
   const demo = useMemo(() => buildFeedbackDemo(company), [company])
+  const metaConnected = !!company.instagram_user_id
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '26px' }}>
       <div style={{ padding: '12px 16px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
         🔁 <strong>O diferencial do Growth OS.</strong> A maioria das ferramentas para no "anúncio → resultado". Aqui a IA acompanha o caminho inteiro — <strong>anúncio → lead → venda → aprendizado</strong> — e fica mais inteligente a cada ciclo. No modo demonstração os números vêm dos outros módulos; ao vivo, cruzam os dados reais da Meta, do funil e do atendimento.
       </div>
+
+      <CompanyCore metaConnected={metaConnected} />
 
       {/* Cadeia de atribuição */}
       <section>
