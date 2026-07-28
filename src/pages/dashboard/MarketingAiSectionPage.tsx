@@ -4,7 +4,7 @@ import { useCompany } from '../../contexts/CompanyContext'
 import { useMarketingAiData } from './marketingAi/useMarketingAiData'
 import { CARD, MUTED, BORDER, D, PILLAR_ICON, IMPACT_COLOR, IMPACT_LABEL, timeAgo, type ActivityLogRow, type Insight, type TrackingSnapshot, type MarketingAiConfig } from './marketingAi/shared'
 import TrackingTab from './marketingAi/TrackingTab'
-import ContentAgentTab from './marketingAi/ContentAgentTab'
+import ContentSection from './marketingAi/ContentSection'
 import MarketIntelTab from './marketingAi/MarketIntelTab'
 import BrainTab from './marketingAi/BrainTab'
 import TimelineTab from './marketingAi/TimelineTab'
@@ -86,7 +86,7 @@ export default function MarketingAiSectionPage() {
       case 'tracking':
         return <TrackingTab accessToken={accessToken} snapshots={data.snapshots} insights={data.insights.filter(i => i.pillar === 'tracking')} hasInstagram={!!company.instagram_url} onRefresh={data.refresh} />
       case 'content':
-        return <ContentAgentTab company={company} />
+        return <ContentSection company={company} />
       case 'competitors':
         return <MarketIntelTab company={company} />
       case 'brain':
