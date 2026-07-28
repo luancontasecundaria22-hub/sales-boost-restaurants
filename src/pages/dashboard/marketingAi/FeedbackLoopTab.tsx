@@ -2,9 +2,87 @@ import { useMemo } from 'react'
 import type { CompanyData } from '../../../contexts/CompanyContext'
 import { CARD, MUTED, BORDER } from './shared'
 import { buildFeedbackDemo, CONFIDENCE_META, type AttributionStep, type Learning } from './feedbackDemo'
+import { buildIcpDemo, type IcpSignal } from './growthIntelDemo'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
+
+const SIGNAL_META: Record<IcpSignal['kind'], { label: string; icon: string; color: string }> = {
+  change: { label: 'Mudança detectada', icon: '🔀', color: '#60a5fa' },
+  positioning: { label: 'Posicionamento', icon: '🎯', color: '#FBBF24' },
+  opportunity: { label: 'Novo público', icon: '✨', color: GREEN },
+}
+
+// Motor de ICP (demo): o Feedback Loop aprende quem é o cliente ideal e
+// refina sozinho. No futuro, alimentado por Meta + engajamento + campanhas.
+function IcpEngine({ businessType, city }: { businessType?: string | null; city?: string | null }) {
+  const { profile, signals, learning } = useMemo(() => buildIcpDemo(businessType, city), [businessType, city])
+  const blocks: { label: string; items: string[] }[] = [
+    { label: 'Demografia', items: profile.demographics },
+    { label: 'Interesses', items: profile.interests },
+    { label: 'Comportamento', items: profile.behaviors },
+    { label: 'Gatilhos de compra', items: profile.triggers },
+  ]
+  return (
+    <section>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '13px', fontWeight: 800, color: 'white' }}>🧬 Cliente ideal (ICP) — aprendido pela IA</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '9.5px', fontWeight: 700, color: ORANGE, border: '1px solid rgba(255,109,41,0.35)', borderRadius: '99px', padding: '2px 9px' }}>
+          {profile.confidence}% de confiança
+        </span>
+      </div>
+      <div style={{ fontSize: '11px', color: MUTED, marginBottom: '13px', lineHeight: 1.6, maxWidth: '660px' }}>
+        A IA cruza quem segue, quem interage e quem compra pra montar (e refinar sozinha) o perfil do seu cliente ideal. Quanto mais dados reais, mais afiado.
+      </div>
+
+      <div style={{ background: CARD, border: '1px solid rgba(255,109,41,0.2)', borderRadius: '14px', padding: '16px 18px', marginBottom: '14px' }}>
+        <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'white', lineHeight: 1.4, marginBottom: '14px' }}>“{profile.headline}”</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+          {blocks.map(b => (
+            <div key={b.label}>
+              <div style={{ fontSize: '9.5px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>{b.label}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                {b.items.map(i => <span key={i} style={{ fontSize: '11px', color: 'rgba(255,255,255,0.82)', background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, borderRadius: '7px', padding: '3px 8px' }}>{i}</span>)}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div>
+          <div style={{ fontSize: '9.5px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Onde ele está · ticket médio {profile.avgTicket}</div>
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {profile.channels.map(ch => (
+              <span key={ch.name} style={{ fontSize: '11px', color: 'white', background: 'rgba(255,109,41,0.08)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '7px', padding: '3px 9px' }}>{ch.name} · {ch.share}%</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '10px', marginBottom: '14px' }}>
+        {signals.map((s, i) => {
+          const m = SIGNAL_META[s.kind]
+          return (
+            <div key={i} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '13px 15px' }}>
+              <div style={{ fontSize: '9.5px', fontWeight: 700, color: m.color, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>{m.icon} {m.label}</div>
+              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'white', marginBottom: '4px', lineHeight: 1.35 }}>{s.title}</div>
+              <div style={{ fontSize: '11px', color: MUTED, lineHeight: 1.5 }}>{s.detail}</div>
+            </div>
+          )
+        })}
+      </div>
+
+      <div style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '13px 15px' }}>
+        <div style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Aprendendo com</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+          {learning.map((l, i) => (
+            <div key={i} style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.5 }}>
+              <span style={{ color: ORANGE, fontWeight: 700 }}>{l.source}:</span> {l.note}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
 
 // Cadeia de atribuição: anúncio → clique → lead → conversa → venda → receita
 function AttributionChain({ steps }: { steps: AttributionStep[] }) {
@@ -111,17 +189,19 @@ function CompanyCore({ metaConnected }: { metaConnected: boolean }) {
   )
 }
 
-export default function FeedbackLoopTab({ company }: { company: Pick<CompanyData, 'id' | 'business_name' | 'instagram_user_id'> }) {
+export default function FeedbackLoopTab({ company }: { company: Pick<CompanyData, 'id' | 'business_name' | 'instagram_user_id' | 'business_type' | 'city'> }) {
   const demo = useMemo(() => buildFeedbackDemo(company), [company])
   const metaConnected = !!company.instagram_user_id
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '26px' }}>
       <div style={{ padding: '12px 16px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
-        🔁 <strong>O diferencial do Growth OS.</strong> A maioria das ferramentas para no "anúncio → resultado". Aqui a IA acompanha o caminho inteiro — <strong>anúncio → lead → venda → aprendizado</strong> — e fica mais inteligente a cada ciclo. No modo demonstração os números vêm dos outros módulos; ao vivo, cruzam os dados reais da Meta, do funil e do atendimento.
+        🔁 <strong>O diferencial do Growth OS.</strong> A maioria das ferramentas para no "anúncio → resultado". Aqui a IA acompanha o caminho inteiro — <strong>anúncio → lead → venda → aprendizado</strong> — e ainda aprende <strong>quem é o seu cliente ideal</strong>, refinando sozinha a cada ciclo. No modo demonstração os números são de exemplo; ao vivo, cruzam os dados reais da Meta, do funil e do atendimento.
       </div>
 
       <CompanyCore metaConnected={metaConnected} />
+
+      <IcpEngine businessType={company.business_type} city={company.city} />
 
       {/* Cadeia de atribuição */}
       <section>

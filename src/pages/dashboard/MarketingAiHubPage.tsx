@@ -19,12 +19,14 @@ const GROWTH_MODULES: ModuleDef[] = [
   { section: 'meta-ads', title: 'Agente de Meta Ads', desc: 'Analisa campanhas, otimiza orçamento e cria testes de criativo.', icon: '🎯' },
   { section: 'funil', title: 'Funil de Vendas', desc: 'CRM inteligente: captura, qualifica e faz follow-up dos leads.', icon: '🔀' },
   { section: 'whatsapp', title: 'Atendimento WhatsApp', desc: 'Responde, qualifica interesse e passa pro humano quando precisa.', icon: '💬' },
-  { section: 'conexoes', title: 'Conexões', desc: 'Ligue Meta, WhatsApp, Google, site e loja ao Growth OS.', icon: '🔌' },
 ]
 
-// Ferramentas de apoio — inteligência, aprendizado e histórico.
-const SUPPORT_MODULES: { section: string; label: string; icon: string; soon?: boolean }[] = [
-  { section: 'feedback', label: 'Feedback Loop', icon: '🔁' },
+// Os 4 pilares de inteligência — a base que faz o agente entender o negócio.
+const INTEL_MODULES: ModuleDef[] = [
+  { section: 'conexoes', title: 'Conexões', desc: 'Liga Meta, WhatsApp, Google e loja — a base de dados do agente.', icon: '🔌' },
+  { section: 'feedback', title: 'Feedback Loop', desc: 'Aprende seu cliente ideal (ICP) e refina sozinho.', icon: '🔁' },
+  { section: 'insights', title: 'Insights', desc: 'Oportunidades de fora: eventos, datas, tendências, parcerias.', icon: '💡' },
+  { section: 'context', title: 'Contexto do Negócio', desc: 'Você ensina à IA o que nenhuma integração sabe.', icon: '🧠' },
 ]
 
 export default function MarketingAiHubPage() {
@@ -91,20 +93,26 @@ export default function MarketingAiHubPage() {
           ))}
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-            <span style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Inteligência e histórico</span>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-              {SUPPORT_MODULES.map(l => (
-                <button key={l.section} onClick={() => open(l.section)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '9px', color: MUTED, fontSize: '12px', cursor: 'pointer', fontFamily: D }}
-                  onMouseEnter={e => { e.currentTarget.style.color = ORANGE; e.currentTarget.style.borderColor = 'rgba(255,109,41,0.3)' }}
-                  onMouseLeave={e => { e.currentTarget.style.color = MUTED; e.currentTarget.style.borderColor = BORDER }}>
-                  <span>{l.icon}</span>{l.label}
-                </button>
-              ))}
-            </div>
-          </div>
+        <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>
+          Inteligência do negócio
+        </div>
+        <p style={{ fontSize: '12px', color: MUTED, lineHeight: 1.6, marginBottom: '14px', maxWidth: '680px' }}>
+          Os quatro pilares que fazem a IA entender seu negócio de verdade — <strong style={{ color: 'white' }}>dados</strong> (Conexões), o <strong style={{ color: 'white' }}>cliente ideal</strong> (Feedback Loop), as <strong style={{ color: 'white' }}>oportunidades de fora</strong> (Insights) e o que <strong style={{ color: 'white' }}>só você sabe</strong> (Contexto). Juntos, viram a base de toda decisão do agente.
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '12px' }}>
+          {INTEL_MODULES.map((m, i) => (
+            <button key={m.section} onClick={() => open(m.section)}
+              style={{ textAlign: 'left', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '16px 17px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '7px', transition: 'border-color 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,109,41,0.35)' }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                <span style={{ fontSize: '20px' }}>{m.icon}</span>
+                <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'white' }}>{m.title}</span>
+                <span style={{ marginLeft: 'auto', fontSize: '9.5px', fontWeight: 700, color: 'rgba(255,255,255,0.35)' }}>{i + 1}/4</span>
+              </div>
+              <div style={{ fontSize: '11.5px', color: MUTED, lineHeight: 1.5 }}>{m.desc}</div>
+            </button>
+          ))}
         </div>
       </div>
     </div>
