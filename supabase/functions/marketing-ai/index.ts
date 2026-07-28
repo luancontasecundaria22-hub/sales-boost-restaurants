@@ -74,6 +74,24 @@ async function logActivity(admin: SupaClient, companyId: string, pillar: string,
   await admin.from('marketing_ai_activity_log').insert({ company_id: companyId, pillar, action, reasoning: reasoning ?? null })
 }
 
+// Parte A: avisa o dono no Telegram quando o agente PRINCIPAL (Growth OS) faz
+// algo que precisa de aprovação. Mesmo caminho do sistema antigo
+// (log-bot-event → worker), mas atribuído ao Marketing AI. Respeita a
+// preferência de notificação do dono e falha em silêncio (é um bônus).
+async function notifyTelegram(admin: SupaClient, companyId: string, count: number, reason: string) {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const secret = Deno.env.get('BOT_WEBHOOK_SECRET')
+  if (!supabaseUrl) return
+  const { data: co } = await admin.from('companies').select('telegram_chat_id, notification_prefs').eq('id', companyId).maybeSingle()
+  const prefs = (co?.notification_prefs ?? {}) as Record<string, unknown>
+  if (prefs.agent_actions === false) return
+  fetch(`${supabaseUrl}/functions/v1/log-bot-event`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ secret: secret ?? '', bot_name: 'marketing', event_type: 'AGENT_ACTION', company_id: companyId, telegram_chat_id: co?.telegram_chat_id ?? null, data: { action: 'posts_created', count, reason: reason.slice(0, 200), agent: 'Marketing AI' } }),
+  }).catch(() => {})
+}
+
 // Marketing Brain — conhecimento permanente e unificado. Cada pilar grava
 // aqui, além da própria tabela de detalhe, pra nunca existir memória
 // isolada (ver doc "Marketing Brain Updates").
@@ -289,7 +307,10 @@ Gere 2 ideias de conteúdo alinhadas com a estratégia acima. Retorne APENAS um 
       } catch (e) { console.error('runContent image error:', e) }
     }
   }
-  if (created > 0) await logActivity(admin, company.id, 'content', `${created} ideia(s) de conteúdo criada(s)`, ideas[0]?.reasoning)
+  if (created > 0) {
+    await logActivity(admin, company.id, 'content', `${created} ideia(s) de conteúdo criada(s)`, ideas[0]?.reasoning)
+    await notifyTelegram(admin, company.id, created, ideas[0]?.reasoning ?? 'Novo conteúdo criado, esperando sua aprovação.')
+  }
   return { created }
 }
 

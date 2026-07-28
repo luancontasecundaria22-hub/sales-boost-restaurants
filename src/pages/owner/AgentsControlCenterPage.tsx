@@ -131,6 +131,11 @@ export default function AgentsControlCenterPage() {
   const [roleActivity, setRoleActivity] = useState<Record<string, RoleActivity>>({})
   const [reportConfig, setReportConfig] = useState<ReportConfig>({ daily_enabled: true, weekly_enabled: false, monthly_enabled: true, annual_enabled: false })
   const [telegramStats, setTelegramStats] = useState({ connected: 0, total: 0 })
+  const [telegramPersonality, setTelegramPersonality] = useState('')
+  const [telegramMsgsToday, setTelegramMsgsToday] = useState(0)
+  const [telegramLastAt, setTelegramLastAt] = useState<string | null>(null)
+  const [savingTelegram, setSavingTelegram] = useState(false)
+  const [telegramSaved, setTelegramSaved] = useState(false)
 
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -185,6 +190,17 @@ export default function AgentsControlCenterPage() {
     if (reportRow) setReportConfig(reportRow as ReportConfig)
     setTelegramStats({ connected: telegramConnected ?? 0, total: telegramTotal ?? 0 })
 
+    // Config + monitoramento do agente do Telegram.
+    const todayISO = new Date(new Date().toDateString()).toISOString()
+    const [{ data: tgCfg }, { count: tgToday }, { data: tgLast }] = await Promise.all([
+      supabase.from('telegram_agent_config').select('personality').eq('id', true).maybeSingle(),
+      supabase.from('telegram_messages').select('id', { count: 'exact', head: true }).gte('created_at', todayISO),
+      supabase.from('telegram_messages').select('created_at').order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    ])
+    setTelegramPersonality((tgCfg?.personality as string) ?? '')
+    setTelegramMsgsToday(tgToday ?? 0)
+    setTelegramLastAt((tgLast?.created_at as string) ?? null)
+
     if (roles.length > 0) {
       // Growth OS é o agente principal — abre selecionado por padrão.
       const initial = roles.find(r => r.role === 'marketing_ai') ?? roles.find(r => r.active) ?? roles[0]
@@ -229,6 +245,14 @@ export default function AgentsControlCenterPage() {
   const toggleAgentRole = async (role: string, active: boolean) => {
     setAgentRoles(prev => prev.map(r => r.role === role ? { ...r, active } : r))
     await supabase.from('agent_roles').update({ active, updated_at: new Date().toISOString() }).eq('role', role)
+  }
+
+  const saveTelegramPersonality = async () => {
+    setSavingTelegram(true)
+    await supabase.from('telegram_agent_config').update({ personality: telegramPersonality, updated_at: new Date().toISOString() }).eq('id', true)
+    setSavingTelegram(false)
+    setTelegramSaved(true)
+    setTimeout(() => setTelegramSaved(false), 2000)
   }
 
   const toggleReport = async (key: keyof ReportConfig, value: boolean) => {
@@ -361,6 +385,49 @@ export default function AgentsControlCenterPage() {
                   </label>
                 ))}
               </div>
+            </SettingsSection>
+
+            <SettingsSection title="Agente do Telegram" description="Quem responde no Telegram, com qual personalidade e quais ferramentas — muda na hora, sem deploy." defaultOpen={false}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '18px' }}>
+                {([
+                  ['Empresas conectadas', `${telegramStats.connected}/${telegramStats.total}`],
+                  ['Mensagens hoje', String(telegramMsgsToday)],
+                  ['Última atividade', telegramLastAt ? new Date(telegramLastAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'],
+                ] as const).map(([label, value]) => (
+                  <div key={label} style={{ background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}`, borderRadius: '10px', padding: '12px 14px' }}>
+                    <div style={{ fontSize: '10px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>{label}</div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: 'white' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Personalidade</div>
+              <textarea value={telegramPersonality} onChange={e => setTelegramPersonality(e.target.value)} rows={3}
+                placeholder="Como o agente do Telegram deve soar (tom, estilo, regras)."
+                style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: D, marginBottom: '10px' }} />
+              <button onClick={saveTelegramPersonality} disabled={savingTelegram}
+                style={{ padding: '8px 16px', background: telegramSaved ? '#4ade80' : ORANGE, color: '#000', fontWeight: 700, fontSize: '12.5px', borderRadius: '8px', border: 'none', cursor: 'pointer', marginBottom: '20px' }}>
+                {telegramSaved ? '✓ Salvo' : savingTelegram ? 'Salvando...' : 'Salvar personalidade'}
+              </button>
+
+              <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Ferramentas que ele pode usar</div>
+              {(() => {
+                const tgTools = capabilities.filter(c => c.used_by.includes('telegram'))
+                if (tgTools.length === 0) return <div style={{ color: MUTED, fontSize: '12.5px' }}>Ferramentas ainda não registradas — aplique a migration 037_telegram_agent.sql.</div>
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {tgTools.map(c => (
+                      <label key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 14px', borderRadius: '9px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={c.enabled} onChange={e => toggleCapability(c.id, e.target.checked)} style={{ width: '16px', height: '16px', accentColor: ORANGE, marginTop: '2px' }} />
+                        <div>
+                          <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'white' }}>{c.name}{!c.enabled && <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#f87171', marginLeft: '8px' }}>desligada</span>}</div>
+                          <div style={{ fontSize: '11.5px', color: MUTED, marginTop: '2px', lineHeight: 1.5 }}>{c.description}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                )
+              })()}
             </SettingsSection>
 
             {selectedRoleRow && !isMarketingAi && (

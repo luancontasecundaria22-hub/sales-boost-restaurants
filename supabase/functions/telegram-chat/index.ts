@@ -24,8 +24,36 @@ const TOOLS = [
   { name: 'list_leads', description: 'Lista leads do CRM de vendas.', input_schema: { type: 'object', properties: { stage: { type: 'string' }, limit: { type: 'number' } } } },
 ]
 
-async function runTool(tu: { name: string; id: string; input: unknown }, companyId: string, admin: SupaClient): Promise<{ result: string; posts: number }> {
+// Mapa nome-da-tool → id no capability_registry (used_by 'telegram'). O owner
+// liga/desliga cada uma no Agents Control Center; a função respeita na hora.
+const TOOL_CAP: Record<string, string> = {
+  create_post: 'tg_content', create_multiple_posts: 'tg_content',
+  get_business_overview: 'tg_overview', list_posts: 'tg_posts',
+  list_opportunities: 'tg_opportunities', list_reviews: 'tg_reviews',
+  get_latest_diagnostic: 'tg_diagnostic', list_competitors: 'tg_competitors',
+  list_leads: 'tg_leads',
+}
+
+// Config ao vivo do agente do Telegram: personalidade + quais tools estão
+// desligadas. Lido a cada mensagem — mudar no Control Center vale na hora.
+async function getTelegramConfig(admin: SupaClient): Promise<{ personality: string; disabled: Set<string> }> {
+  const [{ data: cfg }, { data: caps }] = await Promise.all([
+    admin.from('telegram_agent_config').select('personality').eq('id', true).maybeSingle(),
+    admin.from('capability_registry').select('id, enabled').contains('used_by', ['telegram']),
+  ])
+  const disabled = new Set<string>()
+  for (const c of (caps ?? []) as { id: string; enabled: boolean }[]) if (!c.enabled) disabled.add(c.id)
+  return { personality: (cfg?.personality as string) ?? '', disabled }
+}
+
+async function runTool(tu: { name: string; id: string; input: unknown }, companyId: string, admin: SupaClient, disabled: Set<string>): Promise<{ result: string; posts: number }> {
   const inp = tu.input as Record<string, unknown>
+
+  // Defesa em profundidade: mesmo filtrando as tools oferecidas, nunca confie
+  // que o modelo só pediu o permitido.
+  if (TOOL_CAP[tu.name] && disabled.has(TOOL_CAP[tu.name])) {
+    return { result: 'Essa ação foi desativada pelo administrador no Agents Control Center.', posts: 0 }
+  }
 
   if (tu.name === 'create_post') {
     await admin.from('posts').insert({ company_id: companyId, content: inp.content, platform: inp.platform ?? 'instagram', image_suggestion: inp.image_suggestion ?? null, best_time: inp.best_time ?? null, status: 'rascunho' })
@@ -201,7 +229,12 @@ Regra de contagem: para responder "quantos/quantas X", use o campo total_matchin
 
 Para criar conteúdo de verdade (não só descrever), use create_post ou create_multiple_posts — nunca publica sozinho, tudo vira rascunho pra aprovação.`
 
-    const systemPrompt = [baseContext, roleContext, toolsNote, '', 'Responda de forma direta e útil via Telegram. Seja conciso. Sem markdown (sem **, ##, listas com marcadores) — texto corrido, como se estivesse falando.'].join('\n')
+    // Config ao vivo do Control Center: personalidade + tools desligadas.
+    const { personality, disabled } = await getTelegramConfig(admin)
+    const activeTools = TOOLS.filter(t => !(TOOL_CAP[t.name] && disabled.has(TOOL_CAP[t.name])))
+    const personalityNote = personality ? `\nPersonalidade definida pelo administrador (siga sempre): ${personality}` : ''
+
+    const systemPrompt = [baseContext, roleContext, personalityNote, toolsNote, '', 'Responda de forma direta e útil via Telegram. Seja conciso. Sem markdown (sem **, ##, listas com marcadores) — texto corrido, como se estivesse falando.'].join('\n')
 
     // ── Agentic loop (max 5 turns), same shape as agent-chat ──────────
     let convo: unknown[] = [...historyMessages, { role: 'user', content: message }]
@@ -215,7 +248,7 @@ Para criar conteúdo de verdade (não só descrever), use create_post ou create_
         // Sonnet em vez de Haiku aqui — segue instrução de "sempre chamar a
         // ferramenta antes de responder" de forma bem mais confiável, e isso
         // importa mais que custo quando o pedido é precisão de números.
-        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1024, system: systemPrompt, tools: TOOLS, messages: convo }),
+        body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1024, system: systemPrompt, tools: activeTools, messages: convo }),
       })
 
       if (!claudeRes.ok) {
@@ -236,7 +269,7 @@ Para criar conteúdo de verdade (não só descrever), use create_post ou create_
       convo.push({ role: 'assistant', content: blocks })
       const toolResults = []
       for (const tu of toolUses) {
-        const { result, posts } = await runTool(tu as { name: string; id: string; input: unknown }, company.id, admin)
+        const { result, posts } = await runTool(tu as { name: string; id: string; input: unknown }, company.id, admin, disabled)
         postsCreated += posts
         toolResults.push({ type: 'tool_result', tool_use_id: tu.id, content: result })
       }
