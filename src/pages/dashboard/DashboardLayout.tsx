@@ -32,13 +32,6 @@ function makeNavSections(T: typeof d[keyof typeof d], flags: { jarvis: boolean; 
         icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" /></svg>,
       }],
     }] : []),
-    ...(flags.agentesMenu ? [{
-      section: T.layout.sections.marketing,
-      items: [{
-        to: '/dashboard/posts', label: T.layout.nav.posts,
-        icon: <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, ...iconStroke }}><path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" /></svg>,
-      }],
-    }] : []),
     ...(flags.marketingAi ? [{
       section: T.layout.sections.marketingAi, accent: true,
       items: [{

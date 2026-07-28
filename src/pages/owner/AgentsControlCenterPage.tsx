@@ -180,7 +180,8 @@ export default function AgentsControlCenterPage() {
     if (data) setMaxActiveAgents(data.max_active_agents ?? FACTORY_DEFAULTS.maxActiveAgents)
     setCapabilities((capRows ?? []) as CapabilityRow[])
     setIntegrationCatalog((integrationRows ?? []) as IntegrationRow[])
-    const roles = ((roleRows ?? []) as AgentRoleRow[]).sort((a, b) => roleRank(a.role) - roleRank(b.role))
+    // Agente Geral removido do produto — some da lista (dados preservados no banco).
+    const roles = ((roleRows ?? []) as AgentRoleRow[]).filter(r => r.role !== 'marketing').sort((a, b) => roleRank(a.role) - roleRank(b.role))
     setAgentRoles(roles)
     if (reportRow) setReportConfig(reportRow as ReportConfig)
     setTelegramStats({ connected: telegramConnected ?? 0, total: telegramTotal ?? 0 })

@@ -72,7 +72,6 @@ export default function CompanyDetailPage() {
   const [form, setForm] = useState({ business_name: '', business_type: '', city: '', goal: '', plan: '' })
   const [dna, setDna] = useState<BusinessDna>({})
   const [jarvisEnabled, setJarvisEnabled] = useState(false)
-  const [agentEnabled, setAgentEnabled] = useState(false)
   const [marketingAiEnabled, setMarketingAiEnabled] = useState(true)
   const [togglingFeature, setTogglingFeature] = useState(false)
   const [newValue, setNewValue] = useState('')
@@ -129,7 +128,6 @@ export default function CompanyDetailPage() {
         })
         setDna(data.company.business_dna ?? {})
         setJarvisEnabled(!!data.company.jarvis_enabled)
-        setAgentEnabled(!!data.company.agent_enabled)
         setMarketingAiEnabled(data.company.marketing_ai_enabled ?? true)
 
         const ma = data.marketing_ai
@@ -160,10 +158,9 @@ export default function CompanyDetailPage() {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const toggleFeature = async (feature: 'jarvis_enabled' | 'agent_enabled' | 'marketing_ai_enabled', value: boolean) => {
+  const toggleFeature = async (feature: 'jarvis_enabled' | 'marketing_ai_enabled', value: boolean) => {
     setTogglingFeature(true)
     if (feature === 'jarvis_enabled') setJarvisEnabled(value)
-    else if (feature === 'agent_enabled') setAgentEnabled(value)
     else setMarketingAiEnabled(value)
     await fetch(`${SUPABASE_URL}/functions/v1/owner-company-activity`, {
       method: 'POST',
@@ -454,13 +451,6 @@ export default function CompanyDetailPage() {
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>🎙️ Jarvis</div>
                 <div style={{ fontSize: '10.5px', color: MUTED }}>Assistente de voz</div>
-              </div>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderRadius: '9px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)', cursor: 'pointer' }}>
-              <input type="checkbox" checked={agentEnabled} disabled={togglingFeature} onChange={e => toggleFeature('agent_enabled', e.target.checked)} style={{ width: '16px', height: '16px', accentColor: ORANGE }} />
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>🤖 Agente Geral <span style={{ fontSize: '9.5px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', border: `1px solid ${BORDER}`, borderRadius: '99px', padding: '1px 7px', marginLeft: '4px' }}>LEGADO</span></div>
-                <div style={{ fontSize: '10.5px', color: MUTED }}>Posts, campanhas, concorrentes, chat</div>
               </div>
             </label>
           </div>

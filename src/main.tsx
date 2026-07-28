@@ -15,11 +15,7 @@ import ActivityPage from './pages/dashboard/ActivityPage.tsx'
 import DiagnosticsPage from './pages/dashboard/DiagnosticsPage.tsx'
 import InsightsPage from './pages/dashboard/InsightsPage.tsx'
 import SettingsPage from './pages/dashboard/SettingsPage.tsx'
-import PostsPage from './pages/dashboard/PostsPage.tsx'
-import AgentSectionPage from './pages/dashboard/AgentSectionPage.tsx'
-import AgentCategoryPage from './pages/dashboard/AgentCategoryPage.tsx'
 import OpportunitiesPage from './pages/dashboard/OpportunitiesPage.tsx'
-import AgentePage from './pages/dashboard/AgentePage.tsx'
 import MarketingAiHubPage from './pages/dashboard/MarketingAiHubPage.tsx'
 import MarketingAiSectionPage from './pages/dashboard/MarketingAiSectionPage.tsx'
 import ApprovalsPage from './pages/dashboard/ApprovalsPage.tsx'
@@ -106,14 +102,13 @@ function RouterRoot() {
         <Route path="diagnostico" element={<DiagnosticsPage />} />
         <Route path="insights" element={<InsightsPage />} />
         <Route path="integrations" element={<Navigate to="/dashboard/marketing-ai/conexoes" replace />} />
-        <Route path="posts" element={<PostsPage />} />
-        <Route path="posts/categoria/:group" element={<AgentCategoryPage />} />
-        <Route path="posts/:section" element={<AgentSectionPage />} />
-        <Route path="agente" element={<AgentePage />} />
+        {/* Agente Geral removido — rotas antigas redirecionam pro Marketing AI. */}
+        <Route path="posts/*" element={<Navigate to="/dashboard/marketing-ai" replace />} />
+        <Route path="agente" element={<Navigate to="/dashboard/marketing-ai" replace />} />
         <Route path="marketing-ai" element={<MarketingAiHubPage />} />
         <Route path="marketing-ai/:section" element={<MarketingAiSectionPage />} />
         <Route path="oportunidades" element={<OpportunitiesPage />} />
-        <Route path="concorrentes" element={<Navigate to="/dashboard/posts/concorrentes" replace />} />
+        <Route path="concorrentes" element={<Navigate to="/dashboard/marketing-ai/competitors" replace />} />
         <Route path="aprovacoes" element={<ApprovalsPage />} />
         <Route path="relatorio" element={<ReportPage />} />
         <Route path="settings" element={<SettingsPage />} />
