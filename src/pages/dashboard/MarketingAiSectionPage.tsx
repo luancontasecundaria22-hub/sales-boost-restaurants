@@ -20,6 +20,7 @@ import FeedbackLoopTab from './marketingAi/FeedbackLoopTab'
 import ReviewsAgentTab from './marketingAi/ReviewsAgentTab'
 import InsightsTab from './marketingAi/InsightsTab'
 import BusinessContextTab from './marketingAi/BusinessContextTab'
+import MetaHealthTab from './marketingAi/MetaHealthTab'
 import { buildGrowthDemo } from './marketingAi/growthDemo'
 
 const ORANGE = '#FF6D29'
@@ -27,17 +28,17 @@ const ORANGE = '#FF6D29'
 const SECTION_TITLE: Record<string, string> = {
   tracking: 'Tracking', content: 'Conteúdo', competitors: 'Inteligência de Mercado', brain: 'Aprendizado',
   overview: 'Visão Geral', chat: 'Chat', experiments: 'Experimentos', tools: 'Configuração', timeline: 'Central de Execução', reports: 'Relatórios',
-  conexoes: 'Conexões', 'meta-ads': 'Agente de Meta Ads', funil: 'Funil de Vendas', whatsapp: 'Atendimento WhatsApp', feedback: 'Feedback Loop', configuracao: 'Configuração dos Agentes', avaliacoes: 'Avaliações', insights: 'Insights', context: 'Contexto do Negócio',
+  conexoes: 'Conexões', 'meta-ads': 'Agente de Meta Ads', funil: 'Funil de Vendas', whatsapp: 'Atendimento WhatsApp', feedback: 'Feedback Loop', configuracao: 'Configuração dos Agentes', avaliacoes: 'Avaliações', insights: 'Insights', context: 'Contexto do Negócio', 'saude-meta': 'Saúde da Meta',
 }
 const SECTION_ICON: Record<string, string> = {
   tracking: '📈', content: '✍️', competitors: '🧭', brain: '🧠',
   overview: '🏠', chat: '✨', experiments: '🧪', tools: '🛠️', timeline: '🕓', reports: '📊',
-  conexoes: '🔌', 'meta-ads': '🎯', funil: '🔀', whatsapp: '💬', feedback: '🔁', configuracao: '⚙️', avaliacoes: '⭐', insights: '💡', context: '🧠',
+  conexoes: '🔌', 'meta-ads': '🎯', funil: '🔀', whatsapp: '💬', feedback: '🔁', configuracao: '⚙️', avaliacoes: '⭐', insights: '💡', context: '🧠', 'saude-meta': '❤️‍🩹',
 }
 
 // Seções do Growth OS que funcionam em modo demonstração, sem depender da
 // ativação/config do Marketing AI feita pela equipe.
-const DEMO_SECTIONS = new Set(['overview', 'conexoes', 'meta-ads', 'funil', 'whatsapp', 'feedback', 'content', 'competitors', 'configuracao', 'avaliacoes', 'insights', 'context'])
+const DEMO_SECTIONS = new Set(['overview', 'conexoes', 'meta-ads', 'funil', 'whatsapp', 'feedback', 'content', 'competitors', 'configuracao', 'avaliacoes', 'insights', 'context', 'saude-meta'])
 
 export default function MarketingAiSectionPage() {
   const { section } = useParams<{ section: string }>()
@@ -117,6 +118,8 @@ export default function MarketingAiSectionPage() {
         return <InsightsTab company={company} />
       case 'context':
         return <BusinessContextTab company={company} />
+      case 'saude-meta':
+        return <MetaHealthTab company={company} />
       default:
         return null
     }

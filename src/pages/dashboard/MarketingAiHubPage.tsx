@@ -27,6 +27,7 @@ const INTEL_MODULES: ModuleDef[] = [
   { section: 'feedback', title: 'Feedback Loop', desc: 'Aprende seu cliente ideal (ICP) e refina sozinho.', icon: '🔁' },
   { section: 'insights', title: 'Insights', desc: 'Oportunidades de fora: eventos, datas, tendências, parcerias.', icon: '💡' },
   { section: 'context', title: 'Contexto do Negócio', desc: 'Você ensina à IA o que nenhuma integração sabe.', icon: '🧠' },
+  { section: 'saude-meta', title: 'Saúde da Meta', desc: 'Um score de 0 a 100: quão saudável está seu ecossistema na Meta e o que melhorar primeiro.', icon: '❤️‍🩹' },
 ]
 
 export default function MarketingAiHubPage() {
@@ -97,7 +98,7 @@ export default function MarketingAiHubPage() {
           Inteligência do negócio
         </div>
         <p style={{ fontSize: '12px', color: MUTED, lineHeight: 1.6, marginBottom: '14px', maxWidth: '680px' }}>
-          Os quatro pilares que fazem a IA entender seu negócio de verdade — <strong style={{ color: 'white' }}>dados</strong> (Conexões), o <strong style={{ color: 'white' }}>cliente ideal</strong> (Feedback Loop), as <strong style={{ color: 'white' }}>oportunidades de fora</strong> (Insights) e o que <strong style={{ color: 'white' }}>só você sabe</strong> (Contexto). Juntos, viram a base de toda decisão do agente.
+          Os pilares que fazem a IA entender seu negócio de verdade — <strong style={{ color: 'white' }}>dados</strong> (Conexões), o <strong style={{ color: 'white' }}>cliente ideal</strong> (Feedback Loop), as <strong style={{ color: 'white' }}>oportunidades de fora</strong> (Insights) e o que <strong style={{ color: 'white' }}>só você sabe</strong> (Contexto). Fechando, a <strong style={{ color: 'white' }}>Saúde da Meta</strong> mede tudo num único score e diz o que melhorar primeiro.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '12px' }}>
           {INTEL_MODULES.map((m, i) => (
@@ -108,7 +109,7 @@ export default function MarketingAiHubPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
                 <span style={{ fontSize: '20px' }}>{m.icon}</span>
                 <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'white' }}>{m.title}</span>
-                <span style={{ marginLeft: 'auto', fontSize: '9.5px', fontWeight: 700, color: 'rgba(255,255,255,0.35)' }}>{i + 1}/4</span>
+                <span style={{ marginLeft: 'auto', fontSize: '9.5px', fontWeight: 700, color: 'rgba(255,255,255,0.35)' }}>{i + 1}/{INTEL_MODULES.length}</span>
               </div>
               <div style={{ fontSize: '11.5px', color: MUTED, lineHeight: 1.5 }}>{m.desc}</div>
             </button>
