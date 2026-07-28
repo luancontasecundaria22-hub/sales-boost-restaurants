@@ -25,8 +25,15 @@ interface AiContent {
   created_at: string
 }
 
-function ContentCard({ item, onApprove, onDiscard, busy, lang }: {
-  item: AiContent; onApprove: () => void; onDiscard: () => void; busy: boolean; lang: 'pt' | 'en'
+// Exemplo mostrado só quando não há conteúdo real esperando aprovação —
+// sempre marcado como demonstração e substituído pelo conteúdo real do agente.
+const DEMO_CONTENT: AiContent[] = [
+  { id: 'demo-1', idea: 'Bastidores do preparo do prato mais pedido', caption: 'Ninguém vê o carinho que vai antes do prato chegar na mesa 🍳 Hoje a gente abre a cozinha pra você. Marca aquele amigo que precisa provar!', hashtags: '#gastronomia #bastidores #feitocomamor', format: 'reel', image_url: null, reasoning: 'Reels de bastidores tiveram 3x mais alcance nas últimas 2 semanas.', status: 'draft', created_at: new Date().toISOString() },
+  { id: 'demo-2', idea: 'Carrossel: 3 combinações que você não conhecia', caption: 'Você provavelmente já pediu o clássico — mas já testou essas 3 combinações? Desliza pro lado 👉', hashtags: '#dica #cardapio #novidade', format: 'carrossel', image_url: null, reasoning: 'Conteúdo educativo puxa salvamentos, que o Instagram premia com alcance.', status: 'draft', created_at: new Date().toISOString() },
+]
+
+function ContentCard({ item, onApprove, onDiscard, busy, lang, demo }: {
+  item: AiContent; onApprove: () => void; onDiscard: () => void; busy: boolean; lang: 'pt' | 'en'; demo?: boolean
 }) {
   const icon = item.format ? (FORMAT_ICON[item.format] ?? '📝') : '📝'
   return (
@@ -43,12 +50,12 @@ function ContentCard({ item, onApprove, onDiscard, busy, lang }: {
         </div>
       </div>
       <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-        <button onClick={onApprove} disabled={busy}
-          style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', border: 'none', borderRadius: '9px', cursor: busy ? 'wait' : 'pointer', fontFamily: D }}>
+        <button onClick={demo ? undefined : onApprove} disabled={busy || demo}
+          style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', border: 'none', borderRadius: '9px', cursor: demo ? 'default' : busy ? 'wait' : 'pointer', fontFamily: D, opacity: demo ? 0.7 : 1 }}>
           {lang === 'en' ? 'Approve' : 'Aprovar'}
         </button>
-        <button onClick={onDiscard} disabled={busy}
-          style={{ padding: '8px 16px', background: 'transparent', color: MUTED, fontWeight: 600, fontSize: '12px', border: `1px solid ${BORDER}`, borderRadius: '9px', cursor: busy ? 'wait' : 'pointer', fontFamily: D }}>
+        <button onClick={demo ? undefined : onDiscard} disabled={busy || demo}
+          style={{ padding: '8px 16px', background: 'transparent', color: MUTED, fontWeight: 600, fontSize: '12px', border: `1px solid ${BORDER}`, borderRadius: '9px', cursor: demo ? 'default' : busy ? 'wait' : 'pointer', fontFamily: D }}>
           {lang === 'en' ? 'Discard' : 'Descartar'}
         </button>
       </div>
@@ -114,13 +121,19 @@ export default function ApprovalsPage() {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '60px', color: MUTED }}>{d[lang].common.loading}</div>
         ) : isEmpty ? (
-          <div style={{ textAlign: 'center', padding: '80px 0' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🎉</div>
-            <div style={{ fontFamily: D, fontSize: '1.3rem', fontWeight: 800, color: 'white', marginBottom: '8px' }}>{T.emptyAll}</div>
-            <div style={{ color: MUTED, fontSize: '13px', maxWidth: '380px', margin: '0 auto', lineHeight: 1.7 }}>
-              {lang === 'en' ? 'Nothing waiting for approval. When the Marketing AI drafts new content, it lands here.' : 'Nada esperando aprovação. Quando o Marketing AI criar conteúdo novo, ele aparece aqui.'}
+          <>
+            <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: '11px', fontSize: '12px', color: '#FBBF24', lineHeight: 1.6 }}>
+              🧪 {lang === 'en'
+                ? 'Nothing waiting for approval right now — below is an example of how it looks. When the Marketing AI drafts real content, it replaces this automatically.'
+                : 'Nada esperando aprovação agora — abaixo é um exemplo de como fica. Quando o Marketing AI criar conteúdo de verdade, isto é substituído sozinho.'}
             </div>
-          </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', opacity: 0.6 }}>
+              {DEMO_CONTENT.map(item => (
+                <ContentCard key={item.id} item={item} busy={false} lang={lang} demo
+                  onApprove={() => {}} onDiscard={() => {}} />
+              ))}
+            </div>
+          </>
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>

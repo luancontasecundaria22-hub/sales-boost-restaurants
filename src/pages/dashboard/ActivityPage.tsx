@@ -9,6 +9,16 @@ const MUTED = '#BABABA'
 const D = "'Bricolage Grotesque', system-ui, sans-serif"
 const BORDER = 'rgba(255,255,255,0.06)'
 
+// Exemplo mostrado só quando ainda não há atividade real — sempre marcado como
+// demonstração e substituído automaticamente assim que o agente age de verdade.
+const _n = Date.now()
+const DEMO_ACTIVITY: ActivityLogRow[] = [
+  { id: 'demo-1', pillar: 'strategy', action: 'Recomendou focar em Reels nesta semana', reasoning: 'Os Reels tiveram 3x mais alcance que os carrosséis nos últimos 14 dias.', created_at: new Date(_n - 2 * 3600e3).toISOString() },
+  { id: 'demo-2', pillar: 'content', action: 'Criou 2 ideias de post para aprovação', reasoning: 'Baseado no tema que mais engajou: bastidores do preparo.', created_at: new Date(_n - 5 * 3600e3).toISOString() },
+  { id: 'demo-3', pillar: 'competitor', action: 'Analisou 3 concorrentes', reasoning: 'Um concorrente aumentou a frequência de posts — dá pra se destacar no fim de semana.', created_at: new Date(_n - 26 * 3600e3).toISOString() },
+  { id: 'demo-4', pillar: 'tracking', action: 'Coletou métricas do Instagram', reasoning: 'Engajamento subiu 12% depois dos posts das 19h.', created_at: new Date(_n - 30 * 3600e3).toISOString() },
+] as ActivityLogRow[]
+
 export default function ActivityPage() {
   const { user } = useAuth()
   const { lang } = useLang()
@@ -16,6 +26,9 @@ export default function ActivityPage() {
   const [selected, setSelected] = useState<ActivityLogRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [noCompany, setNoCompany] = useState(false)
+
+  const isDemo = !loading && !noCompany && activity.length === 0
+  const rows = isDemo ? DEMO_ACTIVITY : activity
 
   useEffect(() => {
     if (!user) return
@@ -65,18 +78,19 @@ export default function ActivityPage() {
                 {lang === 'en' ? 'Growth OS · live' : 'Growth OS · ao vivo'}
               </span>
             </div>
-            {activity.length === 0 ? (
-              <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: '13px', lineHeight: 1.7 }}>
-                {lang === 'en'
-                  ? 'No activity yet. As soon as the Marketing AI collects data, creates content or recommends something, it shows up here.'
-                  : 'Nenhuma atividade ainda. Assim que o Marketing AI coletar dados, gerar conteúdo ou recomendar algo, aparece aqui.'}
+            {isDemo && (
+              <div style={{ padding: '12px 24px', background: 'rgba(251,191,36,0.06)', borderBottom: `1px solid ${BORDER}`, fontSize: '12px', color: '#FBBF24', lineHeight: 1.55 }}>
+                🧪 {lang === 'en'
+                  ? 'Example data — this is how it will look once the agent starts acting. Real activity replaces it automatically.'
+                  : 'Dados de exemplo — é assim que fica quando o agente começar a agir. A atividade real substitui isto sozinha.'}
               </div>
-            ) : (
-              <div style={{ padding: '8px 0' }}>
-                {activity.map((a, i) => (
+            )}
+            {(
+              <div style={{ padding: '8px 0', opacity: isDemo ? 0.6 : 1 }}>
+                {rows.map((a, i) => (
                   <div key={a.id} onClick={() => setSelected(a)} style={{
                     display: 'flex', gap: '14px', padding: '12px 24px',
-                    borderBottom: i < activity.length - 1 ? `1px solid ${BORDER}` : 'none',
+                    borderBottom: i < rows.length - 1 ? `1px solid ${BORDER}` : 'none',
                     alignItems: 'flex-start', cursor: 'pointer', transition: 'background 0.15s',
                   }}
                     onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
