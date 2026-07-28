@@ -136,6 +136,13 @@ export default function AgentsControlCenterPage() {
   const [telegramLastAt, setTelegramLastAt] = useState<string | null>(null)
   const [savingTelegram, setSavingTelegram] = useState(false)
   const [telegramSaved, setTelegramSaved] = useState(false)
+  const [tgPaused, setTgPaused] = useState(false)
+  const [tgPausedReply, setTgPausedReply] = useState('')
+  const [tgHoursEnabled, setTgHoursEnabled] = useState(false)
+  const [tgStart, setTgStart] = useState(8)
+  const [tgEnd, setTgEnd] = useState(20)
+  const [tgTimezone, setTgTimezone] = useState('America/Sao_Paulo')
+  const [tgOutsideReply, setTgOutsideReply] = useState('')
 
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -193,11 +200,19 @@ export default function AgentsControlCenterPage() {
     // Config + monitoramento do agente do Telegram.
     const todayISO = new Date(new Date().toDateString()).toISOString()
     const [{ data: tgCfg }, { count: tgToday }, { data: tgLast }] = await Promise.all([
-      supabase.from('telegram_agent_config').select('personality').eq('id', true).maybeSingle(),
+      supabase.from('telegram_agent_config').select('personality, ai_paused, paused_reply, active_hours_enabled, active_start, active_end, timezone, outside_hours_reply').eq('id', true).maybeSingle(),
       supabase.from('telegram_messages').select('id', { count: 'exact', head: true }).gte('created_at', todayISO),
       supabase.from('telegram_messages').select('created_at').order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ])
-    setTelegramPersonality((tgCfg?.personality as string) ?? '')
+    const tg = (tgCfg ?? {}) as Record<string, unknown>
+    setTelegramPersonality((tg.personality as string) ?? '')
+    setTgPaused((tg.ai_paused as boolean) ?? false)
+    setTgPausedReply((tg.paused_reply as string) ?? '')
+    setTgHoursEnabled((tg.active_hours_enabled as boolean) ?? false)
+    setTgStart((tg.active_start as number) ?? 8)
+    setTgEnd((tg.active_end as number) ?? 20)
+    setTgTimezone((tg.timezone as string) ?? 'America/Sao_Paulo')
+    setTgOutsideReply((tg.outside_hours_reply as string) ?? '')
     setTelegramMsgsToday(tgToday ?? 0)
     setTelegramLastAt((tgLast?.created_at as string) ?? null)
 
@@ -247,9 +262,20 @@ export default function AgentsControlCenterPage() {
     await supabase.from('agent_roles').update({ active, updated_at: new Date().toISOString() }).eq('role', role)
   }
 
-  const saveTelegramPersonality = async () => {
+  const persistTelegram = async (patch: Record<string, unknown>) => {
+    await supabase.from('telegram_agent_config').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', true)
+  }
+  const toggleTgPause = async (v: boolean) => {
+    setTgPaused(v)
+    await persistTelegram({ ai_paused: v })
+  }
+  const saveTelegramConfig = async () => {
     setSavingTelegram(true)
-    await supabase.from('telegram_agent_config').update({ personality: telegramPersonality, updated_at: new Date().toISOString() }).eq('id', true)
+    await persistTelegram({
+      personality: telegramPersonality, paused_reply: tgPausedReply,
+      active_hours_enabled: tgHoursEnabled, active_start: tgStart, active_end: tgEnd,
+      timezone: tgTimezone, outside_hours_reply: tgOutsideReply,
+    })
     setSavingTelegram(false)
     setTelegramSaved(true)
     setTimeout(() => setTelegramSaved(false), 2000)
@@ -401,13 +427,53 @@ export default function AgentsControlCenterPage() {
                 ))}
               </div>
 
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', border: `1px solid ${tgPaused ? 'rgba(248,113,113,0.4)' : BORDER}`, background: tgPaused ? 'rgba(248,113,113,0.06)' : 'rgba(255,255,255,0.02)', marginBottom: '14px' }}>
+                <input type="checkbox" checked={tgPaused} onChange={e => toggleTgPause(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: '#f87171' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>🙋 Pausar a IA (atendente humano)</div>
+                  <div style={{ fontSize: '11px', color: MUTED, marginTop: '2px' }}>{tgPaused ? 'IA pausada — o bot responde com a mensagem abaixo e não aciona a IA. Salva na hora.' : 'Ligue quando um humano vai assumir — a IA para de responder e o bot manda a mensagem de espera.'}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Mensagem quando pausado</div>
+              <textarea value={tgPausedReply} onChange={e => setTgPausedReply(e.target.value)} rows={2}
+                placeholder="O que o bot responde enquanto a IA está pausada."
+                style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: D, marginBottom: '18px' }} />
+
               <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>Personalidade</div>
               <textarea value={telegramPersonality} onChange={e => setTelegramPersonality(e.target.value)} rows={3}
                 placeholder="Como o agente do Telegram deve soar (tom, estilo, regras)."
                 style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: D, marginBottom: '10px' }} />
-              <button onClick={saveTelegramPersonality} disabled={savingTelegram}
+              <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '4px 0 8px' }}>Horário de atendimento</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: tgHoursEnabled ? '12px' : '18px', cursor: 'pointer' }}>
+                <input type="checkbox" checked={tgHoursEnabled} onChange={e => setTgHoursEnabled(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: ORANGE }} />
+                <span style={{ fontSize: '12.5px', color: 'white' }}>Responder só dentro do horário (fora dele, manda auto-resposta)</span>
+              </label>
+              {tgHoursEnabled && (
+                <div style={{ marginBottom: '18px' }}>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '4px' }}>Abre (hora)</label>
+                      <input type="number" min={0} max={23} value={tgStart} onChange={e => setTgStart(Number(e.target.value))} style={{ ...inputStyle, width: '90px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '4px' }}>Fecha (hora)</label>
+                      <input type="number" min={0} max={23} value={tgEnd} onChange={e => setTgEnd(Number(e.target.value))} style={{ ...inputStyle, width: '90px', boxSizing: 'border-box' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: '160px' }}>
+                      <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '4px' }}>Fuso horário</label>
+                      <input value={tgTimezone} onChange={e => setTgTimezone(e.target.value)} placeholder="America/Sao_Paulo" style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
+                    </div>
+                  </div>
+                  <label style={{ display: 'block', fontSize: '10.5px', color: MUTED, marginBottom: '4px' }}>Mensagem fora do horário</label>
+                  <textarea value={tgOutsideReply} onChange={e => setTgOutsideReply(e.target.value)} rows={2}
+                    placeholder="O que o bot responde fora do horário de atendimento."
+                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: D }} />
+                </div>
+              )}
+
+              <button onClick={saveTelegramConfig} disabled={savingTelegram}
                 style={{ padding: '8px 16px', background: telegramSaved ? '#4ade80' : ORANGE, color: '#000', fontWeight: 700, fontSize: '12.5px', borderRadius: '8px', border: 'none', cursor: 'pointer', marginBottom: '20px' }}>
-                {telegramSaved ? '✓ Salvo' : savingTelegram ? 'Salvando...' : 'Salvar personalidade'}
+                {telegramSaved ? '✓ Salvo' : savingTelegram ? 'Salvando...' : 'Salvar configurações'}
               </button>
 
               <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>Ferramentas que ele pode usar</div>

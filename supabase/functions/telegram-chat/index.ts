@@ -34,16 +34,58 @@ const TOOL_CAP: Record<string, string> = {
   list_leads: 'tg_leads',
 }
 
-// Config ao vivo do agente do Telegram: personalidade + quais tools estão
-// desligadas. Lido a cada mensagem — mudar no Control Center vale na hora.
-async function getTelegramConfig(admin: SupaClient): Promise<{ personality: string; disabled: Set<string> }> {
+interface TgConfig {
+  personality: string
+  disabled: Set<string>
+  ai_paused: boolean
+  paused_reply: string
+  active_hours_enabled: boolean
+  active_start: number
+  active_end: number
+  timezone: string
+  outside_hours_reply: string
+}
+
+// Config ao vivo do agente do Telegram: personalidade, tools desligadas,
+// handoff (pausa) e horário de atendimento. Lido a cada mensagem — mudar no
+// Control Center vale na hora.
+async function getTelegramConfig(admin: SupaClient): Promise<TgConfig> {
   const [{ data: cfg }, { data: caps }] = await Promise.all([
-    admin.from('telegram_agent_config').select('personality').eq('id', true).maybeSingle(),
+    admin.from('telegram_agent_config').select('personality, ai_paused, paused_reply, active_hours_enabled, active_start, active_end, timezone, outside_hours_reply').eq('id', true).maybeSingle(),
     admin.from('capability_registry').select('id, enabled').contains('used_by', ['telegram']),
   ])
   const disabled = new Set<string>()
   for (const c of (caps ?? []) as { id: string; enabled: boolean }[]) if (!c.enabled) disabled.add(c.id)
-  return { personality: (cfg?.personality as string) ?? '', disabled }
+  const c = (cfg ?? {}) as Record<string, unknown>
+  return {
+    personality: (c.personality as string) ?? '',
+    disabled,
+    ai_paused: (c.ai_paused as boolean) ?? false,
+    paused_reply: (c.paused_reply as string) ?? 'Um atendente humano vai te responder por aqui em instantes.',
+    active_hours_enabled: (c.active_hours_enabled as boolean) ?? false,
+    active_start: (c.active_start as number) ?? 8,
+    active_end: (c.active_end as number) ?? 20,
+    timezone: (c.timezone as string) ?? 'America/Sao_Paulo',
+    outside_hours_reply: (c.outside_hours_reply as string) ?? 'Estamos fora do horário de atendimento agora. Retornamos assim que possível!',
+  }
+}
+
+// Hora atual (0-23) no fuso configurado. Cai pro UTC se o fuso for inválido.
+function currentHourInTz(tz: string): number {
+  try {
+    const s = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hour12: false }).format(new Date())
+    return parseInt(s, 10) % 24
+  } catch { return new Date().getUTCHours() }
+}
+
+// Está fora do horário de atendimento? Cobre janelas normais (8→20) e que
+// viram a meia-noite (22→6).
+function isOutsideActiveHours(cfg: TgConfig): boolean {
+  const h = currentHourInTz(cfg.timezone)
+  const inside = cfg.active_start <= cfg.active_end
+    ? (h >= cfg.active_start && h < cfg.active_end)
+    : (h >= cfg.active_start || h < cfg.active_end)
+  return !inside
 }
 
 async function runTool(tu: { name: string; id: string; input: unknown }, companyId: string, admin: SupaClient, disabled: Set<string>): Promise<{ result: string; posts: number }> {
@@ -229,19 +271,28 @@ Regra de contagem: para responder "quantos/quantas X", use o campo total_matchin
 
 Para criar conteúdo de verdade (não só descrever), use create_post ou create_multiple_posts — nunca publica sozinho, tudo vira rascunho pra aprovação.`
 
-    // Config ao vivo do Control Center: personalidade + tools desligadas.
-    const { personality, disabled } = await getTelegramConfig(admin)
+    // Config ao vivo do Control Center: personalidade, tools, handoff, horário.
+    const cfg = await getTelegramConfig(admin)
+    const disabled = cfg.disabled
     const activeTools = TOOLS.filter(t => !(TOOL_CAP[t.name] && disabled.has(TOOL_CAP[t.name])))
-    const personalityNote = personality ? `\nPersonalidade definida pelo administrador (siga sempre): ${personality}` : ''
+    const personalityNote = cfg.personality ? `\nPersonalidade definida pelo administrador (siga sempre): ${cfg.personality}` : ''
 
     const systemPrompt = [baseContext, roleContext, personalityNote, toolsNote, '', 'Responda de forma direta e útil via Telegram. Seja conciso. Sem markdown (sem **, ##, listas com marcadores) — texto corrido, como se estivesse falando.'].join('\n')
 
-    // ── Agentic loop (max 5 turns), same shape as agent-chat ──────────
     let convo: unknown[] = [...historyMessages, { role: 'user', content: message }]
     let reply = ''
     let postsCreated = 0
 
-    for (let i = 0; i < 5; i++) {
+    // Human handoff: IA pausada → responde com a mensagem de atendente humano,
+    // sem acionar a IA. Fora do horário de atendimento → auto-resposta.
+    if (cfg.ai_paused) {
+      reply = cfg.paused_reply
+    } else if (cfg.active_hours_enabled && isOutsideActiveHours(cfg)) {
+      reply = cfg.outside_hours_reply
+    }
+
+    // ── Agentic loop (max 5 turns) — só roda se não houve handoff/auto-resposta.
+    if (!reply) for (let i = 0; i < 5; i++) {
       const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-api-key': anthropicKey, 'anthropic-version': '2023-06-01' },
