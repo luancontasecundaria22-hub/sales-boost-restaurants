@@ -28,11 +28,16 @@ const DEFAULT_PREFS: NotificationPrefs = {
   daily_report: true, weekly_report: true, monthly_report: true, annual_report: true,
 }
 
-const PREF_OPTIONS: { key: keyof NotificationPrefs; label: string; hint: string }[] = [
-  { key: 'daily_report', label: 'Relatório diário', hint: 'Um resumo do dia, enviado toda noite pelo Agente Secretário.' },
-  { key: 'weekly_report', label: 'Relatório semanal', hint: 'Panorama da semana — só chega se o dono da plataforma tiver ligado essa categoria.' },
-  { key: 'monthly_report', label: 'Relatório mensal', hint: 'Panorama do mês.' },
-  { key: 'annual_report', label: 'Relatório anual', hint: 'Panorama do ano.' },
+// Controle global da plataforma (owner → Telegram & Relatórios). Os relatórios
+// só saem se estiverem ligados nos dois lugares — aqui a gente reflete isso:
+// se o owner desligou uma categoria, ela aparece travada pra o cliente.
+type GlobalReports = { daily_enabled: boolean; weekly_enabled: boolean; monthly_enabled: boolean; annual_enabled: boolean }
+
+const PREF_OPTIONS: { key: keyof NotificationPrefs; label: string; hint: string; globalKey?: keyof GlobalReports }[] = [
+  { key: 'daily_report', label: 'Relatório diário', hint: 'Um resumo do dia, enviado toda noite pelo Agente Secretário.', globalKey: 'daily_enabled' },
+  { key: 'weekly_report', label: 'Relatório semanal', hint: 'Panorama da semana — só chega se o dono da plataforma tiver ligado essa categoria.', globalKey: 'weekly_enabled' },
+  { key: 'monthly_report', label: 'Relatório mensal', hint: 'Panorama do mês.', globalKey: 'monthly_enabled' },
+  { key: 'annual_report', label: 'Relatório anual', hint: 'Panorama do ano.', globalKey: 'annual_enabled' },
   { key: 'agent_actions', label: 'Execuções do agente', hint: 'Quando o agente cria um post ou rascunha uma resposta sozinho — e por quê.' },
   { key: 'negative_reviews', label: 'Avaliações negativas / sem resposta', hint: 'Quando o agente encontra uma review ruim ou parada há dias.' },
   { key: 'opportunities', label: 'Outras oportunidades', hint: 'Rascunhos parados, sem posts novos, engajamento baixo.' },
@@ -49,6 +54,7 @@ export default function NotificationsCard() {
   const [picking, setPicking] = useState(false)
   const [prefs, setPrefs] = useState<NotificationPrefs>(DEFAULT_PREFS)
   const [savingPref, setSavingPref] = useState<keyof NotificationPrefs | null>(null)
+  const [globalReports, setGlobalReports] = useState<GlobalReports | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -62,6 +68,9 @@ export default function NotificationsCard() {
         setTelegramChatId(data.telegram_chat_id ?? null)
         setPrefs({ ...DEFAULT_PREFS, ...(data.notification_prefs as Partial<NotificationPrefs> | null ?? {}) })
       })
+    // Reflete o controle global do owner (Telegram & Relatórios).
+    supabase.from('report_config').select('daily_enabled, weekly_enabled, monthly_enabled, annual_enabled').eq('id', true).maybeSingle()
+      .then(({ data }) => { if (data) setGlobalReports(data as GlobalReports) })
   }, [user])
 
   const togglePref = async (key: keyof NotificationPrefs) => {
@@ -128,22 +137,28 @@ export default function NotificationsCard() {
               O que avisar
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {PREF_OPTIONS.map(opt => (
-                <label key={opt.key}
-                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.03)', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={prefs[opt.key]}
-                    onChange={() => togglePref(opt.key)}
-                    disabled={savingPref === opt.key}
-                    style={{ width: '16px', height: '16px', accentColor: ORANGE, cursor: 'pointer', flexShrink: 0 }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{opt.label}</div>
-                    <div style={{ fontSize: '11px', color: MUTED, marginTop: '1px' }}>{opt.hint}</div>
-                  </div>
-                </label>
-              ))}
+              {PREF_OPTIONS.map(opt => {
+                const gatedOff = !!(opt.globalKey && globalReports && globalReports[opt.globalKey] === false)
+                return (
+                  <label key={opt.key}
+                    style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.03)', cursor: gatedOff ? 'not-allowed' : 'pointer', opacity: gatedOff ? 0.55 : 1 }}>
+                    <input
+                      type="checkbox"
+                      checked={gatedOff ? false : prefs[opt.key]}
+                      onChange={() => { if (!gatedOff) togglePref(opt.key) }}
+                      disabled={savingPref === opt.key || gatedOff}
+                      style={{ width: '16px', height: '16px', accentColor: ORANGE, cursor: gatedOff ? 'not-allowed' : 'pointer', flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>
+                        {opt.label}
+                        {gatedOff && <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#FBBF24', marginLeft: '8px' }}>desligado pela plataforma</span>}
+                      </div>
+                      <div style={{ fontSize: '11px', color: MUTED, marginTop: '1px' }}>{opt.hint}</div>
+                    </div>
+                  </label>
+                )
+              })}
             </div>
           </>
         ) : !picking ? (
