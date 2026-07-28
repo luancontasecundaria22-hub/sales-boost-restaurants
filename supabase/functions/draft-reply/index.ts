@@ -53,7 +53,47 @@ async function notifyMarketing(chatId: number | null | undefined, companyId: str
   }).catch(() => {})
 }
 
-async function draftPendingReviewReplies(admin: SupaClient, anthropicKey: string, companyId: string): Promise<{ drafted: number; negative: number; stale: number }> {
+// Publica uma resposta direto no Google Business Profile (mesmo caminho do
+// reply-google-review, mas por service-role, para o modo automático do cron).
+// Retorna true se publicou. Nunca lança — falha vira "não publicou".
+async function publishReplyToGBP(admin: SupaClient, companyId: string, reviewId: string, googleReviewId: string, replyText: string, clientId?: string, clientSecret?: string): Promise<boolean> {
+  try {
+    const { data: integration } = await admin.from('company_integrations')
+      .select('access_token, refresh_token, token_expires_at, metadata')
+      .eq('company_id', companyId).eq('type', 'google_business_profile').maybeSingle()
+    if (!integration) return false
+    const meta = integration.metadata as { account_id?: string; location_id?: string }
+    if (!meta?.account_id || !meta?.location_id) return false
+
+    let accessToken = integration.access_token
+    const expiresAt = integration.token_expires_at ? new Date(integration.token_expires_at) : new Date(0)
+    if (expiresAt < new Date(Date.now() + 60_000) && integration.refresh_token && clientId && clientSecret) {
+      const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: integration.refresh_token, grant_type: 'refresh_token' }),
+      })
+      if (refreshRes.ok) {
+        const refreshed = await refreshRes.json()
+        accessToken = refreshed.access_token
+        await admin.from('company_integrations').update({
+          access_token: accessToken,
+          token_expires_at: new Date(Date.now() + (refreshed.expires_in ?? 3600) * 1000).toISOString(),
+        }).eq('company_id', companyId).eq('type', 'google_business_profile')
+      }
+    }
+
+    const reviewName = `accounts/${meta.account_id}/locations/${meta.location_id}/reviews/${googleReviewId}`
+    const replyRes = await fetch(`https://mybusiness.googleapis.com/v4/${reviewName}/reply`, {
+      method: 'PUT', headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment: replyText.trim() }),
+    })
+    if (!replyRes.ok) { console.error('auto-reply GBP error:', await replyRes.text()); return false }
+    await admin.from('reviews').update({ owner_reply: replyText.trim(), responded_at: new Date().toISOString() }).eq('id', reviewId)
+    return true
+  } catch (e) { console.error('publishReplyToGBP error:', e); return false }
+}
+
+async function draftPendingReviewReplies(admin: SupaClient, anthropicKey: string, companyId: string, autoReply: boolean, clientId?: string, clientSecret?: string): Promise<{ drafted: number; negative: number; stale: number; published: number }> {
   const { data: opps } = await admin
     .from('opportunities')
     .select('id, ref_id, type')
@@ -62,23 +102,32 @@ async function draftPendingReviewReplies(admin: SupaClient, anthropicKey: string
     .eq('status', 'open')
     .is('ai_draft', null)
 
-  let drafted = 0, negative = 0, stale = 0
+  let drafted = 0, negative = 0, stale = 0, published = 0
   for (const opp of opps ?? []) {
     if (!opp.ref_id) continue
     try {
       const { data: company } = await admin.from('companies').select('business_name, business_type, city').eq('id', companyId).single()
-      const { data: review } = await admin.from('reviews').select('author, rating, text, review_date').eq('id', opp.ref_id).single()
+      const { data: review } = await admin.from('reviews').select('author, rating, text, review_date, google_review_id').eq('id', opp.ref_id).single()
       if (!company || !review) continue
       const draft = await callClaude(anthropicKey, buildReviewReplyPrompt(company, review))
       await admin.from('opportunities').update({ ai_draft: draft }).eq('id', opp.id)
       drafted++
       if (opp.type === 'negative_review') negative++
       else if (opp.type === 'unanswered_review') stale++
+
+      // Modo automático: publica direto no Google e fecha a oportunidade.
+      if (autoReply && review.google_review_id) {
+        const ok = await publishReplyToGBP(admin, companyId, opp.ref_id as string, review.google_review_id as string, draft, clientId, clientSecret)
+        if (ok) {
+          published++
+          await admin.from('opportunities').update({ status: 'acted_on' }).eq('id', opp.id)
+        }
+      }
     } catch (e) {
       console.error(`draft-reply cron: opportunity ${opp.id} error:`, e)
     }
   }
-  return { drafted, negative, stale }
+  return { drafted, negative, stale, published }
 }
 
 Deno.serve(async (req) => {
@@ -90,6 +139,8 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? supabaseAnonKey
     const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
     const cronSecretEnv = Deno.env.get('CRON_SECRET')
+    const clientId = Deno.env.get('GOOGLE_OAUTH_CLIENT_ID')
+    const clientSecret = Deno.env.get('GOOGLE_OAUTH_CLIENT_SECRET')
 
     if (!anthropicKey) return json({ error: 'ANTHROPIC_API_KEY não configurado.' }, 503)
 
@@ -98,10 +149,10 @@ Deno.serve(async (req) => {
     // Cron mode: auto-draft replies for every open review-type opportunity, across all active companies
     const bodyForCron = req.method === 'POST' ? await req.json().catch(() => ({})) as Record<string, unknown> : {}
     if (cronSecretEnv && bodyForCron.cron_secret === cronSecretEnv) {
-      const { data: companies } = await admin.from('companies').select('id, telegram_chat_id, notification_prefs').eq('active', true)
+      const { data: companies } = await admin.from('companies').select('id, telegram_chat_id, notification_prefs, auto_reply_reviews').eq('active', true)
       let total = 0
       for (const c of companies ?? []) {
-        const r = await draftPendingReviewReplies(admin, anthropicKey, c.id)
+        const r = await draftPendingReviewReplies(admin, anthropicKey, c.id, !!c.auto_reply_reviews, clientId, clientSecret)
         total += r.drafted
         if (r.drafted > 0) {
           const prefs = (c.notification_prefs as Record<string, boolean> | null) ?? {}
@@ -109,10 +160,11 @@ Deno.serve(async (req) => {
             const reasonParts: string[] = []
             if (r.negative > 0) reasonParts.push(`${r.negative} avaliação(ões) negativa(s) sem resposta`)
             if (r.stale > 0) reasonParts.push(`${r.stale} avaliação(ões) parada(s) há +14 dias sem resposta`)
+            const published = r.published > 0 ? ` — ${r.published} publicada(s) automaticamente no Google` : ''
             notifyMarketing(c.telegram_chat_id as number | null, c.id as string, 'AGENT_ACTION', {
-              action: 'replies_drafted',
+              action: r.published > 0 ? 'replies_published' : 'replies_drafted',
               count: r.drafted,
-              reason: reasonParts.join(' e ') || 'avaliações sem resposta detectadas',
+              reason: (reasonParts.join(' e ') || 'avaliações sem resposta detectadas') + published,
             })
           }
         }

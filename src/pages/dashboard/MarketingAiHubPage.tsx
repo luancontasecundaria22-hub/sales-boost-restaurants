@@ -14,6 +14,7 @@ interface ModuleDef { section: string; title: string; desc: string; icon: string
 // Os agentes de crescimento — o coração do Growth OS.
 const GROWTH_MODULES: ModuleDef[] = [
   { section: 'competitors', title: 'Inteligência de Mercado', desc: 'Concorrentes, tendências e oportunidades do seu segmento.', icon: '🧭' },
+  { section: 'avaliacoes', title: 'Avaliações', desc: 'A IA responde as avaliações do Google — rascunha e você aprova (ou liga o modo automático).', icon: '⭐' },
   { section: 'content', title: 'Agente de Conteúdo', desc: 'Calendário, ideias, roteiros de Reels, legendas e criativos.', icon: '✍️' },
   { section: 'meta-ads', title: 'Agente de Meta Ads', desc: 'Analisa campanhas, otimiza orçamento e cria testes de criativo.', icon: '🎯' },
   { section: 'funil', title: 'Funil de Vendas', desc: 'CRM inteligente: captura, qualifica e faz follow-up dos leads.', icon: '🔀' },
