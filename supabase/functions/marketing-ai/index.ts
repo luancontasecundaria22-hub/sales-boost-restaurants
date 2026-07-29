@@ -39,6 +39,31 @@ type SupaClient = ReturnType<typeof createClient>
 interface Company {
   id: string; business_name: string; business_type: string | null; city: string | null
   instagram_url: string | null; goal: string | null
+  // Memória estratégica que o dono ensina (tabela business_context). Anexada
+  // ao carregar a empresa; entra no preâmbulo de todo prompt do agente.
+  businessContext?: string
+}
+
+// Lê o que o dono ensinou (business_context) e formata pro prompt do agente.
+// Só notas ativas e vigentes hoje, mais importantes primeiro, limitado pra
+// não estourar tokens. É o "cérebro do negócio": entender quem é a empresa.
+async function loadBusinessContext(admin: SupaClient, companyId: string): Promise<string> {
+  const today = new Date().toISOString().slice(0, 10)
+  const { data } = await admin
+    .from('business_context')
+    .select('text, category, importance, effective_date, expiration_date')
+    .eq('company_id', companyId)
+    .eq('archived', false)
+    .order('created_at', { ascending: false })
+    .limit(30)
+  if (!data?.length) return ''
+  const order: Record<string, number> = { high: 0, medium: 1, low: 2 }
+  const active = (data as { text: string; category: string; importance: string; effective_date: string | null; expiration_date: string | null }[])
+    .filter(n => (!n.effective_date || n.effective_date <= today) && (!n.expiration_date || n.expiration_date >= today))
+    .sort((a, b) => (order[a.importance] ?? 1) - (order[b.importance] ?? 1))
+    .slice(0, 15)
+  if (!active.length) return ''
+  return active.map(n => `- [${n.category}${n.importance === 'high' ? ' · prioridade alta' : ''}] ${n.text}`).join('\n')
 }
 
 interface MarketingAiConfig {
@@ -65,7 +90,7 @@ Voz da marca: ${config.brand_voice ?? 'não definida ainda'}. Tom: ${config.tone
 Público-alvo: ${config.target_audience ?? 'não definido ainda'}.
 Pilares de conteúdo: ${config.content_pillars.join(', ') || 'não definidos ainda'}.
 Objetivos: ${config.marketing_goals ?? config.business_objectives ?? 'crescer e engajar mais'}.
-
+${company.businessContext ? `\nO que o dono ensinou sobre o negócio (respeite SEMPRE em toda decisão, conteúdo e campanha):\n${company.businessContext}\n` : ''}
 Seus dados são 100% próprios — não compartilha tabelas, posts nem histórico com o "Agente Geral" do dashboard. Você enxerga só o que suas próprias quatro inteligências coletaram: Tracking (métricas reais do Instagram), Content (ideias e legendas), Competitor (concorrentes configurados) e Strategy (o que o Hermes decidiu, com o porquê).
 Regra permanente: você nunca publica nada sozinho — todo conteúdo que você cria fica como rascunho esperando aprovação. Nunca invente número que não veio de uma coleta real.`
 }
@@ -619,6 +644,7 @@ Deno.serve(async (req) => {
       let processed = 0
       for (const company of (companies ?? []) as Company[]) {
         try {
+          company.businessContext = await loadBusinessContext(admin, company.id)
           await runPipelineForCompany(admin, company, apifyToken, anthropicKey, replicateKey, hermesUrl, hermesApiKey, disabled)
           processed++
         } catch (e) {
@@ -636,6 +662,7 @@ Deno.serve(async (req) => {
 
     const { data: company } = await admin.from('companies').select('id, business_name, business_type, city, instagram_url, goal').eq('user_id', user.id).maybeSingle()
     if (!company) return json({ error: 'Empresa não encontrada.' }, 404)
+    ;(company as Company).businessContext = await loadBusinessContext(admin, company.id)
 
     const action = body.action as string
     const config = await getConfig(admin, company.id)

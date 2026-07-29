@@ -15,9 +15,33 @@ interface Company {
   google_rating?: number | null; google_review_count?: string | null
   agent_messages_used?: number; agent_messages_reset_at?: string
   telegram_chat_id?: number | null; notification_prefs?: Record<string, boolean> | null
+  // Memória estratégica que o dono ensina (tabela business_context) — o Hermes
+  // recebe isto pra conhecer o negócio na hora de raciocinar.
+  businessContext?: string
 }
 
 const PLAN_LIMITS: Record<string, number> = { free: 30, basic: 150, pro: Infinity }
+
+// Lê o que o dono ensinou (business_context) e formata pro prompt do Hermes.
+// Só notas ativas e vigentes hoje, importantes primeiro, limitado a 15.
+async function loadBusinessContext(admin: SupaClient, companyId: string): Promise<string> {
+  const today = new Date().toISOString().slice(0, 10)
+  const { data } = await admin
+    .from('business_context')
+    .select('text, category, importance, effective_date, expiration_date')
+    .eq('company_id', companyId)
+    .eq('archived', false)
+    .order('created_at', { ascending: false })
+    .limit(30)
+  if (!data?.length) return ''
+  const order: Record<string, number> = { high: 0, medium: 1, low: 2 }
+  const active = (data as { text: string; category: string; importance: string; effective_date: string | null; expiration_date: string | null }[])
+    .filter(n => (!n.effective_date || n.effective_date <= today) && (!n.expiration_date || n.expiration_date >= today))
+    .sort((a, b) => (order[a.importance] ?? 1) - (order[b.importance] ?? 1))
+    .slice(0, 15)
+  if (!active.length) return ''
+  return active.map(n => `- [${n.category}${n.importance === 'high' ? ' · prioridade alta' : ''}] ${n.text}`).join('\n')
+}
 
 // ── Hermes Control Center ────────────────────────────────────────────────
 // O "cérebro" do Hermes não fica mais fixo no código — é configuração que o
@@ -334,7 +358,10 @@ Regra permanente, que nenhuma configuração pode desligar: nunca publique, envi
 Responda em texto corrido, sem markdown. Sem **, ##, tabelas ou listas com marcadores. Frases naturais e diretas.`
 
 function buildSystemPrompt(role: AgentRole, company: Company, config: HermesConfig, roleSettings: AgentRoleSettings, integrations?: Record<string, boolean>): string {
-  return `${composeHermesPreamble(config, roleSettings.approvals, integrations)}\n\n---\n\n${AGENT_ROLES[role].buildPrompt(company)}${SHARED_RULES}`
+  const ctx = company.businessContext
+    ? `\n\n---\n\nO que o dono ensinou sobre o negócio (respeite SEMPRE ao decidir ou responder):\n${company.businessContext}`
+    : ''
+  return `${composeHermesPreamble(config, roleSettings.approvals, integrations)}\n\n---\n\n${AGENT_ROLES[role].buildPrompt(company)}${ctx}${SHARED_RULES}`
 }
 
 async function notifyMarketing(chatId: number | null | undefined, companyId: string, event: string, data?: Record<string, unknown>) {
@@ -894,6 +921,8 @@ Deno.serve(async (req) => {
           continue
         }
 
+        company.businessContext = await loadBusinessContext(admin, company.id)
+
         let decision: OrchestratorDecision
         try {
           decision = await decideRolesToRun(hermesUrl, hermesApiKey, company, admin, config, marketingSettings)
@@ -994,6 +1023,7 @@ Deno.serve(async (req) => {
       .maybeSingle()
 
     if (!company) return json({ error: 'Empresa nao encontrada. Complete o onboarding primeiro.' }, 404)
+    ;(company as Company).businessContext = await loadBusinessContext(admin, company.id)
 
     const config = await getHermesConfig(admin)
     let result: ChatTurnResult
