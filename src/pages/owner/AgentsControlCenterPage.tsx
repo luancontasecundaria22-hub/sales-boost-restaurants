@@ -68,12 +68,25 @@ interface AgentRoleRow {
 }
 interface RoleActivity { count7d: number; lastAt: string | null }
 
-interface ReportConfig { daily_enabled: boolean; weekly_enabled: boolean; monthly_enabled: boolean; annual_enabled: boolean }
+interface ReportConfig {
+  daily_enabled: boolean; weekly_enabled: boolean; monthly_enabled: boolean; annual_enabled: boolean
+  telegram_enabled: boolean; agent_actions_enabled: boolean; opportunities_enabled: boolean
+  negative_reviews_enabled: boolean; new_competitor_enabled: boolean; new_lead_enabled: boolean
+}
 const REPORT_OPTIONS: { key: keyof ReportConfig; label: string; hint: string }[] = [
   { key: 'daily_enabled', label: 'Relatório diário', hint: 'Toda noite (22h), pelo Agente Secretário. Já ativo desde o início.' },
   { key: 'weekly_enabled', label: 'Relatório semanal', hint: 'Toda segunda-feira — panorama da semana.' },
   { key: 'monthly_enabled', label: 'Relatório mensal', hint: 'Todo dia 1º — panorama do mês.' },
   { key: 'annual_enabled', label: 'Relatório anual', hint: 'Todo 1º de janeiro — panorama do ano.' },
+]
+// Avisos em tempo real que o agente principal dispara pelo Telegram. Cada um
+// passa a ter um interruptor global aqui (vale pra todos os clientes).
+const TELEGRAM_EVENT_OPTIONS: { key: keyof ReportConfig; label: string; hint: string }[] = [
+  { key: 'agent_actions_enabled', label: 'Execuções do agente', hint: 'Quando o agente cria um post ou rascunha uma resposta sozinho — e por quê.' },
+  { key: 'opportunities_enabled', label: 'Oportunidades', hint: 'Rascunhos parados, sem posts novos, engajamento baixo.' },
+  { key: 'negative_reviews_enabled', label: 'Avaliações negativas', hint: 'Quando aparece uma review ruim ou parada há dias.' },
+  { key: 'new_competitor_enabled', label: 'Novos concorrentes', hint: 'Quando um concorrente novo aparece no raio monitorado.' },
+  { key: 'new_lead_enabled', label: 'Novos leads', hint: 'Quando um lead novo entra no funil.' },
 ]
 
 interface CompanyOption { id: string; business_name: string }
@@ -129,7 +142,7 @@ export default function AgentsControlCenterPage() {
   const [integrationCatalog, setIntegrationCatalog] = useState<IntegrationRow[]>([])
   const [agentRoles, setAgentRoles] = useState<AgentRoleRow[]>([])
   const [roleActivity, setRoleActivity] = useState<Record<string, RoleActivity>>({})
-  const [reportConfig, setReportConfig] = useState<ReportConfig>({ daily_enabled: true, weekly_enabled: false, monthly_enabled: true, annual_enabled: false })
+  const [reportConfig, setReportConfig] = useState<ReportConfig>({ daily_enabled: true, weekly_enabled: false, monthly_enabled: true, annual_enabled: false, telegram_enabled: true, agent_actions_enabled: true, opportunities_enabled: true, negative_reviews_enabled: true, new_competitor_enabled: true, new_lead_enabled: true })
   const [telegramStats, setTelegramStats] = useState({ connected: 0, total: 0 })
 
   const [saving, setSaving] = useState(false)
@@ -344,18 +357,44 @@ export default function AgentsControlCenterPage() {
               </div>
             </SettingsSection>
 
-            <SettingsSection title="Telegram & Relatórios" description="Quais relatórios automáticos são enviados por Telegram, e com que frequência.">
+            <SettingsSection title="Telegram & Relatórios" description="Controle central do Telegram — o que o agente principal avisa em tempo real e quais relatórios automáticos saem. Vale pra toda a plataforma.">
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}`, borderRadius: '9px', marginBottom: '16px' }}>
                 <span style={{ fontSize: '15px' }}>✈️</span>
                 <span style={{ fontSize: '12.5px', color: 'white' }}>{telegramStats.connected} de {telegramStats.total} empresas com Telegram conectado</span>
               </div>
-              <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', marginBottom: '16px', lineHeight: 1.6 }}>
-                Cada interruptor aqui é o teto geral da plataforma. Mesmo ligado aqui, cada cliente ainda pode desligar a categoria dele em Configurações → Notificações — os dois precisam estar ligados pro relatório sair.
+
+              {/* Interruptor mestre — desliga TODOS os avisos automáticos de uma vez.
+                  Respostas diretas a comandos no bot continuam funcionando. */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '13px 15px', borderRadius: '10px', border: `1px solid ${reportConfig.telegram_enabled ? 'rgba(74,222,128,0.3)' : 'rgba(248,113,113,0.3)'}`, background: reportConfig.telegram_enabled ? 'rgba(74,222,128,0.06)' : 'rgba(248,113,113,0.06)', cursor: 'pointer', marginBottom: '18px' }}>
+                <input type="checkbox" checked={reportConfig.telegram_enabled} onChange={e => toggleReport('telegram_enabled', e.target.checked)} style={{ width: '17px', height: '17px', accentColor: ORANGE }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'white' }}>Avisos automáticos no Telegram {reportConfig.telegram_enabled ? '' : '(desligados)'}</div>
+                  <div style={{ fontSize: '11px', color: MUTED, marginTop: '1px' }}>Interruptor geral. Desligado, nenhum aviso automático sai — mas o bot ainda responde quem escreve pra ele.</div>
+                </div>
+              </label>
+
+              <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.45)', marginBottom: '14px', lineHeight: 1.6, opacity: reportConfig.telegram_enabled ? 1 : 0.5 }}>
+                Cada interruptor abaixo é o teto geral da plataforma. Mesmo ligado aqui, cada cliente ainda pode desligar a categoria dele em Configurações → Notificações — os dois precisam estar ligados pro aviso sair.
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+              <div style={{ fontSize: '10.5px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '9px', opacity: reportConfig.telegram_enabled ? 1 : 0.5 }}>Avisos em tempo real</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '18px', opacity: reportConfig.telegram_enabled ? 1 : 0.5 }}>
+                {TELEGRAM_EVENT_OPTIONS.map(r => (
+                  <label key={r.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderRadius: '9px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)', cursor: reportConfig.telegram_enabled ? 'pointer' : 'not-allowed' }}>
+                    <input type="checkbox" checked={reportConfig.telegram_enabled && reportConfig[r.key]} disabled={!reportConfig.telegram_enabled} onChange={e => toggleReport(r.key, e.target.checked)} style={{ width: '16px', height: '16px', accentColor: ORANGE }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{r.label}</div>
+                      <div style={{ fontSize: '11px', color: MUTED, marginTop: '1px' }}>{r.hint}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div style={{ fontSize: '10.5px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '9px', opacity: reportConfig.telegram_enabled ? 1 : 0.5 }}>Relatórios periódicos</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', opacity: reportConfig.telegram_enabled ? 1 : 0.5 }}>
                 {REPORT_OPTIONS.map(r => (
-                  <label key={r.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderRadius: '9px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={reportConfig[r.key]} onChange={e => toggleReport(r.key, e.target.checked)} style={{ width: '16px', height: '16px', accentColor: ORANGE }} />
+                  <label key={r.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '11px 14px', borderRadius: '9px', border: `1px solid ${BORDER}`, background: 'rgba(255,255,255,0.02)', cursor: reportConfig.telegram_enabled ? 'pointer' : 'not-allowed' }}>
+                    <input type="checkbox" checked={reportConfig[r.key]} disabled={!reportConfig.telegram_enabled} onChange={e => toggleReport(r.key, e.target.checked)} style={{ width: '16px', height: '16px', accentColor: ORANGE }} />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: '13px', fontWeight: 600, color: 'white' }}>{r.label}</div>
                       <div style={{ fontSize: '11px', color: MUTED, marginTop: '1px' }}>{r.hint}</div>

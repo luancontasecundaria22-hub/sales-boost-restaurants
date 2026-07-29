@@ -53,6 +53,20 @@ function buildNotificationText(eventType: string, data?: Record<string, unknown>
   }
 }
 
+// Mapeia cada tipo de aviso automático pra coluna de controle global do owner
+// em report_config. O que não estiver aqui (ex.: 'message' = resposta direta a
+// um comando do usuário) nunca é bloqueado — o bot sempre responde quem fala
+// com ele. REPORT_READY é gated na origem (periodic-report), então passa aqui.
+const EVENT_GATE_KEY: Record<string, string> = {
+  AGENT_ACTION: 'agent_actions_enabled',
+  POST_APPROVED: 'agent_actions_enabled',
+  CYCLE_SUMMARY: 'agent_actions_enabled',
+  OPPORTUNITY_DETECTED: 'opportunities_enabled',
+  NEGATIVE_REVIEW: 'negative_reviews_enabled',
+  NEW_COMPETITOR: 'new_competitor_enabled',
+  NEW_LEAD: 'new_lead_enabled',
+}
+
 async function sendTelegramMessage(token: string, chatId: number, text: string): Promise<boolean> {
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -98,10 +112,30 @@ Deno.serve(async (req) => {
 
     if (error) throw error
 
+    // Controle global do owner (report_config). O interruptor mestre
+    // (telegram_enabled) e o gate por categoria valem pra TODOS os clientes.
+    // Respostas diretas a comandos ('message') nunca são bloqueadas. Falha em
+    // aberto: se não achar config, envia (não quebra quem já recebia).
+    let globallyAllowed = true
+    const gateKey = EVENT_GATE_KEY[event_type ?? '']
+    if (gateKey || event_type) {
+      const { data: cfg } = await supabase
+        .from('report_config')
+        .select('telegram_enabled, agent_actions_enabled, opportunities_enabled, negative_reviews_enabled, new_competitor_enabled, new_lead_enabled')
+        .eq('id', true)
+        .maybeSingle()
+      if (cfg) {
+        const c = cfg as Record<string, boolean>
+        // Mestre desligado silencia todos os avisos automáticos (não respostas).
+        if (c.telegram_enabled === false && event_type && event_type !== 'message') globallyAllowed = false
+        if (gateKey && c[gateKey] === false) globallyAllowed = false
+      }
+    }
+
     let telegramSent = false
     const chatId = telegram_chat_id ? Number(telegram_chat_id) : null
     const botToken = Deno.env.get('TELEGRAM_BOT_TOKEN')
-    if (chatId && botToken) {
+    if (chatId && botToken && globallyAllowed) {
       telegramSent = await sendTelegramMessage(botToken, chatId, finalMessage)
     }
 
