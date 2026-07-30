@@ -96,7 +96,26 @@ export interface DemoWaConversation {
   id: string; name: string; status: WaStatus; unread: number; lastPreview: string; messages: DemoWaMessage[]
 }
 
-export interface WhatsAppDemo { conversations: DemoWaConversation[]; knowledge: { faq: string[]; products: string[] } }
+// Fila de follow-up: clientes que esfriaram e o agente rascunhou uma mensagem
+// pra reaquecer — sempre esperando aprovação (nunca envia sozinho).
+export interface FollowUpItem {
+  id: string; name: string; channel: string; lastContact: string
+  reason: string; draft: string; temperature: LeadTemp
+}
+
+export type AutonomyLevel = 'suggest' | 'approve' | 'auto'
+export const AUTONOMY_META: Record<AutonomyLevel, { label: string; hint: string }> = {
+  suggest: { label: 'Só sugerir', hint: 'A IA escreve, você copia e envia.' },
+  approve: { label: 'Aprovar antes', hint: 'A IA rascunha e envia após seu ok.' },
+  auto: { label: 'Responder sozinho', hint: 'A IA responde na hora; te chama só no que for sensível.' },
+}
+
+export interface WhatsAppDemo {
+  conversations: DemoWaConversation[]
+  knowledge: { faq: string[]; products: string[] }
+  followUps: FollowUpItem[]
+  handoff: { autonomy: AutonomyLevel; activeFrom: string; activeTo: string }
+}
 
 export function buildWhatsAppDemo(company: Pick<CompanyData, 'id' | 'business_name' | 'business_type'>): WhatsAppDemo {
   const biz = company.business_name || 'sua empresa'
@@ -149,5 +168,15 @@ export function buildWhatsAppDemo(company: Pick<CompanyData, 'id' | 'business_na
     products: [`Pacote básico da ${biz}`, 'Plano mensal (R$ 197)', 'Plano Pro', `Serviços avulsos de ${type}`],
   }
 
-  return { conversations, knowledge }
+  const followUps: FollowUpItem[] = [
+    { id: 'fu_1', name: 'Gustavo Dias', channel: 'WhatsApp', lastContact: 'há 2 dias', temperature: 'quente', reason: 'Pediu orçamento e não respondeu depois do valor.', draft: `Oi, Gustavo! Passando pra saber se ficou alguma dúvida sobre o orçamento 😊 Se quiser, consigo segurar a condição até amanhã. Quer que eu reserve?` },
+    { id: 'fu_2', name: 'Helena Martins', channel: 'Instagram', lastContact: 'há 3 dias', temperature: 'morno', reason: 'Demonstrou interesse mas sumiu antes de agendar.', draft: `Oi, Helena! Vi que você tinha interesse em conhecer a ${biz}. Tenho um horário essa semana — quer que eu te mostre como funciona, sem compromisso?` },
+    { id: 'fu_3', name: 'Rafael Pinto', channel: 'WhatsApp', lastContact: 'há 5 dias', temperature: 'morno', reason: 'Conversou, pediu pra pensar e não voltou.', draft: `Oi, Rafael! Tudo certo? Fiquei à disposição pra qualquer dúvida sobre o que conversamos. Posso te ajudar a decidir?` },
+    { id: 'fu_4', name: 'Beatriz Nogueira', channel: 'Anúncio Meta', lastContact: 'há 6 dias', temperature: 'frio', reason: 'Clicou no anúncio, mandou "oi" e não seguiu.', draft: `Oi, Beatriz! Você chegou até a gente pelo anúncio 🙌 Ainda dá tempo de aproveitar. Quer que eu te explique rapidinho como funciona?` },
+  ]
+
+  return {
+    conversations, knowledge, followUps,
+    handoff: { autonomy: 'approve', activeFrom: '08:00', activeTo: '20:00' },
+  }
 }

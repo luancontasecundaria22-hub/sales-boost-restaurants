@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { CompanyData } from '../../../contexts/CompanyContext'
 import { CARD, MUTED, BORDER, D } from './shared'
-import { buildWhatsAppDemo, WA_STATUS_META, type DemoWaConversation } from './salesDemo'
+import { buildWhatsAppDemo, WA_STATUS_META, AUTONOMY_META, TEMP_META, type DemoWaConversation, type AutonomyLevel, type FollowUpItem } from './salesDemo'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -15,17 +15,111 @@ function StatusBadge({ status }: { status: DemoWaConversation['status'] }) {
   )
 }
 
+function Chip({ text }: { text: string }) {
+  return <span style={{ fontSize: '11px', color: 'white', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '99px', padding: '5px 11px' }}>{text}</span>
+}
+
+// Painel de controle do agente de atendimento — nível de autonomia + horário
+// de atendimento + pausa geral (humano assume). Mesmo espírito do handoff do
+// Telegram, agora no WhatsApp. Estado local (demo).
+function ControlBar({ autonomy, setAutonomy, from, to, setFrom, setTo, paused, setPaused }: {
+  autonomy: AutonomyLevel; setAutonomy: (a: AutonomyLevel) => void
+  from: string; to: string; setFrom: (v: string) => void; setTo: (v: string) => void
+  paused: boolean; setPaused: (v: boolean) => void
+}) {
+  const timeStyle = { padding: '6px 8px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, borderRadius: '8px', color: 'white', fontSize: '12px', outline: 'none', fontFamily: D } as const
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '13px', padding: '15px 17px', display: 'flex', flexWrap: 'wrap', gap: '18px', alignItems: 'center' }}>
+      <div>
+        <div style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '7px' }}>Nível de autonomia</div>
+        <div style={{ display: 'inline-flex', gap: '4px', padding: '3px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '9px' }}>
+          {(Object.keys(AUTONOMY_META) as AutonomyLevel[]).map(a => {
+            const on = autonomy === a
+            return (
+              <button key={a} onClick={() => setAutonomy(a)} title={AUTONOMY_META[a].hint}
+                style={{ padding: '6px 12px', background: on ? 'rgba(255,109,41,0.12)' : 'transparent', border: `1px solid ${on ? 'rgba(255,109,41,0.35)' : 'transparent'}`, borderRadius: '7px', cursor: 'pointer', fontFamily: D, fontSize: '11.5px', fontWeight: 700, color: on ? ORANGE : MUTED }}>
+                {AUTONOMY_META[a].label}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ fontSize: '10.5px', color: MUTED, marginTop: '6px' }}>{AUTONOMY_META[autonomy].hint}</div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '7px' }}>Horário de atendimento</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
+          <input type="time" value={from} onChange={e => setFrom(e.target.value)} style={timeStyle} />
+          <span style={{ color: MUTED, fontSize: '12px' }}>até</span>
+          <input type="time" value={to} onChange={e => setTo(e.target.value)} style={timeStyle} />
+        </div>
+        <div style={{ fontSize: '10.5px', color: MUTED, marginTop: '6px' }}>Fora do horário, a IA avisa que responde em breve.</div>
+      </div>
+
+      <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: '9px', padding: '9px 14px', background: paused ? 'rgba(248,113,113,0.08)' : 'rgba(255,255,255,0.03)', border: `1px solid ${paused ? 'rgba(248,113,113,0.3)' : BORDER}`, borderRadius: '10px', cursor: 'pointer' }}>
+        <input type="checkbox" checked={paused} onChange={e => setPaused(e.target.checked)} style={{ width: '16px', height: '16px', accentColor: '#f87171' }} />
+        <div>
+          <div style={{ fontSize: '12.5px', fontWeight: 700, color: paused ? '#f87171' : 'white' }}>Pausar IA {paused ? '(humano no comando)' : ''}</div>
+          <div style={{ fontSize: '10.5px', color: MUTED }}>Para tudo e assume as conversas manualmente.</div>
+        </div>
+      </label>
+    </div>
+  )
+}
+
+function FollowUpCard({ item, done, onApprove }: { item: FollowUpItem; done: boolean; onApprove: () => void }) {
+  const t = TEMP_META[item.temperature]
+  return (
+    <div style={{ background: CARD, border: `1px solid ${done ? 'rgba(74,222,128,0.25)' : BORDER}`, borderRadius: '12px', padding: '14px 15px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '7px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'white' }}>{item.name}</span>
+        <span style={{ fontSize: '9.5px', fontWeight: 700, color: t.color, border: `1px solid ${t.color}44`, borderRadius: '99px', padding: '2px 8px' }}>{t.label}</span>
+        <span style={{ fontSize: '10px', color: MUTED }}>{item.channel} · {item.lastContact}</span>
+      </div>
+      <div style={{ fontSize: '11px', color: MUTED, lineHeight: 1.5, marginBottom: '9px' }}>💤 {item.reason}</div>
+      <div style={{ padding: '10px 12px', background: 'rgba(255,109,41,0.05)', border: '1px solid rgba(255,109,41,0.15)', borderRadius: '9px', fontSize: '12px', color: 'white', lineHeight: 1.55, marginBottom: '10px' }}>
+        <span style={{ fontSize: '9px', fontWeight: 700, color: ORANGE, display: 'block', marginBottom: '3px' }}>🤖 RASCUNHO DO AGENTE</span>
+        {item.draft}
+      </div>
+      {done ? (
+        <div style={{ fontSize: '11.5px', fontWeight: 700, color: GREEN }}>✓ Aprovado — envia no próximo horário de atendimento</div>
+      ) : (
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={onApprove} style={{ padding: '8px 15px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: D }}>Aprovar e enviar</button>
+          <button disabled style={{ padding: '8px 15px', background: 'transparent', color: MUTED, fontWeight: 700, fontSize: '12px', border: `1px solid ${BORDER}`, borderRadius: '8px', cursor: 'not-allowed', fontFamily: D, opacity: 0.7 }}>Editar</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'id' | 'business_name' | 'business_type'> }) {
   const demo = useMemo(() => buildWhatsAppDemo(company), [company])
   const [activeId, setActiveId] = useState(demo.conversations[0]?.id ?? '')
-  const [transferred, setTransferred] = useState<Set<string>>(new Set())
+  const [transferred, setTransferred] = useState<Set<string>>(new Set(['wa_3']))
   const active = demo.conversations.find(c => c.id === activeId) ?? demo.conversations[0]
+
+  const [autonomy, setAutonomy] = useState<AutonomyLevel>(demo.handoff.autonomy)
+  const [from, setFrom] = useState(demo.handoff.activeFrom)
+  const [to, setTo] = useState(demo.handoff.activeTo)
+  const [paused, setPaused] = useState(false)
+  const [approved, setApproved] = useState<Set<string>>(new Set())
+
+  const toggleTransfer = (id: string, v: boolean) => setTransferred(prev => { const n = new Set(prev); v ? n.add(id) : n.delete(id); return n })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
       <div style={{ padding: '12px 16px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
-        ⏳ <strong>Modo demonstração.</strong> Com a WhatsApp Business API verificada, o agente responde dúvidas, apresenta produtos, qualifica o interesse e passa pro humano quando precisa — aprendendo com o histórico de conversas e o FAQ da empresa. Você define o nível de autonomia (sugerir, aprovar ou responder sozinho).
+        ⏳ <strong>Modo demonstração.</strong> Com a WhatsApp Business API verificada, o agente responde, qualifica, agenda e <strong>passa pro humano quando precisa</strong> — e reaquece clientes que sumiram com <strong>follow-up automático</strong> (sempre esperando sua aprovação). Você controla a autonomia e o horário aqui embaixo.
       </div>
+
+      <ControlBar autonomy={autonomy} setAutonomy={setAutonomy} from={from} to={to} setFrom={setFrom} setTo={setTo} paused={paused} setPaused={setPaused} />
+
+      {paused && (
+        <div style={{ padding: '11px 15px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: '11px', fontSize: '12px', color: 'white' }}>
+          🙋 <strong style={{ color: '#f87171' }}>IA pausada.</strong> Você assumiu o atendimento — o agente não responde nem envia follow-up até você religar.
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 0.9fr) minmax(0, 1.6fr)', gap: '14px', alignItems: 'start' }}>
         {/* Lista de conversas */}
@@ -33,6 +127,7 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
           <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>Conversas</div>
           {demo.conversations.map(c => {
             const isActive = c.id === active?.id
+            const isHuman = transferred.has(c.id)
             return (
               <button key={c.id} onClick={() => setActiveId(c.id)}
                 style={{ textAlign: 'left', background: CARD, border: `1px solid ${isActive ? 'rgba(255,109,41,0.4)' : BORDER}`, borderRadius: '10px', padding: '11px 13px', cursor: 'pointer', fontFamily: D }}>
@@ -41,7 +136,7 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
                   {c.unread > 0 && <span style={{ fontSize: '9px', fontWeight: 700, background: ORANGE, color: '#000', borderRadius: '99px', padding: '1px 6px' }}>{c.unread}</span>}
                 </div>
                 <div style={{ fontSize: '11px', color: MUTED, lineHeight: 1.4, marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.lastPreview}</div>
-                <StatusBadge status={c.status} />
+                {isHuman ? <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#FBBF24' }}>🙋 com humano</span> : <StatusBadge status={c.status} />}
               </button>
             )
           })}
@@ -52,7 +147,7 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
           <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '13px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '13px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
               <span style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>💬 {active.name}</span>
-              <StatusBadge status={active.status} />
+              {transferred.has(active.id) ? <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#FBBF24' }}>🙋 com humano</span> : <StatusBadge status={active.status} />}
             </div>
 
             <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '9px', maxHeight: '340px', overflowY: 'auto' }}>
@@ -72,21 +167,43 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
 
             <div style={{ padding: '12px 16px', borderTop: `1px solid ${BORDER}` }}>
               {transferred.has(active.id) ? (
-                <div style={{ fontSize: '11.5px', color: GREEN, textAlign: 'center' }}>✓ Conversa transferida para um atendente humano</div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '11.5px', color: '#FBBF24' }}>🙋 Você assumiu esta conversa.</span>
+                  <button onClick={() => toggleTransfer(active.id, false)}
+                    style={{ padding: '8px 14px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', color: GREEN, fontWeight: 700, fontSize: '11px', borderRadius: '9px', cursor: 'pointer', fontFamily: D }}>
+                    ↩ Devolver pra IA
+                  </button>
+                </div>
               ) : (
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <div style={{ flex: 1, padding: '9px 12px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '9px', fontSize: '11.5px', color: 'rgba(255,255,255,0.3)' }}>
-                    O agente responde automaticamente…
+                    {paused ? 'IA pausada — digite pra responder…' : 'O agente responde automaticamente…'}
                   </div>
-                  <button onClick={() => setTransferred(prev => new Set(prev).add(active.id))}
+                  <button onClick={() => toggleTransfer(active.id, true)}
                     style={{ padding: '9px 14px', background: 'transparent', border: `1px solid ${BORDER}`, color: MUTED, fontWeight: 700, fontSize: '11px', borderRadius: '9px', cursor: 'pointer', fontFamily: D, flexShrink: 0 }}>
-                    Transferir p/ humano
+                    Assumir (humano)
                   </button>
                 </div>
               )}
             </div>
           </div>
         )}
+      </div>
+
+      {/* Follow-up */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+          <div style={{ fontSize: '13.5px', fontWeight: 800, color: 'white', fontFamily: D }}>🔁 Fila de follow-up</div>
+          <span style={{ fontSize: '10px', fontWeight: 700, color: ORANGE, background: 'rgba(255,109,41,0.1)', borderRadius: '99px', padding: '2px 9px' }}>{demo.followUps.length - approved.size} esperando você</span>
+        </div>
+        <div style={{ fontSize: '11.5px', color: MUTED, marginBottom: '13px', lineHeight: 1.5 }}>
+          Clientes que esfriaram. O agente já rascunhou a mensagem pra reaquecer cada um — você aprova e ele envia (nunca sozinho).
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '11px' }}>
+          {demo.followUps.map(f => (
+            <FollowUpCard key={f.id} item={f} done={approved.has(f.id)} onApprove={() => setApproved(prev => new Set(prev).add(f.id))} />
+          ))}
+        </div>
       </div>
 
       {/* O que o agente aprende */}
@@ -109,11 +226,5 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
         </div>
       </div>
     </div>
-  )
-}
-
-function Chip({ text }: { text: string }) {
-  return (
-    <span style={{ fontSize: '11px', color: 'white', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '99px', padding: '5px 11px' }}>{text}</span>
   )
 }
