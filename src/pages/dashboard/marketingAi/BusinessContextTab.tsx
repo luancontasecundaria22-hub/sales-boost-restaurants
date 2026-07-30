@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CompanyData } from '../../../contexts/CompanyContext'
 import { supabase } from '../../../lib/supabase'
+import BrandDnaPanel from './BrandDnaPanel'
 import { CARD, MUTED, BORDER, D } from './shared'
 import {
   buildContextDemo, CONTEXT_CATEGORY_META, IMPORTANCE_META,
@@ -107,6 +108,8 @@ export default function BusinessContextTab({ company }: { company: Pick<CompanyD
       <div style={{ padding: '12px 16px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '18px' }}>
         🧠 Aqui você ensina à IA o que <strong>nenhuma integração consegue saber</strong> — decisões, planos, mudanças na equipe, foco da temporada. Vira a <strong>memória estratégica</strong> do negócio e passa a influenciar toda campanha, conteúdo e recomendação do agente.
       </div>
+
+      <BrandDnaPanel company={company} />
 
       {isPreview && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '9px', padding: '10px 14px', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.5, marginBottom: '16px' }}>

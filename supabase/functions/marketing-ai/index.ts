@@ -49,21 +49,34 @@ interface Company {
 // não estourar tokens. É o "cérebro do negócio": entender quem é a empresa.
 async function loadBusinessContext(admin: SupaClient, companyId: string): Promise<string> {
   const today = new Date().toISOString().slice(0, 10)
-  const { data } = await admin
-    .from('business_context')
-    .select('text, category, importance, effective_date, expiration_date')
-    .eq('company_id', companyId)
-    .eq('archived', false)
-    .order('created_at', { ascending: false })
-    .limit(30)
-  if (!data?.length) return ''
+  const [notesRes, dnaRes] = await Promise.all([
+    admin.from('business_context').select('text, category, importance, effective_date, expiration_date').eq('company_id', companyId).eq('archived', false).order('created_at', { ascending: false }).limit(30),
+    admin.from('brand_dna').select('voice, tone, avoid, colors, fonts, design_notes').eq('company_id', companyId).maybeSingle(),
+  ])
+  const parts: string[] = []
+
+  // DNA da marca (voz/tom/design) — como a marca soa e se apresenta.
+  const d = dnaRes.data as { voice?: string; tone?: string; avoid?: string; colors?: string[]; fonts?: string; design_notes?: string } | null
+  if (d) {
+    const dna: string[] = []
+    if (d.voice) dna.push(`Voz: ${d.voice}`)
+    if (d.tone) dna.push(`Tom: ${d.tone}`)
+    if (d.avoid) dna.push(`Nunca faz/diz: ${d.avoid}`)
+    if (d.colors?.length) dna.push(`Cores da marca: ${d.colors.join(', ')}`)
+    if (d.fonts) dna.push(`Fontes: ${d.fonts}`)
+    if (d.design_notes) dna.push(`Direção de arte: ${d.design_notes}`)
+    if (dna.length) parts.push(`DNA da marca (respeite em toda peça):\n${dna.map(x => `- ${x}`).join('\n')}`)
+  }
+
+  // Notas estratégicas ativas e vigentes hoje, mais importantes primeiro.
   const order: Record<string, number> = { high: 0, medium: 1, low: 2 }
-  const active = (data as { text: string; category: string; importance: string; effective_date: string | null; expiration_date: string | null }[])
+  const active = (notesRes.data as { text: string; category: string; importance: string; effective_date: string | null; expiration_date: string | null }[] | null ?? [])
     .filter(n => (!n.effective_date || n.effective_date <= today) && (!n.expiration_date || n.expiration_date >= today))
     .sort((a, b) => (order[a.importance] ?? 1) - (order[b.importance] ?? 1))
     .slice(0, 15)
-  if (!active.length) return ''
-  return active.map(n => `- [${n.category}${n.importance === 'high' ? ' · prioridade alta' : ''}] ${n.text}`).join('\n')
+  if (active.length) parts.push(active.map(n => `- [${n.category}${n.importance === 'high' ? ' · prioridade alta' : ''}] ${n.text}`).join('\n'))
+
+  return parts.join('\n\n')
 }
 
 interface MarketingAiConfig {
