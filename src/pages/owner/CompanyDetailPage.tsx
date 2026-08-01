@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate, useParams } from 'react-router-dom'
+import CompanyAiControl from './CompanyAiControl'
 
 const ORANGE = '#FF6D29'
 const BG = '#0E0B0A'
@@ -456,12 +457,14 @@ export default function CompanyDetailPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '28px' }}>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '20px' }}>
           <button onClick={save} disabled={saving}
             style={{ padding: '10px 22px', background: saved ? '#4ade80' : ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: 'pointer' }}>
             {saved ? '✓ Salvo' : saving ? 'Salvando...' : 'Salvar alterações'}
           </button>
         </div>
+
+        <CompanyAiControl companyId={detail.id} plan={detail.plan ?? 'free'} />
 
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '22px' }}>
           <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>

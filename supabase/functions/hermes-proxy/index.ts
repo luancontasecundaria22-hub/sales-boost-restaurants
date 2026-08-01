@@ -801,6 +801,36 @@ async function getTodayUsage(admin: SupaClient, role?: AgentRole): Promise<{ cal
   return { calls: count ?? 0, estimatedCostUsd: (totalTokens / 1000) * ESTIMATED_COST_PER_1K_TOKENS }
 }
 
+// ── Controle de custo da IA por empresa (herda do plano) ─────────────────
+// Resolve as settings efetivas: company_ai_settings (override) ?? plano ?? modo.
+// O ciclo automático respeita isto — pausa, frequência e orçamento por empresa.
+const MODE_FREQ_MIN: Record<string, number> = { economy: 360, balanced: 120, performance: 30, unlimited: 15 }
+interface ResolvedAiSettings { paused: boolean; monthlyBudget: number; dailyBudget: number; frequencyMin: number; lastCycleAt: string | null }
+
+async function resolveAiSettings(admin: SupaClient, company: Company): Promise<ResolvedAiSettings> {
+  const plan = (company.plan ?? 'free').toLowerCase()
+  const [planRes, coRes] = await Promise.all([
+    admin.from('plan_ai_defaults').select('mode, monthly_budget_usd, daily_budget_usd, think_frequency_min').eq('plan', plan).maybeSingle(),
+    admin.from('company_ai_settings').select('mode, monthly_budget_usd, daily_budget_usd, think_frequency_min, paused, last_cycle_at').eq('company_id', company.id).maybeSingle(),
+  ])
+  const pd = (planRes.data ?? {}) as { mode?: string; monthly_budget_usd?: number; daily_budget_usd?: number; think_frequency_min?: number }
+  const co = (coRes.data ?? null) as { mode?: string | null; monthly_budget_usd?: number | null; daily_budget_usd?: number | null; think_frequency_min?: number | null; paused?: boolean; last_cycle_at?: string | null } | null
+  const mode = co?.mode ?? pd.mode ?? 'balanced'
+  return {
+    paused: co?.paused ?? false,
+    monthlyBudget: Number(co?.monthly_budget_usd ?? pd.monthly_budget_usd ?? 0) || 0,
+    dailyBudget: Number(co?.daily_budget_usd ?? pd.daily_budget_usd ?? 0) || 0,
+    frequencyMin: Number(co?.think_frequency_min ?? pd.think_frequency_min ?? MODE_FREQ_MIN[mode] ?? 120),
+    lastCycleAt: co?.last_cycle_at ?? null,
+  }
+}
+
+async function getCompanyCostSince(admin: SupaClient, companyId: string, sinceIso: string): Promise<number> {
+  const { data } = await admin.from('agent_performance').select('tokens_used').eq('company_id', companyId).gte('created_at', sinceIso)
+  const tokens = (data ?? []).reduce((s: number, r: { tokens_used: number | null }) => s + (Number(r.tokens_used) || 0), 0)
+  return (tokens / 1000) * ESTIMATED_COST_PER_1K_TOKENS
+}
+
 // ── Shared chat turn (used by both the interactive/JWT path and Telegram) ──
 // Quota check + reset, run the conversation, persist everything. The two
 // callers only differ in how they found `company` and what they do with the
@@ -916,7 +946,7 @@ Deno.serve(async (req) => {
 
       const { data: companies } = await admin
         .from('companies')
-        .select('id, business_name, business_type, city, goal, social_data, telegram_chat_id, notification_prefs')
+        .select('id, business_name, business_type, city, goal, plan, social_data, telegram_chat_id, notification_prefs')
         .eq('active', true)
 
       const activeRoles = await getActiveAgentRoles(admin)
@@ -934,6 +964,35 @@ Deno.serve(async (req) => {
 
         company.businessContext = await loadBusinessContext(admin, company.id)
 
+        // Controle de custo por empresa (herda do plano). Pausa, respeita a
+        // frequência de raciocínio e o orçamento mensal/diário — o gasto para
+        // sozinho quando estoura, sem nunca virar decisão inventada.
+        const aiSettings = await resolveAiSettings(admin, company)
+        if (aiSettings.paused) {
+          results.push({ company_id: company.id, role: null, skipped: true, posts_created: 0, reasoning: 'IA pausada pra esta empresa no painel de custo.' })
+          continue
+        }
+        if (aiSettings.lastCycleAt && (Date.now() - new Date(aiSettings.lastCycleAt).getTime()) < aiSettings.frequencyMin * 60000) {
+          results.push({ company_id: company.id, role: null, skipped: true, posts_created: 0, reasoning: `Ainda dentro do intervalo de raciocínio (${aiSettings.frequencyMin}min).` })
+          continue
+        }
+        if (aiSettings.monthlyBudget > 0) {
+          const ms = new Date(); ms.setUTCDate(1); ms.setUTCHours(0, 0, 0, 0)
+          const monthCost = await getCompanyCostSince(admin, company.id, ms.toISOString())
+          if (monthCost >= aiSettings.monthlyBudget) {
+            results.push({ company_id: company.id, role: null, skipped: true, posts_created: 0, reasoning: `Orçamento mensal de IA atingido ($${monthCost.toFixed(2)}/$${aiSettings.monthlyBudget}).` })
+            continue
+          }
+        }
+        if (aiSettings.dailyBudget > 0) {
+          const ds = new Date(); ds.setUTCHours(0, 0, 0, 0)
+          const dayCost = await getCompanyCostSince(admin, company.id, ds.toISOString())
+          if (dayCost >= aiSettings.dailyBudget) {
+            results.push({ company_id: company.id, role: null, skipped: true, posts_created: 0, reasoning: `Orçamento diário de IA atingido ($${dayCost.toFixed(2)}/$${aiSettings.dailyBudget}).` })
+            continue
+          }
+        }
+
         let decision: OrchestratorDecision
         try {
           decision = await decideRolesToRun(hermesUrl, hermesApiKey, company, admin, config, marketingSettings)
@@ -950,6 +1009,10 @@ Deno.serve(async (req) => {
           company_id: company.id, agent_role: 'hermes', task_key: 'orchestrator_decision',
           task_description: decision.reasoning.slice(0, 200), latency_ms: 0, tokens_used: decision.tokensUsed, success: true,
         }).catch(() => { /* non-fatal */ })
+
+        // Marca que a empresa "pensou" agora — a próxima rodada respeita a
+        // frequência configurada (não roda de novo antes do intervalo).
+        await admin.from('company_ai_settings').upsert({ company_id: company.id, last_cycle_at: new Date().toISOString() }, { onConflict: 'company_id' }).catch(() => { /* non-fatal */ })
 
         // max_active_agents limita quantos agentes rodam por ciclo — hoje só
         // existe o Agente Geral, mas isso já deixa pronto pro dia que existir
