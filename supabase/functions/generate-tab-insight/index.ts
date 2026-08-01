@@ -97,8 +97,16 @@ async function callClaude(prompt: string, anthropicKey: string): Promise<string>
   return (data.content?.[0]?.text ?? '').replace(/```(?:json)?\n?/g, '').trim()
 }
 
-async function generateReport(admin: SupaClient, company: CompanyRow, tabKey: TabKey, anthropicKey: string): Promise<{ summary: string; suggestions: string[] }> {
-  const context = await gatherContext(admin, company, tabKey)
+// Impressão digital do dado-fonte. Se não mudou, não vale gastar token
+// reprocessando — memory-first: pensa de novo só quando algo muda.
+function hashData(obj: unknown): string {
+  const s = JSON.stringify(obj)
+  let h = 5381
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36) + ':' + s.length.toString(36)
+}
+
+async function generateReport(company: CompanyRow, tabKey: TabKey, anthropicKey: string, context: Record<string, unknown>): Promise<{ summary: string; suggestions: string[] }> {
   const prompt = `Você é o consultor de crescimento de "${company.business_name}" (${company.business_type ?? 'negócio'}).
 
 Área: ${TAB_LABELS[tabKey]}
@@ -150,10 +158,17 @@ Deno.serve(async (req) => {
       for (const company of (companies ?? []) as CompanyRow[]) {
         for (const tabKey of ALL_TAB_KEYS) {
           try {
-            const { data: existing } = await admin.from('insights_reports').select('created_at').eq('company_id', company.id).eq('tab_key', tabKey).maybeSingle()
-            if (existing?.created_at && existing.created_at > sevenDaysAgo) { skipped++; continue }
-            const report = await generateReport(admin, company, tabKey, anthropicKey)
-            await admin.from('insights_reports').upsert({ company_id: company.id, tab_key: tabKey, summary: report.summary, suggestions: report.suggestions, created_at: new Date().toISOString() }, { onConflict: 'company_id,tab_key' })
+            // Junta o dado-fonte e tira a impressão digital ANTES de chamar a IA.
+            const context = await gatherContext(admin, company, tabKey)
+            const dataHash = hashData(context)
+            const { data: existing } = await admin.from('insights_reports').select('created_at, data_hash').eq('company_id', company.id).eq('tab_key', tabKey).maybeSingle()
+            // Dado não mudou desde o último relatório → reaproveita, não gasta token.
+            const unchanged = existing?.data_hash != null && existing.data_hash === dataHash
+            // Linhas antigas sem hash: mantém a janela de 7 dias até re-hashear.
+            const legacyFresh = existing?.created_at && existing.data_hash == null && existing.created_at > sevenDaysAgo
+            if (unchanged || legacyFresh) { skipped++; continue }
+            const report = await generateReport(company, tabKey, anthropicKey, context)
+            await admin.from('insights_reports').upsert({ company_id: company.id, tab_key: tabKey, summary: report.summary, suggestions: report.suggestions, data_hash: dataHash, created_at: new Date().toISOString() }, { onConflict: 'company_id,tab_key' })
             generated++
           } catch (e) { console.error(`generate-tab-insight cron ${company.id}/${tabKey}:`, e) }
         }
@@ -174,9 +189,12 @@ Deno.serve(async (req) => {
     const { data: company } = await admin.from('companies').select(COMPANY_FIELDS).eq('user_id', user.id).maybeSingle()
     if (!company) return json({ error: 'Empresa não encontrada' }, 404)
 
-    const report = await generateReport(admin, company as CompanyRow, tabKey, anthropicKey)
+    // Interativo: o usuário clicou em "atualizar", então geramos na hora —
+    // mas já guardamos a impressão digital pra o cron não refazer à toa depois.
+    const context = await gatherContext(admin, company as CompanyRow, tabKey)
+    const report = await generateReport(company as CompanyRow, tabKey, anthropicKey, context)
     const { data: saved, error: saveErr } = await admin.from('insights_reports')
-      .upsert({ company_id: company.id, tab_key: tabKey, summary: report.summary, suggestions: report.suggestions, created_at: new Date().toISOString() }, { onConflict: 'company_id,tab_key' })
+      .upsert({ company_id: company.id, tab_key: tabKey, summary: report.summary, suggestions: report.suggestions, data_hash: hashData(context), created_at: new Date().toISOString() }, { onConflict: 'company_id,tab_key' })
       .select('summary, suggestions, created_at').single()
     if (saveErr) throw new Error(saveErr.message)
 
