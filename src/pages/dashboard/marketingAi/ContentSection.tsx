@@ -3,13 +3,15 @@ import type { CompanyData } from '../../../contexts/CompanyContext'
 import { BORDER, MUTED, D } from './shared'
 import ContentAgentTab from './ContentAgentTab'
 import CampaignsTab from './CampaignsTab'
+import StoriesTab from './StoriesTab'
 
 const ORANGE = '#FF6D29'
 
-type Mode = 'organico' | 'campanhas'
+type Mode = 'organico' | 'campanhas' | 'stories'
 
 const TABS: { key: Mode; icon: string; label: string; sub: string }[] = [
   { key: 'organico', icon: '✍️', label: 'Orgânico', sub: 'Calendário, ideias e criativos' },
+  { key: 'stories', icon: '📖', label: 'Stories', sub: 'Stories + Story Ads (demo)' },
   { key: 'campanhas', icon: '🎯', label: 'Campanhas', sub: 'Mídia paga com funil (demo)' },
 ]
 
@@ -37,7 +39,7 @@ export default function ContentSection({ company }: { company: Pick<CompanyData,
         })}
       </div>
 
-      {mode === 'organico' ? <ContentAgentTab company={company} /> : <CampaignsTab company={company} />}
+      {mode === 'organico' ? <ContentAgentTab company={company} /> : mode === 'stories' ? <StoriesTab company={company} /> : <CampaignsTab company={company} />}
     </div>
   )
 }
