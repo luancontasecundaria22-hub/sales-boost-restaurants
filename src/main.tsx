@@ -31,6 +31,9 @@ import AgentsControlCenterPage from './pages/owner/AgentsControlCenterPage.tsx'
 import OwnerSettingsPage from './pages/owner/OwnerSettingsPage.tsx'
 import OnboardingPage from './pages/onboarding/OnboardingPage.tsx'
 import DiagnosticoPage from './pages/diagnostico/DiagnosticoPage.tsx'
+import PrivacyPolicyPage from './pages/legal/PrivacyPolicyPage.tsx'
+import TermsOfUsePage from './pages/legal/TermsOfUsePage.tsx'
+import CookieConsent from './components/CookieConsent.tsx'
 
 const Spinner = () => (
   <div style={{ minHeight: '100vh', background: '#0E0B0A', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -117,6 +120,8 @@ function RouterRoot() {
       <Route path="/jarvis" element={<ClientRoute><JarvisPage /></ClientRoute>} />
       <Route path="/onboarding" element={<OnboardingPage />} />
       <Route path="/diagnostico/:id" element={<DiagnosticoPage />} />
+      <Route path="/privacidade" element={<PrivacyPolicyPage />} />
+      <Route path="/termos" element={<TermsOfUsePage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
@@ -128,6 +133,7 @@ createRoot(document.getElementById('root')!).render(
       <AuthProvider>
         <CompanyProvider>
           <RouterRoot />
+          <CookieConsent />
         </CompanyProvider>
       </AuthProvider>
     </BrowserRouter>

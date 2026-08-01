@@ -785,7 +785,15 @@ function SiteFooter({ lang }: { lang: Lang }) {
           </div>
         </div>
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>{tx.copy}</p>
+          <div className="flex items-center gap-5 flex-wrap justify-center">
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>{tx.copy}</p>
+            <Link to="/privacidade" className="text-xs transition-colors" style={{ color: 'rgba(255,255,255,0.4)', textDecoration: 'none' }} onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}>
+              Política de Privacidade
+            </Link>
+            <Link to="/termos" className="text-xs transition-colors" style={{ color: 'rgba(255,255,255,0.4)', textDecoration: 'none' }} onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}>
+              Termos de Uso
+            </Link>
+          </div>
           <div className="flex gap-3">
             {['𝕏', 'in', 'ig'].map((s) => (
               <div key={s} className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold cursor-pointer" style={{ background: 'rgba(255,255,255,0.05)', color: MUTED }}>{s}</div>

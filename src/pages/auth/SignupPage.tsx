@@ -38,6 +38,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
+  const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { signUp } = useAuth()
@@ -48,6 +49,7 @@ export default function SignupPage() {
     setError('')
     if (password.length < 6) return setError('Senha deve ter pelo menos 6 caracteres.')
     if (password !== confirm) return setError('As senhas não coincidem.')
+    if (!accepted) return setError('Você precisa aceitar os Termos de Uso e a Política de Privacidade.')
     setLoading(true)
 
     const { error: signUpErr } = await signUp(email, password)
@@ -108,6 +110,17 @@ export default function SignupPage() {
             <Field label="E-mail" type="email" value={email} onChange={setEmail} placeholder="seu@email.com" />
             <Field label="Senha" type="password" value={password} onChange={setPassword} placeholder="Mínimo 6 caracteres" />
             <Field label="Confirmar senha" type="password" value={confirm} onChange={setConfirm} placeholder="••••••••" />
+
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', margin: '4px 0 16px', cursor: 'pointer' }}>
+              <input type="checkbox" checked={accepted} onChange={e => setAccepted(e.target.checked)}
+                style={{ width: '16px', height: '16px', accentColor: ORANGE, marginTop: '2px', flexShrink: 0, cursor: 'pointer' }} />
+              <span style={{ fontSize: '12.5px', color: MUTED, lineHeight: 1.5 }}>
+                Li e aceito os{' '}
+                <Link to="/termos" target="_blank" style={{ color: ORANGE, textDecoration: 'none', fontWeight: 600 }}>Termos de Uso</Link>
+                {' '}e a{' '}
+                <Link to="/privacidade" target="_blank" style={{ color: ORANGE, textDecoration: 'none', fontWeight: 600 }}>Política de Privacidade</Link>.
+              </span>
+            </label>
 
             {error && (
               <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '13px', color: '#f87171' }}>
