@@ -29,6 +29,7 @@ import HermesControlCenterPage from './pages/owner/HermesControlCenterPage.tsx'
 import HermesStrategyPage from './pages/owner/HermesStrategyPage.tsx'
 import AgentsControlCenterPage from './pages/owner/AgentsControlCenterPage.tsx'
 import OwnerSettingsPage from './pages/owner/OwnerSettingsPage.tsx'
+import PlatformHealthPage from './pages/owner/PlatformHealthPage.tsx'
 import OnboardingPage from './pages/onboarding/OnboardingPage.tsx'
 import DiagnosticoPage from './pages/diagnostico/DiagnosticoPage.tsx'
 import PrivacyPolicyPage from './pages/legal/PrivacyPolicyPage.tsx'
@@ -90,6 +91,7 @@ function RouterRoot() {
       <Route path="/owner/hermes/estrategia" element={<OwnerRoute><HermesStrategyPage /></OwnerRoute>} />
       <Route path="/owner/agentes" element={<OwnerRoute><AgentsControlCenterPage /></OwnerRoute>} />
       <Route path="/owner/settings" element={<OwnerRoute><OwnerSettingsPage /></OwnerRoute>} />
+      <Route path="/owner/health" element={<OwnerRoute><PlatformHealthPage /></OwnerRoute>} />
 
       {/* Client dashboard */}
       <Route

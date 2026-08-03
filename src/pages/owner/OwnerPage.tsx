@@ -103,6 +103,12 @@ export default function OwnerPage() {
             🎯 Leads
           </button>
           <button
+            onClick={() => navigate('/owner/health')}
+            style={{ padding: '7px 16px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: MUTED, fontSize: '12px', cursor: 'pointer' }}
+          >
+            🛡️ Saúde
+          </button>
+          <button
             onClick={() => navigate('/owner/settings')}
             style={{ padding: '7px 16px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: MUTED, fontSize: '12px', cursor: 'pointer' }}
           >
