@@ -56,6 +56,9 @@ export default function MarketingAiSectionPage() {
   // Configurações → Agentes, o lar único de config do cliente. Deep links
   // antigos pra cá redirecionam pra lá.
   if (section === 'configuracao') return <Navigate to="/dashboard/settings?tab=agentes" replace />
+  // Conexões e Contexto do Negócio foram consolidados em Configurações.
+  if (section === 'conexoes') return <Navigate to="/dashboard/settings?tab=conexoes" replace />
+  if (section === 'context') return <Navigate to="/dashboard/settings?tab=contexto" replace />
 
   const accessToken = session?.access_token ?? ''
   const pendingContent = data.content.filter(c => c.status === 'idea' || c.status === 'draft').length

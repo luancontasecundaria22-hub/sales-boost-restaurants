@@ -21,12 +21,12 @@ const GROWTH_MODULES: ModuleDef[] = [
   { section: 'whatsapp', title: 'Atendimento WhatsApp', desc: 'Responde, qualifica interesse e passa pro humano quando precisa.', icon: '💬' },
 ]
 
-// Os 4 pilares de inteligência — a base que faz o agente entender o negócio.
+// Pilares de inteligência do hub. Conexões e Contexto do Negócio foram pra
+// Configurações (config do cliente num lugar só) — aqui ficam os que são
+// leitura/insight do agente.
 const INTEL_MODULES: ModuleDef[] = [
-  { section: 'conexoes', title: 'Conexões', desc: 'Liga Meta, WhatsApp, Google e loja — a base de dados do agente.', icon: '🔌' },
   { section: 'feedback', title: 'Feedback Loop', desc: 'Aprende seu cliente ideal (ICP) e refina sozinho.', icon: '🔁' },
   { section: 'insights', title: 'Insights', desc: 'Oportunidades de fora: eventos, datas, tendências, parcerias.', icon: '💡' },
-  { section: 'context', title: 'Contexto do Negócio', desc: 'Você ensina à IA o que nenhuma integração sabe.', icon: '🧠' },
   { section: 'saude-meta', title: 'Saúde da Meta', desc: 'Um score de 0 a 100: quão saudável está seu ecossistema na Meta e o que melhorar primeiro.', icon: '❤️‍🩹' },
 ]
 
@@ -98,7 +98,7 @@ export default function MarketingAiHubPage() {
           Inteligência do negócio
         </div>
         <p style={{ fontSize: '12px', color: MUTED, lineHeight: 1.6, marginBottom: '14px', maxWidth: '680px' }}>
-          Os pilares que fazem a IA entender seu negócio de verdade — <strong style={{ color: 'white' }}>dados</strong> (Conexões), o <strong style={{ color: 'white' }}>cliente ideal</strong> (Feedback Loop), as <strong style={{ color: 'white' }}>oportunidades de fora</strong> (Insights) e o que <strong style={{ color: 'white' }}>só você sabe</strong> (Contexto). Fechando, a <strong style={{ color: 'white' }}>Saúde da Meta</strong> mede tudo num único score e diz o que melhorar primeiro.
+          O que a IA usa pra entender seu negócio — o <strong style={{ color: 'white' }}>cliente ideal</strong> (Feedback Loop), as <strong style={{ color: 'white' }}>oportunidades de fora</strong> (Insights) e a <strong style={{ color: 'white' }}>Saúde da Meta</strong> num único score. <span style={{ color: 'rgba(255,255,255,0.5)' }}>As <strong>Conexões</strong> e o <strong>Contexto do Negócio</strong> agora ficam em Configurações.</span>
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: '12px' }}>
           {INTEL_MODULES.map((m, i) => (
