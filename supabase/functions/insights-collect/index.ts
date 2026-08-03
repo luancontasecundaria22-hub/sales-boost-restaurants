@@ -99,6 +99,12 @@ Deno.serve(async (req) => {
       TAVILY_API_KEY: Deno.env.get('TAVILY_API_KEY'), CRON_SECRET: Deno.env.get('CRON_SECRET'),
     }
     const admin = createClient(env.SUPABASE_URL!, env.SERVICE ?? env.ANON!)
+    // Fallback: se a secret não estiver no ambiente, lê do _app_config (mesmo
+    // lugar seguro onde o cron_secret já mora). Permite ligar sem redeploy.
+    if (!env.TAVILY_API_KEY) {
+      const { data: cfg } = await admin.from('_app_config').select('value').eq('key', 'tavily_api_key').maybeSingle()
+      if (cfg?.value) env.TAVILY_API_KEY = String(cfg.value)
+    }
     const body = await req.json().catch(() => ({})) as Record<string, unknown>
     const isCron = env.CRON_SECRET && body.cron_secret === env.CRON_SECRET
     const force = body.force === true
