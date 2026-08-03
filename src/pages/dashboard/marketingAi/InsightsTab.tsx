@@ -1,9 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CompanyData } from '../../../contexts/CompanyContext'
+import { useAuth } from '../../../contexts/AuthContext'
+import { supabase } from '../../../lib/supabase'
 import { CARD, MUTED, BORDER, D } from './shared'
 import { buildInsightsDemo, INSIGHT_CATEGORY_META, PRIORITY_META, type InsightCategory, type InsightItem } from './growthIntelDemo'
 
 const ORANGE = '#FF6D29'
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
+
+interface InsightRow { id: string; category: string; opportunity: string; why: string | null; impact: string | null; action: string | null; priority: string | null; confidence: number | null; time_window: string | null }
+function rowToItem(r: InsightRow): InsightItem {
+  return { id: r.id, category: r.category as InsightCategory, opportunity: r.opportunity, why: r.why ?? '', impact: r.impact ?? '', action: r.action ?? '', priority: (r.priority as InsightItem['priority']) ?? 'medium', confidence: r.confidence ?? 70, window: r.time_window ?? '' }
+}
 
 function ConfidenceBar({ value }: { value: number }) {
   return (
@@ -59,16 +67,47 @@ const FILTERS: { key: InsightCategory | 'all'; label: string }[] = [
   { key: 'concorrente', label: '🧭 Concorrentes' },
 ]
 
-export default function InsightsTab({ company }: { company: Pick<CompanyData, 'city'> }) {
-  const all = useMemo(() => buildInsightsDemo(company.city), [company.city])
+export default function InsightsTab({ company }: { company: Pick<CompanyData, 'id' | 'city'> }) {
+  const { session } = useAuth()
+  const demo = useMemo(() => buildInsightsDemo(company.city), [company.city])
+  const [real, setReal] = useState<InsightItem[] | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<InsightCategory | 'all'>('all')
+
+  const load = async () => {
+    const { data } = await supabase.from('external_insights').select('*').eq('company_id', company.id).order('created_at', { ascending: false })
+    setReal(((data as InsightRow[] | null) ?? []).map(rowToItem))
+    setLoading(false)
+  }
+  useEffect(() => { load() /* eslint-disable-next-line */ }, [company.id])
+
+  const refresh = async () => {
+    if (!session || refreshing) return
+    setRefreshing(true)
+    try {
+      await fetch(`${SUPABASE_URL}/functions/v1/insights-collect`, { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ force: true }) })
+    } catch { /* ignore */ }
+    await load(); setRefreshing(false)
+  }
+
+  const hasReal = (real?.length ?? 0) > 0
+  const all = hasReal ? real! : demo
   const items = filter === 'all' ? all : all.filter(i => i.category === filter)
 
   return (
     <div>
-      <div style={{ padding: '12px 16px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '18px' }}>
-        🧪 <strong>Modo demonstração.</strong> Oportunidades de <strong>fora</strong> do seu negócio — eventos, datas, tendências, parcerias e movimentos de concorrentes. No futuro vêm de Meta, Google, Maps, APIs de eventos/notícias e social listening. Por enquanto, dados de exemplo.
-      </div>
+      {hasReal ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '18px' }}>
+          <span>🌐 <strong style={{ color: '#4ade80' }}>Insights reais</strong> — coletados da web (Tavily) e destilados pela IA pro seu segmento e cidade.</span>
+          <button onClick={refresh} disabled={refreshing} style={{ marginLeft: 'auto', flexShrink: 0, padding: '6px 12px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: MUTED, fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: D }}>{refreshing ? 'Atualizando…' : '↻ Atualizar'}</button>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '18px' }}>
+          <span>🧪 <strong>Exemplos.</strong> Oportunidades de <strong>fora</strong> — eventos, datas, tendências, parcerias. Clique em buscar pra trazer insights <strong>reais</strong> do seu segmento e cidade (via web).</span>
+          <button onClick={refresh} disabled={refreshing || loading} style={{ marginLeft: 'auto', flexShrink: 0, padding: '6px 12px', background: ORANGE, color: '#000', border: 'none', borderRadius: '8px', fontSize: '11px', fontWeight: 800, cursor: 'pointer', fontFamily: D }}>{refreshing ? 'Buscando…' : '🌐 Buscar reais'}</button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', marginBottom: '18px' }}>
         {FILTERS.map(f => (
