@@ -13,17 +13,6 @@ interface ApifyXPost {
   author?: { userName?: string; name?: string }
 }
 
-interface ApifyRedditPost {
-  id?: string
-  parsedId?: string
-  url?: string
-  title?: string
-  body?: string
-  username?: string
-  communityName?: string
-  createdAt?: string
-}
-
 function fallbackId(...parts: (string | number | undefined | null)[]): string {
   return parts.filter(p => p !== undefined && p !== null && p !== '').join('|').slice(0, 180)
 }
@@ -66,34 +55,6 @@ async function syncMentions(
     total += rows.length
   } catch (e) {
     console.error(`monitor-web-mentions: X sync error for company ${companyId}:`, e)
-  }
-
-  try {
-    const items = await runApifyActor(
-      apifyToken, 'trudax~reddit-scraper',
-      {
-        searches: [businessName], searchPosts: true, searchComments: false,
-        searchCommunities: false, searchUsers: false, sort: 'new', time: 'month', maxItems: 20,
-      },
-    ) as ApifyRedditPost[]
-
-    const rows = items.map(p => ({
-      company_id: companyId,
-      source: 'reddit',
-      external_id: String(p.parsedId ?? p.id ?? fallbackId(p.username, p.createdAt, p.title?.slice(0, 40))),
-      author: p.username ?? 'Anônimo',
-      rating: null,
-      text: [p.title, p.body].filter(Boolean).join('\n\n') || null,
-      review_date: p.createdAt ? p.createdAt.slice(0, 10) : null,
-      raw_data: { url: p.url ?? null, community: p.communityName ?? null },
-    }))
-
-    if (rows.length > 0) {
-      await admin.from('reviews').upsert(rows, { onConflict: 'company_id,source,external_id', ignoreDuplicates: false })
-    }
-    total += rows.length
-  } catch (e) {
-    console.error(`monitor-web-mentions: Reddit sync error for company ${companyId}:`, e)
   }
 
   return total
