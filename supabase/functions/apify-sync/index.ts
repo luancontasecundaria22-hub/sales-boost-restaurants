@@ -84,17 +84,6 @@ interface ApifyXPost {
   author?: { userName?: string; name?: string }
 }
 
-interface ApifyRedditPost {
-  id?: string
-  parsedId?: string
-  url?: string
-  title?: string
-  body?: string
-  username?: string
-  communityName?: string
-  createdAt?: string
-}
-
 interface JobStep {
   key: string
   label: string
@@ -168,7 +157,6 @@ Deno.serve(async (req) => {
     // Buscam menções ao nome do negócio na internet (não um perfil próprio) —
     // por isso o gatilho é ter business_name, não um campo de URL específico.
     if (company.business_name) steps.push({ key: 'x_mentions', label: 'Menções no X', status: 'pending' })
-    if (company.business_name) steps.push({ key: 'reddit_mentions', label: 'Menções no Reddit', status: 'pending' })
     steps.push({ key: 'analyze_reviews', label: 'Classificação de sentimento', status: 'pending' })
     if (company.google_place_id) steps.push({ key: 'competitors', label: 'Concorrentes', status: 'pending' })
     steps.push({ key: 'opportunities', label: 'Oportunidades', status: 'pending' })
@@ -521,41 +509,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // ── Menções no Reddit (busca por nome do negócio, todo o Reddit) ──
-      if (company.business_name) {
-        await setStep('reddit_mentions', 'running')
-        try {
-          const items = await runApifyActor(
-            apifyToken,
-            'trudax~reddit-scraper',
-            {
-              searches: [company.business_name], searchPosts: true, searchComments: false,
-              searchCommunities: false, searchUsers: false, sort: 'new', time: 'month', maxItems: 20,
-            },
-            90,
-          ) as ApifyRedditPost[]
-
-          const rows = items.map(p => ({
-            company_id: company.id,
-            source: 'reddit',
-            external_id: String(p.parsedId ?? p.id ?? fallbackId(p.username, p.createdAt, p.title?.slice(0, 40))),
-            author: p.username ?? 'Anônimo',
-            rating: null,
-            text: [p.title, p.body].filter(Boolean).join('\n\n') || null,
-            review_date: p.createdAt ? p.createdAt.slice(0, 10) : null,
-            raw_data: { url: p.url ?? null, community: p.communityName ?? null },
-          }))
-
-          if (rows.length > 0) {
-            await admin.from('reviews').upsert(rows, { onConflict: 'company_id,source,external_id', ignoreDuplicates: false })
-          }
-          results.reddit_mentions = { synced: rows.length }
-          await setStep('reddit_mentions', 'done', `${rows.length} menções`)
-        } catch (e) {
-          results.reddit_mentions_error = String(e)
-          await setStep('reddit_mentions', 'error', String(e))
-        }
-      }
 
       // Save social_data to company
       const currentSocialData = (await admin
@@ -710,7 +663,13 @@ Deno.serve(async (req) => {
         }
       }
 
-      const hasError = liveSteps.some(s => s.status === 'error')
+      // Passos de "menção na web" (busca o nome do negócio em redes abertas) são
+      // enriquecimento opcional e às vezes dependem de scrapers de terceiros que
+      // saem do ar — se só eles falharem, a sincronização não deve parecer que
+      // "deu erro", porque tudo que importa (avaliações, concorrentes, perfil,
+      // diagnóstico) foi atualizado. O erro do passo continua registrado no job.
+      const OPTIONAL_STEPS = new Set(['x_mentions'])
+      const hasError = liveSteps.some(s => s.status === 'error' && !OPTIONAL_STEPS.has(s.key))
       await admin.from('sync_jobs').update({
         status: hasError ? 'error' : 'done',
         updated_at: new Date().toISOString(),
