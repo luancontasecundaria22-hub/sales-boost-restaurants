@@ -151,7 +151,7 @@ export default function ApiUsagePanel() {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', background: 'rgba(255,109,41,0.05)', border: '1px solid rgba(255,109,41,0.18)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '18px' }}>
-        <span>🔑 Todas as APIs que o site usa. Onde o provedor tem API de saldo (Apify, ElevenLabs, APITemplate) o crédito aparece <strong>ao vivo</strong>. Claude e OpenAI não expõem saldo por chave — pra esses mostramos o gasto rastreado e o link do painel deles.</span>
+        <span>🔑 Todas as APIs que o site usa. Onde o provedor tem API de saldo (Apify, APITemplate) o crédito aparece <strong>ao vivo</strong>. Claude e OpenAI não expõem saldo por chave — pra esses mostramos o gasto rastreado e o link do painel deles.</span>
         <button onClick={load} disabled={refreshing} style={{ marginLeft: 'auto', flexShrink: 0, padding: '6px 12px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: MUTED, fontSize: '11px', fontWeight: 700, cursor: refreshing ? 'default' : 'pointer', fontFamily: D }}>{refreshing ? 'Atualizando…' : '↻ Atualizar'}</button>
       </div>
 
