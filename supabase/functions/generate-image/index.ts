@@ -1,0 +1,97 @@
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+type SupaClient = ReturnType<typeof createClient>
+
+// Gera imagem com a OpenAI (gpt-image-1; fallback pra dall-e-3 se a conta não
+// estiver verificada pro gpt-image-1) e devolve os bytes PNG. Função central:
+// generate-posts, marketing-ai, Stories/Campanhas chamam esta.
+function b64ToBytes(b64: string): Uint8Array { return Uint8Array.from(atob(b64), c => c.charCodeAt(0)) }
+
+async function callOpenAI(apiKey: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch('https://api.openai.com/v1/images/generations', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  const data = await res.json().catch(() => ({})) as Record<string, unknown>
+  if (!res.ok) throw new Error(`${payload.model} ${res.status}: ${JSON.stringify(data).slice(0, 220)}`)
+  return data
+}
+
+async function openaiImage(apiKey: string, prompt: string, size: string): Promise<{ bytes: Uint8Array; model: string }> {
+  // 1) gpt-image-1 — devolve base64.
+  try {
+    const d = await callOpenAI(apiKey, { model: 'gpt-image-1', prompt, size, n: 1, quality: 'medium' })
+    const b64 = (d.data as { b64_json?: string }[] | undefined)?.[0]?.b64_json
+    if (!b64) throw new Error('gpt-image-1 sem b64')
+    return { bytes: b64ToBytes(b64), model: 'gpt-image-1' }
+  } catch (e1) {
+    // 2) dall-e-3 — devolve URL (sem response_format); tamanhos próprios.
+    const dsize = size === '1024x1536' ? '1024x1792' : size === '1536x1024' ? '1792x1024' : '1024x1024'
+    let d: Record<string, unknown>
+    try { d = await callOpenAI(apiKey, { model: 'dall-e-3', prompt, size: dsize, n: 1 }) }
+    catch (e2) { throw new Error(`gpt-image-1: ${e1 instanceof Error ? e1.message : e1} | dall-e-3: ${e2 instanceof Error ? e2.message : e2}`) }
+    const url = (d.data as { url?: string }[] | undefined)?.[0]?.url
+    if (!url) throw new Error('dall-e-3 sem url')
+    const img = await fetch(url)
+    return { bytes: new Uint8Array(await img.arrayBuffer()), model: 'dall-e-3' }
+  }
+}
+
+async function upload(admin: SupaClient, bytes: Uint8Array): Promise<string> {
+  const path = `generated/${crypto.randomUUID()}.png`
+  const { error } = await admin.storage.from('post-images').upload(path, bytes, { contentType: 'image/png', upsert: false })
+  if (error) throw new Error(`storage: ${error.message}`)
+  const { data } = admin.storage.from('post-images').getPublicUrl(path)
+  return data.publicUrl
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  try {
+    const env = {
+      SUPABASE_URL: Deno.env.get('SUPABASE_URL'), ANON: Deno.env.get('SUPABASE_ANON_KEY'),
+      SERVICE: Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'), OPENAI_API_KEY: Deno.env.get('OPENAI_API_KEY'),
+      CRON_SECRET: Deno.env.get('CRON_SECRET'),
+    }
+    const admin = createClient(env.SUPABASE_URL!, env.SERVICE ?? env.ANON!)
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>
+
+    const bearer = req.headers.get('Authorization') ?? ''
+    const isCron = env.CRON_SECRET && body.cron_secret === env.CRON_SECRET
+    const isService = env.SERVICE && bearer === `Bearer ${env.SERVICE}`
+    if (!isCron && !isService) {
+      const userClient = createClient(env.SUPABASE_URL!, env.ANON!, { global: { headers: { Authorization: bearer } } })
+      const { data: { user } } = await userClient.auth.getUser()
+      if (!user) return json({ error: 'Unauthorized' }, 401)
+      const { data: roleRow } = await admin.from('user_roles').select('role').eq('email', user.email ?? '').maybeSingle()
+      if ((roleRow as { role?: string } | null)?.role !== 'owner') return json({ error: 'Forbidden' }, 403)
+    }
+
+    const prompt = String(body.prompt ?? '').trim()
+    if (!prompt) return json({ error: 'prompt obrigatório' }, 400)
+    const size = ['1024x1024', '1024x1536', '1536x1024'].includes(String(body.size)) ? String(body.size) : '1024x1024'
+
+    let apiKey = env.OPENAI_API_KEY
+    if (!apiKey) {
+      const { data: cfg } = await admin.from('_app_config').select('value').eq('key', 'openai_api_key').maybeSingle()
+      apiKey = cfg?.value ? String(cfg.value) : undefined
+    }
+    if (!apiKey) return json({ error: 'OPENAI_API_KEY não configurada' }, 200)
+
+    const { bytes, model } = await openaiImage(apiKey, prompt, size)
+    const url = await upload(admin, bytes)
+    return json({ ok: true, url, model })
+  } catch (err) {
+    console.error('generate-image error:', err)
+    return json({ error: err instanceof Error ? err.message : String(err) }, 500)
+  }
+})
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+}
