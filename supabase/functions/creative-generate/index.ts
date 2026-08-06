@@ -21,7 +21,7 @@ type SupaClient = ReturnType<typeof createClient>
 
 interface Company { id: string; business_name: string; business_type: string | null; city: string | null; goal: string | null }
 interface Config { agent_name: string; brand_voice: string | null; tone: string | null; target_audience: string | null; content_pillars: string[]; marketing_goals: string | null; business_objectives: string | null }
-interface Know { kind: string; title: string; content: string }
+interface Know { kind: string; title: string; content: string; module?: string }
 
 function preamble(config: Config, company: Company): string {
   const name = config.agent_name?.trim() || 'Agente de Marketing'
@@ -116,17 +116,23 @@ Deno.serve(async (req) => {
     const [{ data: cfgRow }, { data: insRows }, { data: libRows }] = await Promise.all([
       admin.from('marketing_ai_config').select('agent_name, brand_voice, tone, target_audience, content_pillars, marketing_goals, business_objectives').eq('company_id', company.id).maybeSingle(),
       admin.from('marketing_ai_insights').select('pillar, title, description').eq('company_id', company.id).eq('status', 'open').order('created_at', { ascending: false }).limit(6),
-      admin.from('marketing_ai_knowledge').select('kind, title, content').or(`company_id.is.null,company_id.eq.${company.id}`),
+      admin.from('marketing_ai_knowledge').select('kind, title, content, module').or(`company_id.is.null,company_id.eq.${company.id}`).in('module', ['core', kind]),
     ])
     const config = (cfgRow as Config | null) ?? defaultConfig(company)
     const insights = (insRows ?? []) as { pillar: string; title: string; description: string }[]
     const lib = (libRows ?? []) as Know[]
+    // Conhecimento especializado do módulo que está sendo gerado (Orgânico/Stories/Campanhas).
+    const moduleKnow = lib.filter(k => k.module === kind).map(k => `- ${k.title}: ${k.content}`).join('\n') || '(sem específicos ainda)'
+    const MOD_LABEL: Record<string, string> = { organico: 'Post Orgânico', stories: 'Stories', campanhas: 'Campanha (mídia paga)' }
+    const modLabel = MOD_LABEL[kind] ?? kind
 
     // ── Passo 1: Diretor Criativo → BRIEF ────────────────────────────────
     const directorPrompt = `${preamble(config, company)}
 
-Você é o DIRETOR CRIATIVO de uma agência. Antes de qualquer execução, decida o brief do próximo post. Use os insights reais e escolha entre os recursos disponíveis na biblioteca.
+Você é o DIRETOR CRIATIVO de uma agência. Vai criar um conteúdo do tipo "${modLabel}". Decida o brief usando os insights reais e as boas práticas ESPECÍFICAS desse formato (não use regra genérica).
 ${insights.length ? `\nInsights abertos:\n${insights.map(i => `- [${i.pillar}] ${i.title}: ${i.description}`).join('\n')}` : ''}
+
+Boas práticas do formato ${modLabel}:\n${moduleKnow}
 
 Personalidades disponíveis:\n${listByKind(lib, 'personality')}
 Frameworks de copy:\n${listByKind(lib, 'framework')}
@@ -157,8 +163,10 @@ Siga fielmente o brief do Diretor Criativo:
 ${frameworkContent ? `\nUse este framework de copy:\n${frameworkContent}` : ''}
 ${visualContent ? `\nConceito visual a evocar:\n${visualContent}` : ''}
 
-Escreva o post pronto pra publicar. Retorne APENAS um JSON array:
-[{"idea":"resumo curto do post","caption":"legenda completa pronta pra publicar","hashtags":"#tag1 #tag2 #tag3","cta":"chamada pra ação final","format":"${brief.format ?? 'foto'}"}]`
+Boas práticas do formato ${modLabel} (siga-as):\n${moduleKnow}
+
+Escreva o post pronto pra publicar. Se o formato for vídeo/reel/story, inclua também um roteiro curto de COMO GRAVAR o vídeo (cenas, o que filmar, duração aproximada, texto na tela) — é uma recomendação de gravação, não um vídeo pronto. Retorne APENAS um JSON array:
+[{"idea":"resumo curto do post","caption":"legenda completa pronta pra publicar","hashtags":"#tag1 #tag2 #tag3","cta":"chamada pra ação final","format":"${brief.format ?? 'foto'}","video_script":"roteiro de como gravar, se fizer sentido em vídeo; senão vazio"}]`
 
     const execRaw = await callClaude(anthropicKey, execPrompt, 2000)
     let post = extractOne(execRaw)
@@ -179,7 +187,7 @@ Escreva 1 post de Instagram pronto pra publicar sobre o negócio (formato ${brie
       company_id: company.id, kind,
       idea: post.idea ?? null, caption: post.caption ?? null, hashtags: post.hashtags ?? null,
       cta: post.cta ?? (brief.cta as string ?? null), format: post.format ?? (brief.format as string ?? null),
-      reasoning: brief.reasoning as string ?? null, brief, personality,
+      reasoning: brief.reasoning as string ?? null, video_script: post.video_script ?? null, brief, personality,
     }).select('id').single()
     if (insErr) return json({ error: insErr.message }, 500)
 

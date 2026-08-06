@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { CARD, MUTED, BORDER, D, timeAgo } from './shared'
-import { callContentTest, ScoreBreakdown, BriefBlock, PostMedia, type TestPost } from './TestingArea'
+import { callContentTest, ScoreBreakdown, BriefBlock, PostMedia, VideoScript, type TestPost } from './TestingArea'
 
 const GREEN = '#4ade80'
 const KIND_LABEL: Record<string, string> = { organico: 'Orgânico', stories: 'Stories', campanhas: 'Campanhas' }
@@ -87,6 +87,7 @@ export default function ContentVault({ companyId, reloadKey }: { companyId: stri
                   {t.hashtags && <div style={{ fontSize: '11px', color: '#60a5fa', lineHeight: 1.4 }}>{t.hashtags}</div>}
 
                   <BriefBlock post={t} />
+                  <VideoScript post={t} />
                   <ScoreBreakdown post={t} />
 
                   <div style={{ display: 'flex', gap: '7px', marginTop: 'auto', paddingTop: '2px', flexWrap: 'wrap' }}>

@@ -18,6 +18,7 @@ export interface TestPost {
   format: string | null
   image_url: string | null
   video_url: string | null
+  video_script: string | null
   reasoning: string | null
   scores: Record<string, CatScore> | null
   quality_score: number | null
@@ -25,6 +26,17 @@ export interface TestPost {
   brief: Record<string, string> | null
   personality: string | null
   created_at: string
+}
+
+// Recomendação de como GRAVAR o vídeo (roteiro), quando o formato é vídeo/reel/story.
+export function VideoScript({ post }: { post: TestPost }) {
+  if (!post.video_script || !post.video_script.trim()) return null
+  return (
+    <div style={{ background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '8px', padding: '8px 10px' }}>
+      <div style={{ fontSize: '9px', fontWeight: 700, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>🎥 Como gravar</div>
+      <div style={{ fontSize: '11px', color: MUTED, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{post.video_script}</div>
+    </div>
+  )
 }
 
 // Player de vídeo (fal.ai) ou a imagem gerada; fallback pra "sem imagem".
@@ -103,7 +115,6 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [vidBusy, setVidBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
 
@@ -156,24 +167,6 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
     setBusyId(null)
   }
 
-  // Vídeo (fal.ai) — lento (~1-2 min). Anima a imagem do post num Reel.
-  const genVideo = async (id: string) => {
-    setVidBusy(id); setError(''); setOkMsg('')
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-video`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content_id: id }),
-      })
-      const r = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(r.error ?? 'Erro ao gerar vídeo')
-      setOkMsg('Vídeo gerado ✓')
-      await load()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erro ao gerar vídeo')
-    }
-    setVidBusy(null)
-  }
-
   return (
     <section style={{ marginTop: '26px', paddingTop: '22px', borderTop: `1px solid ${BORDER}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -220,6 +213,7 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
                   {t.hashtags && <div style={{ fontSize: '11px', color: '#60a5fa', lineHeight: 1.4 }}>{t.hashtags}</div>}
 
                   <BriefBlock post={t} />
+                  <VideoScript post={t} />
                   <ScoreBreakdown post={t} />
 
                   <div style={{ display: 'flex', gap: '7px', marginTop: 'auto', paddingTop: '2px', flexWrap: 'wrap' }}>
@@ -239,10 +233,6 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
                         {busy ? 'Regenerando...' : '🔁 Regenerar fraco'}
                       </button>
                     )}
-                    <button onClick={() => genVideo(t.id)} disabled={vidBusy === t.id} title="Gerar vídeo (Reel) — leva ~1-2 min"
-                      style={{ padding: '8px 10px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: '#A78BFA', fontSize: '11.5px', cursor: vidBusy === t.id ? 'default' : 'pointer', fontFamily: D }}>
-                      {vidBusy === t.id ? '🎥...' : '🎥'}
-                    </button>
                     <button onClick={() => discard(t.id)} disabled={busy}
                       style={{ padding: '8px 12px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: MUTED, fontSize: '11.5px', cursor: busy ? 'default' : 'pointer', fontFamily: D }}>
                       Descartar
