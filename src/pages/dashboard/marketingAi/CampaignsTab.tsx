@@ -5,6 +5,7 @@ import {
   buildCampaignDemo, FUNNEL_META, STATUS_META,
   type Campaign, type CampaignRecommendation, type FunnelStage,
 } from './campaignDemo'
+import TestingArea from './TestingArea'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -350,6 +351,8 @@ export default function CampaignsTab({ company }: { company: Pick<CompanyData, '
           ))}
         </div>
       </div>
+
+      <TestingArea companyId={company.id} kind="campanhas" />
     </div>
   )
 }

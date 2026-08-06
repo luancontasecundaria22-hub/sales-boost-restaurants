@@ -5,6 +5,7 @@ import {
   buildContentDemo, CONTENT_FORMAT_ICON, CONTENT_STATUS_META, CONTENT_FUNNEL_META,
   type CalendarPost, type ContentIdea, type ContentFunnel,
 } from './intelDemo'
+import TestingArea from './TestingArea'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -192,6 +193,8 @@ export default function ContentAgentTab({ company }: { company: Pick<CompanyData
           </button>
         </div>
       </section>
+
+      <TestingArea companyId={company.id} kind="organico" />
     </div>
   )
 }

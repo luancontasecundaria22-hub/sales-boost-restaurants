@@ -5,6 +5,7 @@ import {
   buildStoriesDemo, STICKER_META, STORY_STAGE_META, STORY_STATUS_META,
   type OrganicStory, type StoryAd, type StoryStage,
 } from './storiesDemo'
+import TestingArea from './TestingArea'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -254,6 +255,8 @@ export default function StoriesTab({ company }: { company: Pick<CompanyData, 'id
           ))}
         </div>
       </div>
+
+      <TestingArea companyId={company.id} kind="stories" />
     </div>
   )
 }
