@@ -6,6 +6,7 @@ import {
   type CalendarPost, type ContentIdea, type ContentFunnel,
 } from './intelDemo'
 import TestingArea from './TestingArea'
+import ModuleLibrary from './ModuleLibrary'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -194,6 +195,7 @@ export default function ContentAgentTab({ company }: { company: Pick<CompanyData
         </div>
       </section>
 
+      <ModuleLibrary module="organico" />
       <TestingArea companyId={company.id} kind="organico" />
     </div>
   )

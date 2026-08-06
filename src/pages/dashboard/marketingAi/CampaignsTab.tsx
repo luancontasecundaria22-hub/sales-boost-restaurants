@@ -6,6 +6,7 @@ import {
   type Campaign, type CampaignRecommendation, type FunnelStage,
 } from './campaignDemo'
 import TestingArea from './TestingArea'
+import ModuleLibrary from './ModuleLibrary'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -352,6 +353,7 @@ export default function CampaignsTab({ company }: { company: Pick<CompanyData, '
         </div>
       </div>
 
+      <ModuleLibrary module="campanhas" />
       <TestingArea companyId={company.id} kind="campanhas" />
     </div>
   )

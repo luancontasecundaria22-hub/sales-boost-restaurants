@@ -6,6 +6,7 @@ import {
   type OrganicStory, type StoryAd, type StoryStage,
 } from './storiesDemo'
 import TestingArea from './TestingArea'
+import ModuleLibrary from './ModuleLibrary'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -256,6 +257,7 @@ export default function StoriesTab({ company }: { company: Pick<CompanyData, 'id
         </div>
       </div>
 
+      <ModuleLibrary module="stories" />
       <TestingArea companyId={company.id} kind="stories" />
     </div>
   )
