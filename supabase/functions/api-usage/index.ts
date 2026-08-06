@@ -58,6 +58,17 @@ async function apitemplateUsage(key: string): Promise<Usage> {
   return { label: 'Documentos gerados', used, limit, unit: 'PDFs', pct: limit ? Math.min(100, Math.round((used / limit) * 100)) : null }
 }
 
+// DataForSEO expõe o saldo em dinheiro da conta (Basic auth login:senha).
+async function dataforseoUsage(login: string, password: string): Promise<Usage> {
+  const auth = btoa(`${login}:${password}`)
+  const res = await timedFetch('https://api.dataforseo.com/v3/appendix/user_data', { headers: { Authorization: `Basic ${auth}` } })
+  if (!res.ok) throw new Error(`DataForSEO ${res.status}`)
+  const d = await res.json()
+  const money = d?.tasks?.[0]?.result?.[0]?.money ?? {}
+  const balance = Number(money.balance ?? 0)
+  return { label: 'Saldo da conta', used: Math.round(balance * 100) / 100, limit: null, unit: 'USD', pct: null }
+}
+
 // Claude não expõe saldo por chave — estimamos o gasto pelo que rastreamos
 // (tokens_used em agent_performance). ~US$6 por milhão de tokens (blend Sonnet).
 async function anthropicTracked(admin: SupaClient): Promise<Usage> {
@@ -110,6 +121,11 @@ Deno.serve(async (req) => {
         if (p.usage_type === 'apify') base.usage = await apifyUsage(key!)
         else if (p.usage_type === 'elevenlabs') base.usage = await elevenUsage(key!)
         else if (p.usage_type === 'apitemplate') base.usage = await apitemplateUsage(key!)
+        else if (p.usage_type === 'dataforseo') {
+          const pwd = Deno.env.get('DATAFORSEO_PASSWORD') ?? cfg['dataforseo_password']
+          if (!pwd) throw new Error('Senha do DataForSEO não configurada.')
+          base.usage = await dataforseoUsage(key!, pwd)
+        }
         else if (p.usage_type === 'anthropic_tracked') base.usage = await anthropicTracked(admin)
         else if (p.usage_type === 'manual') base.note = 'Sem API de saldo — veja no painel do provedor.'
         else base.note = 'Chave configurada.' // status
