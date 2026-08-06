@@ -54,6 +54,18 @@ function parseObj(raw: string): Record<string, unknown> {
   return {}
 }
 
+// Extrai um post do texto da IA de forma tolerante: aceita array, objeto único,
+// ou JSON cercado de texto. Devolve null só se realmente não houver post.
+function extractOne(raw: string): Record<string, string> | null {
+  const tryParse = (s: string): unknown => { try { return JSON.parse(s) } catch { return null } }
+  let v: unknown = tryParse(raw)
+  if (!v) { const a = raw.match(/\[[\s\S]*\]/); if (a) v = tryParse(a[0]) }
+  if (!v) { const o = raw.match(/\{[\s\S]*\}/); if (o) v = tryParse(o[0]) }
+  if (Array.isArray(v)) v = v[0]
+  if (v && typeof v === 'object' && ((v as Record<string, unknown>).caption || (v as Record<string, unknown>).idea)) return v as Record<string, string>
+  return null
+}
+
 async function generateImage(businessType: string | null, idea: string, visualSystem?: string): Promise<string | null> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')
@@ -148,11 +160,20 @@ ${visualContent ? `\nConceito visual a evocar:\n${visualContent}` : ''}
 Escreva o post pronto pra publicar. Retorne APENAS um JSON array:
 [{"idea":"resumo curto do post","caption":"legenda completa pronta pra publicar","hashtags":"#tag1 #tag2 #tag3","cta":"chamada pra ação final","format":"${brief.format ?? 'foto'}"}]`
 
-    const execRaw = await callClaude(anthropicKey, execPrompt, 1500)
-    let arr: Record<string, string>[] = []
-    try { const p = JSON.parse(execRaw); arr = Array.isArray(p) ? p : [] } catch { const m = execRaw.match(/\[[\s\S]*\]/); if (m) { try { arr = JSON.parse(m[0]) } catch { /* */ } } }
-    const post = arr[0]
-    if (!post) return json({ error: 'A IA não retornou um post válido. Tente de novo.' }, 502)
+    const execRaw = await callClaude(anthropicKey, execPrompt, 2000)
+    let post = extractOne(execRaw)
+    if (!post) {
+      // Fallback: uma tentativa direta e simples, garante que o dono sempre recebe um post.
+      const fbRaw = await callClaude(anthropicKey, `${preamble(config, company)}
+
+Escreva 1 post de Instagram pronto pra publicar sobre o negócio (formato ${brief.format ?? 'foto'}). Responda SOMENTE com um JSON array, sem nenhum texto antes ou depois:
+[{"idea":"resumo curto","caption":"legenda completa","hashtags":"#a #b #c","cta":"chamada pra ação","format":"${brief.format ?? 'foto'}"}]`, 1500)
+      post = extractOne(fbRaw)
+      if (!post) {
+        console.error('creative-generate: parse falhou. exec:', execRaw.slice(0, 300), '| fb:', fbRaw.slice(0, 300))
+        return json({ error: 'A IA não retornou um post válido. Tente de novo.' }, 502)
+      }
+    }
 
     const { data: inserted, error: insErr } = await admin.from('marketing_ai_test_content').insert({
       company_id: company.id, kind,
