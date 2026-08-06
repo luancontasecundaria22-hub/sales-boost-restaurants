@@ -21,7 +21,29 @@ export interface TestPost {
   scores: Record<string, CatScore> | null
   quality_score: number | null
   status: string
+  brief: Record<string, string> | null
+  personality: string | null
   created_at: string
+}
+
+// Brief do Diretor Criativo (Fase 2): mostra como o conteúdo nasceu.
+export function BriefBlock({ post }: { post: TestPost }) {
+  const b = post.brief
+  if (!b && !post.personality) return null
+  const chips = [
+    post.personality && `🎭 ${post.personality}`,
+    b?.objective && `🎯 ${b.objective}`,
+    b?.visual_system && `🎨 ${b.visual_system}`,
+    b?.framework && `🧩 ${b.framework}`,
+  ].filter(Boolean) as string[]
+  return (
+    <div style={{ background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.18)', borderRadius: '8px', padding: '8px 10px' }}>
+      <div style={{ fontSize: '9px', fontWeight: 700, color: ORANGE, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '5px' }}>🎬 Brief do Diretor</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+        {chips.map(c => <span key={c} style={{ fontSize: '9.5px', color: 'white', background: 'rgba(255,255,255,0.05)', borderRadius: '99px', padding: '2px 7px' }}>{c}</span>)}
+      </div>
+    </div>
+  )
 }
 
 export const CAT_LABEL: Record<string, string> = {
@@ -88,8 +110,15 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
   const generate = async () => {
     setGenerating(true); setError(''); setOkMsg('')
     try {
-      const r = await callContentTest(token, { action: 'generate', kind })
+      // Passo 1+2: Diretor Criativo + personalidade (creative-generate)
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/creative-generate`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind }),
+      })
+      const r = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(r.error ?? 'Erro ao gerar post de teste')
       await load()
+      // Passo 3: controle de qualidade (content-test)
       if (r?.id) { await callContentTest(token, { action: 'score', test_id: r.id }); await load() }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao gerar post de teste')
@@ -165,6 +194,7 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
                   )}
                   {t.hashtags && <div style={{ fontSize: '11px', color: '#60a5fa', lineHeight: 1.4 }}>{t.hashtags}</div>}
 
+                  <BriefBlock post={t} />
                   <ScoreBreakdown post={t} />
 
                   <div style={{ display: 'flex', gap: '7px', marginTop: 'auto', paddingTop: '2px', flexWrap: 'wrap' }}>
