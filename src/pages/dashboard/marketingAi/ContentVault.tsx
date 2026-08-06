@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { CARD, MUTED, BORDER, D, timeAgo } from './shared'
-import { callContentTest, ScoreBreakdown, BriefBlock, type TestPost } from './TestingArea'
+import { callContentTest, ScoreBreakdown, BriefBlock, PostMedia, type TestPost } from './TestingArea'
 
 const GREEN = '#4ade80'
 const KIND_LABEL: Record<string, string> = { organico: 'Orgânico', stories: 'Stories', campanhas: 'Campanhas' }
@@ -75,9 +75,7 @@ export default function ContentVault({ companyId, reloadKey }: { companyId: stri
             const busy = busyId === t.id
             return (
               <div key={t.id} style={{ background: CARD, border: `1px solid rgba(74,222,128,0.25)`, borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                {t.image_url
-                  ? <img src={t.image_url} alt="" style={{ width: '100%', height: '160px', objectFit: 'cover' }} />
-                  : <div style={{ width: '100%', height: '160px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', color: MUTED, fontSize: '11px' }}>sem imagem</div>}
+                <PostMedia post={t} height={160} />
                 <div style={{ padding: '13px', display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                     <span style={{ fontSize: '9px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{KIND_LABEL[t.kind] ?? t.kind}</span>

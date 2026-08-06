@@ -17,6 +17,7 @@ export interface TestPost {
   cta: string | null
   format: string | null
   image_url: string | null
+  video_url: string | null
   reasoning: string | null
   scores: Record<string, CatScore> | null
   quality_score: number | null
@@ -24,6 +25,13 @@ export interface TestPost {
   brief: Record<string, string> | null
   personality: string | null
   created_at: string
+}
+
+// Player de vídeo (fal.ai) ou a imagem gerada; fallback pra "sem imagem".
+export function PostMedia({ post, height = 150 }: { post: TestPost; height?: number }) {
+  if (post.video_url) return <video src={post.video_url} controls style={{ width: '100%', height, objectFit: 'cover', background: '#000' }} />
+  if (post.image_url) return <img src={post.image_url} alt="" style={{ width: '100%', height, objectFit: 'cover' }} />
+  return <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', color: MUTED, fontSize: '11px' }}>sem imagem</div>
 }
 
 // Brief do Diretor Criativo (Fase 2): mostra como o conteúdo nasceu.
@@ -95,6 +103,7 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [vidBusy, setVidBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
 
@@ -147,6 +156,24 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
     setBusyId(null)
   }
 
+  // Vídeo (fal.ai) — lento (~1-2 min). Anima a imagem do post num Reel.
+  const genVideo = async (id: string) => {
+    setVidBusy(id); setError(''); setOkMsg('')
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/generate-video`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content_id: id }),
+      })
+      const r = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(r.error ?? 'Erro ao gerar vídeo')
+      setOkMsg('Vídeo gerado ✓')
+      await load()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao gerar vídeo')
+    }
+    setVidBusy(null)
+  }
+
   return (
     <section style={{ marginTop: '26px', paddingTop: '22px', borderTop: `1px solid ${BORDER}` }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '12px' }}>
@@ -177,9 +204,7 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
             const busy = busyId === t.id
             return (
               <div key={t.id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                {t.image_url
-                  ? <img src={t.image_url} alt="" style={{ width: '100%', height: '150px', objectFit: 'cover' }} />
-                  : <div style={{ width: '100%', height: '150px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', color: MUTED, fontSize: '11px' }}>sem imagem</div>}
+                <PostMedia post={t} />
                 <div style={{ padding: '13px', display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                     {t.format && <span style={{ fontSize: '9px', fontWeight: 700, color: ORANGE, padding: '2px 7px', borderRadius: '99px', border: `1px solid rgba(255,109,41,0.35)`, textTransform: 'uppercase' }}>{t.format}</span>}
@@ -214,6 +239,10 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
                         {busy ? 'Regenerando...' : '🔁 Regenerar fraco'}
                       </button>
                     )}
+                    <button onClick={() => genVideo(t.id)} disabled={vidBusy === t.id} title="Gerar vídeo (Reel) — leva ~1-2 min"
+                      style={{ padding: '8px 10px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: '#A78BFA', fontSize: '11.5px', cursor: vidBusy === t.id ? 'default' : 'pointer', fontFamily: D }}>
+                      {vidBusy === t.id ? '🎥...' : '🎥'}
+                    </button>
                     <button onClick={() => discard(t.id)} disabled={busy}
                       style={{ padding: '8px 12px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '8px', color: MUTED, fontSize: '11.5px', cursor: busy ? 'default' : 'pointer', fontFamily: D }}>
                       Descartar
