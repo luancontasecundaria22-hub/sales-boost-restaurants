@@ -63,10 +63,15 @@ async function callClaude(prompt: string, anthropicKey: string): Promise<string>
   throw new Error(`Claude API: ${lastError}`)
 }
 
+// Gera a imagem do post pela função central generate-image (OpenAI, com
+// fallback de chave no _app_config). Antes usava Replicate (flux-schnell), que
+// foi desativado na plataforma — por isso os posts vinham só com texto.
 async function generateImage(
   imageSuggestion: string,
-  replicateKey: string,
 ): Promise<{ url: string | null; error: string | null }> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')
+  if (!supabaseUrl || !serviceKey) return { url: null, error: 'SUPABASE env ausente' }
   try {
     const prompt = [
       'Professional Instagram marketing photo for a Brazilian small business.',
@@ -76,24 +81,14 @@ async function generateImage(
       'No text overlays. No logos. Square format.',
     ].join(' ')
 
-    const repRes = await fetch('https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions', {
+    const res = await fetch(`${supabaseUrl}/functions/v1/generate-image`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${replicateKey}`, 'Content-Type': 'application/json', 'Prefer': 'wait' },
-      body: JSON.stringify({ input: { prompt, num_outputs: 1, aspect_ratio: '1:1', output_format: 'webp', output_quality: 85 } }),
+      headers: { Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, size: '1024x1024' }),
     })
-    if (!repRes.ok) {
-      const errText = await repRes.text()
-      console.error('Replicate error:', repRes.status, errText)
-      return { url: null, error: `Replicate ${repRes.status}: ${errText.slice(0, 200)}` }
-    }
-
-    const pred = await repRes.json() as { status?: string; output?: string[]; error?: string }
-    const url = pred.status === 'succeeded' ? (pred.output?.[0] ?? null) : null
-    if (!url) {
-      console.error('Replicate: no URL', JSON.stringify(pred).slice(0, 200))
-      return { url: null, error: pred.error ?? 'No output URL from Replicate' }
-    }
-    return { url, error: null }
+    const data = await res.json().catch(() => ({})) as { url?: string; error?: string }
+    if (!res.ok || !data.url) return { url: null, error: data.error ?? `generate-image ${res.status}` }
+    return { url: data.url, error: null }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error('generateImage exception:', msg)
@@ -197,22 +192,20 @@ Regras: legenda pronta (sem colchetes), dados reais, tom natural, CTA alinhado, 
 
   const imageResults: ImageResult[] = []
 
-  if (replicateKey && inserted && inserted.length > 0) {
+  if (inserted && inserted.length > 0) {
     await Promise.allSettled(
       inserted.map(async (row: { id: string; image_suggestion: string | null }) => {
         if (!row.image_suggestion) {
           imageResults.push({ post_id: row.id, step: 'skipped', error: 'no image_suggestion', url: null })
           return
         }
-        const { url, error } = await generateImage(row.image_suggestion, replicateKey)
-        imageResults.push({ post_id: row.id, step: url ? 'done' : 'replicate_failed', error, url })
+        const { url, error } = await generateImage(row.image_suggestion)
+        imageResults.push({ post_id: row.id, step: url ? 'done' : 'image_failed', error, url })
         if (!url) return
         const { error: updErr } = await db.from('posts').update({ image_url: url }).eq('id', row.id)
         if (updErr) console.error('update image_url:', updErr.message)
       })
     )
-  } else if (!replicateKey) {
-    imageResults.push({ post_id: '', step: 'skipped', error: 'REPLICATE_API_KEY not set', url: null })
   }
 
   return { generated: rows.length, quota_reached: false, monthly_count: monthlyCount + rows.length, limit, image_results: imageResults, sample: rows[0]?.content ?? null }
@@ -296,7 +289,7 @@ Deno.serve(async (req) => {
 
     const result = await runForCompany(db, company.id, anthropicKey, replicateKey, user.email === OWNER_EMAIL)
     const message = result.pileup_blocked ? 'Você já tem muitos rascunhos esperando aprovação. Aprove ou recuse alguns antes de gerar mais.' : undefined
-    return json({ ...result, images_configured: replicateKey !== null, message })
+    return json({ ...result, images_configured: true, message })
 
   } catch (err) {
     console.error('top-level error:', err)
