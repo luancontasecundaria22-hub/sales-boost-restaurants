@@ -10,6 +10,7 @@ import AgentConfigTab from './marketingAi/AgentConfigTab'
 import ConnectionsTab from './marketingAi/ConnectionsTab'
 import BusinessContextTab from './marketingAi/BusinessContextTab'
 import { buildGrowthDemo } from './marketingAi/growthDemo'
+import { fetchBusinessTypes, OTHER_BUSINESS_TYPE } from '../../lib/businessTypes'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -18,16 +19,6 @@ const CARD = '#150E08'
 const MUTED = '#BABABA'
 const D = "'Bricolage Grotesque', system-ui, sans-serif"
 const BORDER = 'rgba(255,255,255,0.06)'
-
-const BUSINESS_TYPES = [
-  'Restaurante / Food',
-  'Varejo / E-commerce',
-  'Serviços',
-  'Beleza & Estética',
-  'Barbearia',
-  'Saúde & Bem-estar',
-  'Outro',
-]
 
 const GOALS = [
   'Atrair mais clientes novos',
@@ -74,6 +65,41 @@ function SelectField({ label, value, onChange, options, hint }: {
         <option value="">Selecione...</option>
         {options.map(o => <option key={o} value={o} style={{ background: '#150E08' }}>{o}</option>)}
       </select>
+      {hint && <div style={{ fontSize: '11px', color: MUTED, marginTop: '5px', lineHeight: 1.5 }}>{hint}</div>}
+    </div>
+  )
+}
+
+// Dropdown de tipo de estabelecimento com opções vindas do banco (geridas
+// pelo dono) + "Outro (especifique)" como escape: nenhum negócio fica travado
+// se o ramo dele não estiver na lista.
+function BusinessTypeField({ value, onChange, options, hint }: {
+  value: string; onChange: (v: string) => void; options: string[]; hint?: string
+}) {
+  const [focused, setFocused] = useState(false)
+  const [otherMode, setOtherMode] = useState(false)
+  const known = options.includes(value)
+  const showOther = otherMode || (value !== '' && !known && options.length > 0)
+  const selectValue = showOther ? OTHER_BUSINESS_TYPE : (known ? value : '')
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '7px' }}>Tipo de estabelecimento</label>
+      <select
+        value={selectValue}
+        onChange={e => { const v = e.target.value; if (v === OTHER_BUSINESS_TYPE) { setOtherMode(true); onChange('') } else { setOtherMode(false); onChange(v) } }}
+        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        style={{ width: '100%', padding: '11px 14px', boxSizing: 'border-box', background: '#150E08', border: `1px solid ${focused ? 'rgba(255,109,41,0.55)' : BORDER}`, borderRadius: '10px', color: selectValue ? 'white' : MUTED, fontSize: '14px', outline: 'none', cursor: 'pointer', appearance: 'none' }}
+      >
+        <option value="">Selecione...</option>
+        {options.map(o => <option key={o} value={o} style={{ background: '#150E08' }}>{o}</option>)}
+        <option value={OTHER_BUSINESS_TYPE} style={{ background: '#150E08' }}>Outro (especifique)</option>
+      </select>
+      {showOther && (
+        <input
+          value={value} onChange={e => onChange(e.target.value)} placeholder="Digite o tipo do seu negócio"
+          style={{ width: '100%', marginTop: '10px', padding: '11px 14px', boxSizing: 'border-box', background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, borderRadius: '10px', color: 'white', fontSize: '14px', outline: 'none' }}
+        />
+      )}
       {hint && <div style={{ fontSize: '11px', color: MUTED, marginTop: '5px', lineHeight: 1.5 }}>{hint}</div>}
     </div>
   )
@@ -148,6 +174,9 @@ export default function SettingsPage() {
     setTimeout(() => document.getElementById(`section-${section}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150)
   }, [searchParams])
 
+  // Tipos de estabelecimento (geridos pelo dono no painel owner).
+  useEffect(() => { fetchBusinessTypes().then(setBusinessTypes) }, [])
+
   // Company fields
   const [companyId, setCompanyId] = useState<string | null>(null)
   const [currentPlan, setCurrentPlan] = useState<string>('free')
@@ -156,6 +185,7 @@ export default function SettingsPage() {
   const [upgradeSuccess, setUpgradeSuccess] = useState(searchParams.get('upgrade') === 'success')
   const [businessName, setBusinessName] = useState('')
   const [businessType, setBusinessType] = useState('')
+  const [businessTypes, setBusinessTypes] = useState<string[]>([])
   const [city, setCity] = useState('')
   const [phone, setPhone] = useState('')
   const [contactEmail, setContactEmail] = useState('')
@@ -554,7 +584,7 @@ export default function SettingsPage() {
 
         <SectionCard id="section-negocio" title="Sobre o negócio">
           <Field label="Nome do negócio" value={businessName} onChange={setBusinessName} placeholder="Ex: Studio Beleza Carioca" />
-          <SelectField label="Tipo de estabelecimento" value={businessType} onChange={setBusinessType} options={BUSINESS_TYPES} />
+          <BusinessTypeField value={businessType} onChange={setBusinessType} options={businessTypes} />
           <Field label="Cidade / UF" value={city} onChange={setCity} placeholder="Ex: Rio de Janeiro, RJ" />
           <Field label="Telefone / WhatsApp" value={phone} onChange={setPhone} placeholder="(21) 99999-9999" />
           <Field label="E-mail de contato" value={contactEmail} onChange={setContactEmail} placeholder="voce@seunegocio.com.br" type="email" />

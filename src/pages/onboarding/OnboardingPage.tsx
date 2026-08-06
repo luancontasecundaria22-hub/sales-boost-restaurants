@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { fetchBusinessTypes, OTHER_BUSINESS_TYPE } from '../../lib/businessTypes'
 
 const ORANGE = '#FF6D29'
 const BG = '#0E0B0A'
@@ -22,16 +23,6 @@ interface OnboardingData {
   contact_email: string
   goal: string
 }
-
-const BUSINESS_TYPES = [
-  'Restaurante / Food',
-  'Varejo / E-commerce',
-  'Serviços',
-  'Beleza & Estética',
-  'Barbearia',
-  'Saúde & Bem-estar',
-  'Outro',
-]
 
 const GOALS = [
   'Atrair mais clientes novos',
@@ -121,6 +112,31 @@ function SelectField({
   )
 }
 
+// Tipo de estabelecimento: opções do banco (geridas pelo dono) + "Outro
+// (especifique)" com campo livre, pra ninguém ficar travado.
+function BusinessTypeSelect({ value, onChange, options }: {
+  value: string; onChange: (v: string) => void; options: string[]
+}) {
+  const [otherMode, setOtherMode] = useState(false)
+  const known = options.includes(value)
+  const showOther = otherMode || (value !== '' && !known && options.length > 0)
+  return (
+    <>
+      <SelectField
+        label="Tipo de estabelecimento" required
+        value={showOther ? OTHER_BUSINESS_TYPE : (known ? value : '')}
+        onChange={v => { if (v === OTHER_BUSINESS_TYPE) { setOtherMode(true); onChange('') } else { setOtherMode(false); onChange(v) } }}
+        options={[...options, OTHER_BUSINESS_TYPE]}
+      />
+      {showOther && (
+        <div style={{ marginTop: '-8px' }}>
+          <Field label="Qual?" value={value} onChange={onChange} placeholder="Digite o tipo do seu negócio" required />
+        </div>
+      )}
+    </>
+  )
+}
+
 const STEPS = ['Seu negócio', 'Presença digital', 'Seu objetivo']
 
 export default function OnboardingPage() {
@@ -135,6 +151,9 @@ export default function OnboardingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState(LOADING_MSGS[0])
   const [error, setError] = useState('')
+  const [businessTypes, setBusinessTypes] = useState<string[]>([])
+
+  useEffect(() => { fetchBusinessTypes().then(setBusinessTypes) }, [])
 
   const set = (k: keyof OnboardingData) => (v: string) => setData(d => ({ ...d, [k]: v }))
 
@@ -256,7 +275,7 @@ export default function OnboardingPage() {
                   Conte o básico para personalizarmos seu diagnóstico.
                 </p>
                 <Field label="Nome do negócio" value={data.business_name} onChange={set('business_name')} placeholder="Ex: Studio Beleza Carioca" required />
-                <SelectField label="Tipo de estabelecimento" value={data.business_type} onChange={set('business_type')} options={BUSINESS_TYPES} required />
+                <BusinessTypeSelect value={data.business_type} onChange={set('business_type')} options={businessTypes} />
                 <Field label="Cidade / UF" value={data.city} onChange={set('city')} placeholder="Ex: Rio de Janeiro, RJ" required />
               </>
             )}

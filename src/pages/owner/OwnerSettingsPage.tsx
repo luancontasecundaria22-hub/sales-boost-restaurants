@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import ApiUsagePanel from './ApiUsagePanel'
+import BusinessTypesPanel from './BusinessTypesPanel'
 
 const ORANGE = '#FF6D29'
 const BG = '#0E0B0A'
@@ -13,7 +14,7 @@ const D = "'Bricolage Grotesque', system-ui, sans-serif"
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 const BOT_USERNAME = 'luansoaresribeirobot'
 
-type Tab = 'avisos' | 'apis'
+type Tab = 'avisos' | 'apis' | 'negocios'
 
 export default function OwnerSettingsPage() {
   const { session, signOut } = useAuth()
@@ -62,6 +63,7 @@ export default function OwnerSettingsPage() {
   const TABS: { key: Tab; label: string }[] = [
     { key: 'avisos', label: 'Avisos' },
     { key: 'apis', label: "APIs" },
+    { key: 'negocios', label: 'Tipos de negócio' },
   ]
 
   return (
@@ -145,6 +147,8 @@ export default function OwnerSettingsPage() {
         )}
 
         {tab === 'apis' && <ApiUsagePanel />}
+
+        {tab === 'negocios' && <BusinessTypesPanel />}
       </div>
     </div>
   )
