@@ -1,6 +1,53 @@
 import { useState } from 'react'
 import { supabase } from '../../../lib/supabase'
-import { ORANGE, CARD, MUTED, BORDER, D, inputStyle, callMarketingAi, timeAgo, STATUS_LABEL, type ContentItem, type Campaign, type Trend } from './shared'
+import { ORANGE, CARD, MUTED, BORDER, D, inputStyle, callMarketingAi, callContentImage, timeAgo, STATUS_LABEL, type ContentItem, type Campaign, type Trend } from './shared'
+
+const imgBtn = { padding: '5px 11px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '7px', color: MUTED, fontSize: '10.5px', cursor: 'pointer', fontFamily: D } as const
+
+// Controle opcional/manual de imagem. O fluxo automático (dados da Meta) já
+// gera a imagem sozinho — isto é só o atalho pro dono gerar/trocar na mão.
+function ImageControls({ c, accessToken, onRefresh }: { c: ContentItem; accessToken: string; onRefresh: () => Promise<void> }) {
+  const [busy, setBusy] = useState<'generate' | 'variations' | 'select' | null>(null)
+  const [err, setErr] = useState('')
+  const options = c.image_options ?? []
+
+  const run = async (action: 'generate' | 'variations' | 'select', extra: Record<string, unknown> = {}) => {
+    setBusy(action)
+    setErr('')
+    try {
+      await callContentImage(accessToken, c.id, action, extra)
+      await onRefresh()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erro ao gerar imagem')
+    }
+    setBusy(null)
+  }
+
+  return (
+    <div style={{ marginBottom: '10px', padding: '9px 10px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}`, borderRadius: '8px' }}>
+      <div style={{ fontSize: '9.5px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '7px' }}>🖼️ Imagem — opcional</div>
+      {options.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(56px, 1fr))', gap: '6px', marginBottom: '7px' }}>
+          {options.map(url => (
+            <button key={url} onClick={() => run('select', { url })} disabled={!!busy} title="Usar esta imagem"
+              style={{ padding: 0, border: c.image_url === url ? `2px solid ${ORANGE}` : `1px solid ${BORDER}`, borderRadius: '6px', overflow: 'hidden', cursor: busy ? 'default' : 'pointer', background: 'none', aspectRatio: '1' }}>
+              <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            </button>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        <button onClick={() => run('generate')} disabled={!!busy} style={imgBtn}>
+          {busy === 'generate' ? 'Gerando...' : c.image_url ? 'Regerar' : 'Gerar imagem'}
+        </button>
+        <button onClick={() => run('variations')} disabled={!!busy} style={imgBtn}>
+          {busy === 'variations' ? 'Gerando...' : 'Ver 3 opções'}
+        </button>
+      </div>
+      {err && <div style={{ color: '#f87171', fontSize: '10.5px', marginTop: '6px' }}>{err}</div>}
+    </div>
+  )
+}
 
 const STATUS_COLOR: Record<string, string> = { idea: MUTED, draft: '#FBBF24', approved: '#4ade80', scheduled: '#60a5fa', published: '#A78BFA' }
 const CAMPAIGN_STATUS_LABEL: Record<string, string> = { planned: 'Planejada', active: 'Ativa', completed: 'Concluída', cancelled: 'Cancelada' }
@@ -156,6 +203,7 @@ export default function ContentTab({
                     {campaigns.map(camp => <option key={camp.id} value={camp.id}>{camp.name}</option>)}
                   </select>
                 )}
+                <ImageControls c={c} accessToken={accessToken} onRefresh={onRefresh} />
                 {(c.status === 'idea' || c.status === 'draft') && (
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <button onClick={() => approve(c.id)} style={{ flex: 1, padding: '7px', background: 'rgba(74,222,128,0.1)', border: '1px solid rgba(74,222,128,0.3)', borderRadius: '7px', color: '#4ade80', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer' }}>✓ Aprovar</button>

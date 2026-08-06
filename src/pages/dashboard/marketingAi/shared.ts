@@ -50,6 +50,7 @@ export interface ContentItem {
   hashtags: string | null
   format: 'reel' | 'carrossel' | 'story' | 'foto' | null
   image_url: string | null
+  image_options: string[] | null
   status: 'idea' | 'draft' | 'approved' | 'scheduled' | 'published'
   reasoning: string | null
   campaign_id: string | null
@@ -188,6 +189,21 @@ export async function callMarketingAi(accessToken: string, action: string, extra
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.error ?? 'Erro ao chamar Marketing AI')
   return data
+}
+
+// Opcional/manual: gera imagem pra uma linha de conteúdo. O fluxo automático
+// (dados da Meta) faz o mesmo sozinho; isto é só o atalho manual do dono.
+// action: 'generate' (1 imagem → image_url) | 'variations' (2..4 → image_options)
+//       | 'select' (fixa image_url a partir de uma opção; passa `url`).
+export async function callContentImage(accessToken: string, contentId: string, action: 'generate' | 'variations' | 'select', extra: Record<string, unknown> = {}) {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/content-image`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, content_id: contentId, ...extra }),
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.error ?? 'Erro ao gerar imagem')
+  return data as { image_url?: string; options?: string[] }
 }
 
 export const inputStyle = { padding: '8px 12px', background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none' } as const
