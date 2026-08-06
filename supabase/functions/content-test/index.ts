@@ -82,6 +82,61 @@ async function generateImage(businessType: string | null, idea: string): Promise
   } catch (e) { console.error('generateImage error:', e); return null }
 }
 
+async function loadConfig(admin: SupaClient, company: Company): Promise<Config> {
+  const { data } = await admin.from('marketing_ai_config')
+    .select('agent_name, brand_voice, tone, target_audience, content_pillars, marketing_goals, business_objectives')
+    .eq('company_id', company.id).maybeSingle()
+  return (data as Config | null) ?? defaultConfig(company)
+}
+
+// ── Testing Pipeline: júri de revisores ────────────────────────────────────
+// Cada dimensão recebe nota 0-100 + comentário. A nota final é PONDERADA pelos
+// pesos abaixo (somam 100%). readability é avaliada e mostrada, mas não pesa.
+const SCORE_WEIGHTS: Record<string, number> = {
+  creative: 0.20, novelty: 0.15, brand: 0.15, hook: 0.15, cta: 0.10, visual: 0.10, engagement: 0.10, conversion: 0.05,
+}
+const SCORE_CATS = ['creative', 'novelty', 'brand', 'hook', 'cta', 'visual', 'engagement', 'conversion', 'readability']
+
+interface CatScore { score: number; comment: string }
+type Scores = Record<string, CatScore>
+interface PostShape { idea: string | null; caption: string | null; hashtags: string | null; cta: string | null; format: string | null; hasImage: boolean }
+
+function parseJsonObject(raw: string): Record<string, { score?: number; comment?: string }> {
+  try { return JSON.parse(raw) } catch { /* fall through */ }
+  const m = raw.match(/\{[\s\S]*\}/)
+  if (m) { try { return JSON.parse(m[0]) } catch { /* give up */ } }
+  return {}
+}
+
+async function scoreContent(anthropicKey: string, config: Config, company: Company, post: PostShape): Promise<{ scores: Scores; quality: number }> {
+  const prompt = `${preamble(config, company)}
+
+Agora você é o CONTROLE DE QUALIDADE de uma agência criativa — um júri rigoroso e honesto. Avalie o post abaixo com nota de 0 a 100 em cada dimensão, com um comentário curto e específico (o que está bom ou o que melhorar). Seja criterioso: 90+ só pra conteúdo realmente excelente.
+
+Post:
+- Formato: ${post.format ?? '—'}
+- Ideia: ${post.idea ?? '—'}
+- Legenda: ${post.caption ?? '—'}
+- Hashtags: ${post.hashtags ?? '—'}
+- CTA: ${post.cta ?? '—'}
+- Imagem: ${post.hasImage ? 'tem imagem gerada por IA evocando a ideia' : 'sem imagem'}
+
+Dimensões: creative (força criativa geral), novelty (originalidade vs clichê), brand (consistência com voz/público), hook (força da primeira linha), cta (clareza/persuasão da chamada), visual (adequação do conceito visual), engagement (potencial de curtidas/comentários/salvamentos), conversion (potencial de gerar lead/venda), readability (clareza/facilidade de leitura).
+
+Retorne APENAS um JSON: {"creative":{"score":0,"comment":""},"novelty":{"score":0,"comment":""},"brand":{"score":0,"comment":""},"hook":{"score":0,"comment":""},"cta":{"score":0,"comment":""},"visual":{"score":0,"comment":""},"engagement":{"score":0,"comment":""},"conversion":{"score":0,"comment":""},"readability":{"score":0,"comment":""}}`
+
+  const raw = await callClaude(anthropicKey, prompt, 1200)
+  const parsed = parseJsonObject(raw)
+  const scores: Scores = {}
+  for (const cat of SCORE_CATS) {
+    const s = Math.max(0, Math.min(100, Math.round(Number(parsed[cat]?.score ?? 0))))
+    scores[cat] = { score: s, comment: String(parsed[cat]?.comment ?? '') }
+  }
+  let quality = 0
+  for (const [cat, w] of Object.entries(SCORE_WEIGHTS)) quality += (scores[cat]?.score ?? 0) * w
+  return { scores, quality: Math.round(quality) }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
   try {
@@ -163,7 +218,82 @@ Gere 1 ideia de conteúdo alinhada com a estratégia acima. Retorne APENAS um JS
       return json({ ok: true })
     }
 
-    return json({ error: 'action inválida. Use generate ou approve.' }, 400)
+    // ── Avaliar (Testing Pipeline → Quality Score) ──────────────────────
+    if (action === 'score') {
+      const testId = String(body.test_id ?? '')
+      if (!testId) return json({ error: 'test_id é obrigatório' }, 400)
+      const { data: tRow } = await admin.from('marketing_ai_test_content')
+        .select('id, idea, caption, hashtags, cta, format, image_url').eq('id', testId).eq('company_id', company.id).maybeSingle()
+      const t = tRow as (PostShape & { id: string; image_url: string | null }) | null
+      if (!t) return json({ error: 'Post de teste não encontrado' }, 404)
+      const config = await loadConfig(admin, company)
+      const { scores, quality } = await scoreContent(anthropicKey, config, company, { idea: t.idea, caption: t.caption, hashtags: t.hashtags, cta: t.cta, format: t.format, hasImage: !!t.image_url })
+      await admin.from('marketing_ai_test_content').update({ scores, quality_score: quality }).eq('id', testId)
+      return json({ ok: true, scores, quality_score: quality })
+    }
+
+    // ── Regenerar só o componente fraco (Auto Feedback Loop) ────────────
+    if (action === 'regenerate') {
+      const testId = String(body.test_id ?? '')
+      if (!testId) return json({ error: 'test_id é obrigatório' }, 400)
+      const { data: tRow } = await admin.from('marketing_ai_test_content')
+        .select('id, idea, caption, hashtags, cta, format, image_url, scores').eq('id', testId).eq('company_id', company.id).maybeSingle()
+      const t = tRow as { id: string; idea: string | null; caption: string | null; hashtags: string | null; cta: string | null; format: string | null; image_url: string | null; scores: Scores | null } | null
+      if (!t) return json({ error: 'Post de teste não encontrado' }, 404)
+      const config = await loadConfig(admin, company)
+      const scores = t.scores ?? {}
+
+      // acha a categoria PONDERADA mais fraca (só as que entram na nota final)
+      let weakest = 'creative'; let min = 101
+      for (const cat of Object.keys(SCORE_WEIGHTS)) { const s = scores[cat]?.score ?? 100; if (s < min) { min = s; weakest = cat } }
+
+      if (weakest === 'visual') {
+        // ponto fraco é o visual → regenera SÓ a imagem, mantém o texto
+        const url = await generateImage(company.business_type, t.idea ?? t.caption ?? '')
+        if (url) await admin.from('marketing_ai_test_content').update({ image_url: url }).eq('id', testId)
+      } else {
+        // ponto fraco é texto → reescreve legenda/hook/CTA guiado pelo feedback, mantém a imagem
+        const weak = Object.entries(scores).filter(([, v]) => (v as CatScore).score < 75).map(([k, v]) => `- ${k}: ${(v as CatScore).comment}`).join('\n')
+        const prompt = `${preamble(config, company)}
+
+Você é o Copywriter da agência. Reescreva/melhore o post mantendo a MESMA ideia central e formato, corrigindo especificamente estes pontos fracos apontados pelo controle de qualidade:
+${weak || `- ${weakest}: melhore este aspecto`}
+
+Post atual:
+- Ideia: ${t.idea ?? ''}
+- Legenda: ${t.caption ?? ''}
+- Hashtags: ${t.hashtags ?? ''}
+- CTA: ${t.cta ?? ''}
+
+Retorne APENAS um JSON: {"idea":"...","caption":"...","hashtags":"#...","cta":"..."}`
+        const up = parseJsonObject(await callClaude(anthropicKey, prompt, 1200)) as Record<string, string>
+        await admin.from('marketing_ai_test_content').update({
+          idea: up.idea ?? t.idea, caption: up.caption ?? t.caption, hashtags: up.hashtags ?? t.hashtags, cta: up.cta ?? t.cta,
+        }).eq('id', testId)
+      }
+
+      // re-avalia depois de regenerar
+      const { data: fresh } = await admin.from('marketing_ai_test_content')
+        .select('idea, caption, hashtags, cta, format, image_url').eq('id', testId).single()
+      const f = fresh as PostShape & { image_url: string | null }
+      const { scores: ns, quality } = await scoreContent(anthropicKey, config, company, { idea: f.idea, caption: f.caption, hashtags: f.hashtags, cta: f.cta, format: f.format, hasImage: !!f.image_url })
+      await admin.from('marketing_ai_test_content').update({ scores: ns, quality_score: quality }).eq('id', testId)
+      return json({ ok: true, regenerated: weakest, scores: ns, quality_score: quality })
+    }
+
+    // ── Enviar pro Vault (aprovado pelo QC, aguardando publicação) ──────
+    if (action === 'to_vault') {
+      const testId = String(body.test_id ?? '')
+      if (!testId) return json({ error: 'test_id é obrigatório' }, 400)
+      const { data: tRow } = await admin.from('marketing_ai_test_content').select('id, quality_score').eq('id', testId).eq('company_id', company.id).maybeSingle()
+      const t = tRow as { id: string; quality_score: number | null } | null
+      if (!t) return json({ error: 'Post de teste não encontrado' }, 404)
+      if ((t.quality_score ?? 0) < 90) return json({ error: 'Nota abaixo de 90 — regenere os pontos fracos antes de mandar pro Vault.' }, 400)
+      await admin.from('marketing_ai_test_content').update({ status: 'vault' }).eq('id', testId)
+      return json({ ok: true })
+    }
+
+    return json({ error: 'action inválida. Use generate, score, regenerate, to_vault ou approve.' }, 400)
   } catch (err) {
     console.error('content-test error:', err)
     return json({ error: err instanceof Error ? err.message : String(err) }, 500)
