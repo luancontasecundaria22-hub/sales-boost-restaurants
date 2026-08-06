@@ -22,15 +22,18 @@ async function callOpenAI(apiKey: string, payload: Record<string, unknown>): Pro
   return data
 }
 
-async function openaiImage(apiKey: string, prompt: string, size: string): Promise<{ bytes: Uint8Array; model: string }> {
+// Gera `n` imagens (1..4) numa única chamada. gpt-image-1 devolve n imagens
+// em base64; se ele falhar, cai pro dall-e-3 (que só faz 1 por vez).
+async function openaiImages(apiKey: string, prompt: string, size: string, n: number): Promise<{ images: Uint8Array[]; model: string }> {
   // 1) gpt-image-1 — devolve base64.
   try {
-    const d = await callOpenAI(apiKey, { model: 'gpt-image-1', prompt, size, n: 1, quality: 'medium' })
-    const b64 = (d.data as { b64_json?: string }[] | undefined)?.[0]?.b64_json
-    if (!b64) throw new Error('gpt-image-1 sem b64')
-    return { bytes: b64ToBytes(b64), model: 'gpt-image-1' }
+    const d = await callOpenAI(apiKey, { model: 'gpt-image-1', prompt, size, n, quality: 'medium' })
+    const arr = (d.data as { b64_json?: string }[] | undefined) ?? []
+    const images = arr.map(x => x.b64_json).filter((b): b is string => !!b).map(b64ToBytes)
+    if (images.length === 0) throw new Error('gpt-image-1 sem b64')
+    return { images, model: 'gpt-image-1' }
   } catch (e1) {
-    // 2) dall-e-3 — devolve URL (sem response_format); tamanhos próprios.
+    // 2) dall-e-3 — devolve URL (sem response_format); só n=1.
     const dsize = size === '1024x1536' ? '1024x1792' : size === '1536x1024' ? '1792x1024' : '1024x1024'
     let d: Record<string, unknown>
     try { d = await callOpenAI(apiKey, { model: 'dall-e-3', prompt, size: dsize, n: 1 }) }
@@ -38,7 +41,7 @@ async function openaiImage(apiKey: string, prompt: string, size: string): Promis
     const url = (d.data as { url?: string }[] | undefined)?.[0]?.url
     if (!url) throw new Error('dall-e-3 sem url')
     const img = await fetch(url)
-    return { bytes: new Uint8Array(await img.arrayBuffer()), model: 'dall-e-3' }
+    return { images: [new Uint8Array(await img.arrayBuffer())], model: 'dall-e-3' }
   }
 }
 
@@ -75,6 +78,7 @@ Deno.serve(async (req) => {
     const prompt = String(body.prompt ?? '').trim()
     if (!prompt) return json({ error: 'prompt obrigatório' }, 400)
     const size = ['1024x1024', '1024x1536', '1536x1024'].includes(String(body.size)) ? String(body.size) : '1024x1024'
+    const n = Math.max(1, Math.min(4, Number(body.n) || 1))
 
     let apiKey = env.OPENAI_API_KEY
     if (!apiKey) {
@@ -83,9 +87,9 @@ Deno.serve(async (req) => {
     }
     if (!apiKey) return json({ error: 'OPENAI_API_KEY não configurada' }, 200)
 
-    const { bytes, model } = await openaiImage(apiKey, prompt, size)
-    const url = await upload(admin, bytes)
-    return json({ ok: true, url, model })
+    const { images, model } = await openaiImages(apiKey, prompt, size, n)
+    const urls = await Promise.all(images.map(b => upload(admin, b)))
+    return json({ ok: true, url: urls[0], urls, model })
   } catch (err) {
     console.error('generate-image error:', err)
     return json({ error: err instanceof Error ? err.message : String(err) }, 500)
