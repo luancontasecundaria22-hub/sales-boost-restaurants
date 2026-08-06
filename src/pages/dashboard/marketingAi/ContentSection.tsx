@@ -5,16 +5,18 @@ import ContentAgentTab from './ContentAgentTab'
 import CampaignsTab from './CampaignsTab'
 import StoriesTab from './StoriesTab'
 import ContentVault from './ContentVault'
+import ContentLibrary from './ContentLibrary'
 
 const ORANGE = '#FF6D29'
 
-type Mode = 'organico' | 'campanhas' | 'stories' | 'vault'
+type Mode = 'organico' | 'campanhas' | 'stories' | 'vault' | 'biblioteca'
 
 const TABS: { key: Mode; icon: string; label: string; sub: string }[] = [
   { key: 'organico', icon: '✍️', label: 'Orgânico', sub: 'Calendário, ideias e criativos' },
   { key: 'stories', icon: '📖', label: 'Stories', sub: 'Stories + Story Ads (demo)' },
   { key: 'campanhas', icon: '🎯', label: 'Campanhas', sub: 'Mídia paga com funil (demo)' },
   { key: 'vault', icon: '⭐', label: 'Vault', sub: 'Aprovados pelo QC, prontos pra publicar' },
+  { key: 'biblioteca', icon: '📚', label: 'Biblioteca', sub: 'Frameworks, hooks e personalidades' },
 ]
 
 // Casa os dois módulos de conteúdo sob uma única seção: o Agente de Conteúdo
@@ -41,7 +43,7 @@ export default function ContentSection({ company }: { company: Pick<CompanyData,
         })}
       </div>
 
-      {mode === 'organico' ? <ContentAgentTab company={company} /> : mode === 'stories' ? <StoriesTab company={company} /> : mode === 'campanhas' ? <CampaignsTab company={company} /> : <ContentVault companyId={company.id} />}
+      {mode === 'organico' ? <ContentAgentTab company={company} /> : mode === 'stories' ? <StoriesTab company={company} /> : mode === 'campanhas' ? <CampaignsTab company={company} /> : mode === 'vault' ? <ContentVault companyId={company.id} /> : <ContentLibrary companyId={company.id} />}
     </div>
   )
 }
