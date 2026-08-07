@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { CARD, MUTED, BORDER, D, inputStyle } from './shared'
 import BrandCard from './BrandCard'
+import BrandDnaPanel from './BrandDnaPanel'
 
 const ORANGE = '#FF6D29'
 
@@ -73,6 +74,10 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
           📚 <strong>Biblioteca de Conhecimento por módulo.</strong> Cada formato (Orgânico, Stories, Campanhas) tem seu acervo especializado + o <strong>núcleo comum</strong>. A IA usa automaticamente a biblioteca do formato que está criando — nada de regra genérica. Os itens embutidos já valem; você pode adicionar os seus.
         </div>
         <BrandCard companyId={companyId} />
+      </div>
+
+      <div style={{ marginBottom: '20px' }}>
+        <BrandDnaPanel company={{ id: companyId }} />
       </div>
 
       <div style={{ display: 'inline-flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '11px', marginBottom: '20px', flexWrap: 'wrap' }}>
