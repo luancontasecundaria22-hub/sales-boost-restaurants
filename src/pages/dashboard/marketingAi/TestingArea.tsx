@@ -39,11 +39,38 @@ export function VideoScript({ post }: { post: TestPost }) {
   )
 }
 
-// Player de vídeo (fal.ai) ou a imagem gerada; fallback pra "sem imagem".
+// Popup controlável pra abrir a imagem em tela cheia (fecha no X, no fundo ou ESC).
+export function ImageModal({ url, onClose }: { url: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  return (
+    <div onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.86)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px' }}>
+      <button onClick={onClose} aria-label="Fechar"
+        style={{ position: 'absolute', top: '16px', right: '18px', width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: 'white', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+      <a href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+        style={{ position: 'absolute', top: '18px', left: '18px', fontSize: '12px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '6px 12px', textDecoration: 'none' }}>Abrir original ↗</a>
+      <img src={url} alt="" onClick={e => e.stopPropagation()}
+        style={{ maxWidth: '92vw', maxHeight: '88vh', objectFit: 'contain', borderRadius: '10px', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }} />
+    </div>
+  )
+}
+
+// Player de vídeo ou imagem gerada (clique abre no popup); fallback pra "sem imagem".
 export function PostMedia({ post, height = 150 }: { post: TestPost; height?: number }) {
+  const [zoom, setZoom] = useState(false)
   if (post.video_url) return <video src={post.video_url} controls style={{ width: '100%', height, objectFit: 'cover', background: '#000' }} />
-  if (post.image_url) return <img src={post.image_url} alt="" style={{ width: '100%', height, objectFit: 'cover' }} />
-  return <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', color: MUTED, fontSize: '11px' }}>sem imagem</div>
+  if (!post.image_url) return <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', color: MUTED, fontSize: '11px' }}>sem imagem</div>
+  return (
+    <>
+      <img src={post.image_url} alt="" onClick={() => setZoom(true)} title="Clique pra ampliar"
+        style={{ width: '100%', height, objectFit: 'cover', cursor: 'zoom-in' }} />
+      {zoom && post.image_url && <ImageModal url={post.image_url} onClose={() => setZoom(false)} />}
+    </>
+  )
 }
 
 // Brief do Diretor Criativo (Fase 2): mostra como o conteúdo nasceu.

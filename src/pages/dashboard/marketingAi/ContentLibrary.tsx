@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { CARD, MUTED, BORDER, D, inputStyle } from './shared'
+import BrandCard from './BrandCard'
 
 const ORANGE = '#FF6D29'
 
@@ -29,6 +30,7 @@ export const KIND_LABEL: Record<string, string> = {
   urgency: 'Urgência', retention: 'Retenção', story_ads: 'Story Ads',
   objective: 'Objetivos', funnel: 'Funil', ad_copy: 'Copy de anúncio', headline: 'Headlines', offer: 'Ofertas', targeting: 'Segmentação',
   retargeting: 'Retargeting', ugc: 'UGC', video_ad: 'Vídeo ad', image_ad: 'Imagem ad', meta_best: 'Meta Ads', scaling: 'Escala', fatigue: 'Fadiga de criativo',
+  emotion: 'Emoções', composition: 'Composição', component: 'Componentes',
 }
 export const kindLabel = (k: string) => KIND_LABEL[k] ?? k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, ' ')
 
@@ -66,8 +68,11 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
 
   return (
     <div>
-      <div style={{ padding: '12px 16px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '18px' }}>
-        📚 <strong>Biblioteca de Conhecimento por módulo.</strong> Cada formato (Orgânico, Stories, Campanhas) tem seu acervo especializado + o <strong>núcleo comum</strong>. A IA usa automaticamente a biblioteca do formato que está criando — nada de regra genérica. Os itens embutidos já valem; você pode adicionar os seus.
+      <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '18px' }}>
+        <div style={{ flex: 1, minWidth: '300px', padding: '12px 16px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
+          📚 <strong>Biblioteca de Conhecimento por módulo.</strong> Cada formato (Orgânico, Stories, Campanhas) tem seu acervo especializado + o <strong>núcleo comum</strong>. A IA usa automaticamente a biblioteca do formato que está criando — nada de regra genérica. Os itens embutidos já valem; você pode adicionar os seus.
+        </div>
+        <BrandCard companyId={companyId} />
       </div>
 
       <div style={{ display: 'inline-flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '11px', marginBottom: '20px', flexWrap: 'wrap' }}>
