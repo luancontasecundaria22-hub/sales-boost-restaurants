@@ -113,14 +113,18 @@ Deno.serve(async (req) => {
 
     const kind = ['organico', 'stories', 'campanhas'].includes(String(body.kind)) ? String(body.kind) : 'organico'
 
-    const [{ data: cfgRow }, { data: insRows }, { data: libRows }] = await Promise.all([
+    const [{ data: cfgRow }, { data: insRows }, { data: libRows }, { data: visRows }] = await Promise.all([
       admin.from('marketing_ai_config').select('agent_name, brand_voice, tone, target_audience, content_pillars, marketing_goals, business_objectives').eq('company_id', company.id).maybeSingle(),
       admin.from('marketing_ai_insights').select('pillar, title, description').eq('company_id', company.id).eq('status', 'open').order('created_at', { ascending: false }).limit(6),
       admin.from('marketing_ai_knowledge').select('kind, title, content, module').or(`company_id.is.null,company_id.eq.${company.id}`).in('module', ['core', kind]),
+      admin.from('marketing_ai_knowledge').select('title, meta').eq('company_id', company.id).eq('module', 'visual').order('created_at', { ascending: false }).limit(6),
     ])
     const config = (cfgRow as Config | null) ?? defaultConfig(company)
     const insights = (insRows ?? []) as { pillar: string; title: string; description: string }[]
     const lib = (libRows ?? []) as Know[]
+    // Referências visuais da marca (Layouts & Estilos) — só metadados, limitado (custo).
+    const visualRefs = ((visRows ?? []) as { title: string; meta: Record<string, string> | null }[])
+      .map(v => { const m = v.meta ?? {}; return `- ${v.title}${m.category ? ` [${m.category}]` : ''}${m.visual_style ? `, estilo ${m.visual_style}` : ''}${m.colors ? `, cores ${m.colors}` : ''}${m.composition ? `, composição ${m.composition}` : ''}` }).join('\n')
     // Conhecimento especializado do módulo que está sendo gerado (Orgânico/Stories/Campanhas).
     const moduleKnow = lib.filter(k => k.module === kind).map(k => `- ${k.title}: ${k.content}`).join('\n') || '(sem específicos ainda)'
     const MOD_LABEL: Record<string, string> = { organico: 'Post Orgânico', stories: 'Stories', campanhas: 'Campanha (mídia paga)' }
@@ -164,7 +168,7 @@ ${frameworkContent ? `\nUse este framework de copy:\n${frameworkContent}` : ''}
 ${visualContent ? `\nConceito visual a evocar:\n${visualContent}` : ''}
 
 Boas práticas do formato ${modLabel} (siga-as):\n${moduleKnow}
-
+${visualRefs ? `\nReferências visuais da marca (Layouts & Estilos — inspire-se no estilo quando fizer sentido):\n${visualRefs}\n` : ''}
 Escreva o post pronto pra publicar. Regras importantes:
 - "caption" é APENAS a legenda que vai no Instagram (texto pro público). NUNCA coloque nela instruções de imagem, descrição de foto nem "Slide 1/2/3".
 - Se o formato for CARROSSEL, preencha "slides": um array de 3 a 6 slides, cada um {"text": texto curto que aparece no slide, "image": descrição visual da imagem daquele slide em inglês (sem pessoas, sem texto na imagem)}.

@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { CARD, MUTED, BORDER, D, inputStyle } from './shared'
 import BrandCard from './BrandCard'
 import BrandDnaPanel from './BrandDnaPanel'
+import VisualLibrary from './VisualLibrary'
 
 const ORANGE = '#FF6D29'
 
@@ -21,6 +22,7 @@ const MODULES: { key: string; icon: string; label: string }[] = [
   { key: 'stories', icon: '📖', label: 'Stories' },
   { key: 'campanhas', icon: '🎯', label: 'Campanhas' },
   { key: 'core', icon: '🌐', label: 'Núcleo comum' },
+  { key: 'visual', icon: '🎨', label: 'Layouts & Estilos' },
 ]
 
 export const KIND_LABEL: Record<string, string> = {
@@ -93,6 +95,7 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
         })}
       </div>
 
+      {mod === 'visual' ? <VisualLibrary companyId={companyId} /> : (<>
       <div style={{ marginBottom: '16px' }}>
         <button onClick={() => setAdding(a => !a)} style={{ padding: '6px 13px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '7px', color: ORANGE, fontSize: '11.5px', cursor: 'pointer', fontFamily: D }}>
           {adding ? 'Cancelar' : `+ Adicionar recurso em ${MODULES.find(m => m.key === mod)?.label}`}
@@ -134,6 +137,7 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
           ))}
         </div>
       )}
+      </>)}
     </div>
   )
 }
