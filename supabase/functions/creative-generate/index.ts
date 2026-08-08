@@ -56,13 +56,13 @@ function parseObj(raw: string): Record<string, unknown> {
 
 // Extrai um post do texto da IA de forma tolerante: aceita array, objeto único,
 // ou JSON cercado de texto. Devolve null só se realmente não houver post.
-function extractOne(raw: string): Record<string, string> | null {
+function extractOne(raw: string): Record<string, unknown> | null {
   const tryParse = (s: string): unknown => { try { return JSON.parse(s) } catch { return null } }
   let v: unknown = tryParse(raw)
   if (!v) { const a = raw.match(/\[[\s\S]*\]/); if (a) v = tryParse(a[0]) }
   if (!v) { const o = raw.match(/\{[\s\S]*\}/); if (o) v = tryParse(o[0]) }
   if (Array.isArray(v)) v = v[0]
-  if (v && typeof v === 'object' && ((v as Record<string, unknown>).caption || (v as Record<string, unknown>).idea)) return v as Record<string, string>
+  if (v && typeof v === 'object' && ((v as Record<string, unknown>).caption || (v as Record<string, unknown>).idea)) return v as Record<string, unknown>
   return null
 }
 
@@ -165,8 +165,12 @@ ${visualContent ? `\nConceito visual a evocar:\n${visualContent}` : ''}
 
 Boas práticas do formato ${modLabel} (siga-as):\n${moduleKnow}
 
-Escreva o post pronto pra publicar. Se o formato for vídeo/reel/story, inclua também um roteiro curto de COMO GRAVAR o vídeo (cenas, o que filmar, duração aproximada, texto na tela) — é uma recomendação de gravação, não um vídeo pronto. Retorne APENAS um JSON array:
-[{"idea":"resumo curto do post","caption":"legenda completa pronta pra publicar","hashtags":"#tag1 #tag2 #tag3","cta":"chamada pra ação final","format":"${brief.format ?? 'foto'}","video_script":"roteiro de como gravar, se fizer sentido em vídeo; senão vazio"}]`
+Escreva o post pronto pra publicar. Regras importantes:
+- "caption" é APENAS a legenda que vai no Instagram (texto pro público). NUNCA coloque nela instruções de imagem, descrição de foto nem "Slide 1/2/3".
+- Se o formato for CARROSSEL, preencha "slides": um array de 3 a 6 slides, cada um {"text": texto curto que aparece no slide, "image": descrição visual da imagem daquele slide em inglês (sem pessoas, sem texto na imagem)}.
+- Se for vídeo/reel/story, preencha "video_script" (roteiro de como gravar). Caso contrário, deixe vazio.
+Retorne APENAS um JSON array:
+[{"idea":"resumo curto do post","caption":"só a legenda do Instagram, texto pro público","hashtags":"#tag1 #tag2 #tag3","cta":"chamada pra ação final","format":"${brief.format ?? 'foto'}","video_script":"","slides":[{"text":"","image":""}]}]`
 
     const execRaw = await callClaude(anthropicKey, execPrompt, 2000)
     let post = extractOne(execRaw)
@@ -183,18 +187,34 @@ Escreva 1 post de Instagram pronto pra publicar sobre o negócio (formato ${brie
       }
     }
 
+    const fmt = String(post.format ?? brief.format ?? 'foto')
+    const idea = post.idea ? String(post.idea) : null
+    const caption = post.caption ? String(post.caption) : null
+
     const { data: inserted, error: insErr } = await admin.from('marketing_ai_test_content').insert({
-      company_id: company.id, kind,
-      idea: post.idea ?? null, caption: post.caption ?? null, hashtags: post.hashtags ?? null,
-      cta: post.cta ?? (brief.cta as string ?? null), format: post.format ?? (brief.format as string ?? null),
-      reasoning: brief.reasoning as string ?? null, video_script: post.video_script ?? null, brief, personality,
+      company_id: company.id, kind, idea, caption,
+      hashtags: post.hashtags ? String(post.hashtags) : null,
+      cta: post.cta ? String(post.cta) : (brief.cta as string ?? null),
+      format: fmt, reasoning: brief.reasoning as string ?? null,
+      video_script: post.video_script ? String(post.video_script) : null, brief, personality,
     }).select('id').single()
     if (insErr) return json({ error: insErr.message }, 500)
 
-    const url = await generateImage(company.business_type, post.idea ?? post.caption ?? '', brief.visual_system as string | undefined)
-    if (url) await admin.from('marketing_ai_test_content').update({ image_url: url }).eq('id', inserted.id)
+    // Imagens: carrossel gera 1 imagem por slide (paralelo, até 6); demais, 1 imagem.
+    const visual = brief.visual_system as string | undefined
+    const rawSlides = Array.isArray(post.slides) ? (post.slides as { text?: string; image?: string }[]).slice(0, 6) : []
+    let mainImage: string | null = null
+    let slides: { text: string; image_prompt: string; image_url: string | null }[] | null = null
+    if (fmt === 'carrossel' && rawSlides.length > 0) {
+      const urls = await Promise.all(rawSlides.map(s => generateImage(company.business_type, String(s.image ?? s.text ?? idea ?? ''), visual)))
+      slides = rawSlides.map((s, i) => ({ text: String(s.text ?? ''), image_prompt: String(s.image ?? ''), image_url: urls[i] }))
+      mainImage = slides.find(s => s.image_url)?.image_url ?? null
+    } else {
+      mainImage = await generateImage(company.business_type, String(idea ?? caption ?? ''), visual)
+    }
+    await admin.from('marketing_ai_test_content').update({ image_url: mainImage, slides }).eq('id', inserted.id)
 
-    return json({ ok: true, id: inserted.id, image_generated: !!url, personality, brief })
+    return json({ ok: true, id: inserted.id, image_generated: !!mainImage, slides: slides?.length ?? 0, personality, brief })
   } catch (err) {
     console.error('creative-generate error:', err)
     return json({ error: err instanceof Error ? err.message : String(err) }, 500)

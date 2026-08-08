@@ -19,6 +19,7 @@ export interface TestPost {
   image_url: string | null
   video_url: string | null
   video_script: string | null
+  slides: { text?: string; image_prompt?: string; image_url?: string | null }[] | null
   reasoning: string | null
   scores: Record<string, CatScore> | null
   quality_score: number | null
@@ -39,37 +40,75 @@ export function VideoScript({ post }: { post: TestPost }) {
   )
 }
 
-// Popup controlável pra abrir a imagem em tela cheia (fecha no X, no fundo ou ESC).
-export function ImageModal({ url, onClose }: { url: string; onClose: () => void }) {
+interface MediaItem { url: string; text?: string }
+
+// Popup controlável — suporta 1 imagem OU carrossel (várias). Navega com as
+// setas / ‹ ›, fecha no X, no fundo ou ESC. Mostra o texto do slide, se houver.
+export function ImageModal({ images, start = 0, onClose }: { images: MediaItem[]; start?: number; onClose: () => void }) {
+  const [i, setI] = useState(start)
+  const n = images.length
+  const go = useCallback((d: number) => setI(p => (p + d + n) % n), [n])
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight') go(1)
+      else if (e.key === 'ArrowLeft') go(-1)
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, go])
+  const cur = images[i]
+  const navBtn = { width: '44px', height: '44px', flexShrink: 0, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: 'white', fontSize: '22px', cursor: 'pointer' } as const
   return (
     <div onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.86)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '28px' }}>
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.87)', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px' }}>
       <button onClick={onClose} aria-label="Fechar"
         style={{ position: 'absolute', top: '16px', right: '18px', width: '38px', height: '38px', borderRadius: '50%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', color: 'white', fontSize: '18px', cursor: 'pointer' }}>✕</button>
-      <a href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+      <a href={cur.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
         style={{ position: 'absolute', top: '18px', left: '18px', fontSize: '12px', color: 'white', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)', borderRadius: '8px', padding: '6px 12px', textDecoration: 'none' }}>Abrir original ↗</a>
-      <img src={url} alt="" onClick={e => e.stopPropagation()}
-        style={{ maxWidth: '92vw', maxHeight: '88vh', objectFit: 'contain', borderRadius: '10px', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }} />
+      <div onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: '14px', maxWidth: '96vw' }}>
+        {n > 1 && <button onClick={() => go(-1)} style={navBtn}>‹</button>}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+          <img src={cur.url} alt="" style={{ maxWidth: n > 1 ? '78vw' : '90vw', maxHeight: '78vh', objectFit: 'contain', borderRadius: '10px', boxShadow: '0 20px 60px rgba(0,0,0,0.6)' }} />
+          {cur.text && <div style={{ fontSize: '12.5px', color: 'white', lineHeight: 1.5, maxWidth: '70vw', textAlign: 'center' }}>{cur.text}</div>}
+        </div>
+        {n > 1 && <button onClick={() => go(1)} style={navBtn}>›</button>}
+      </div>
+      {n > 1 && <div style={{ marginTop: '14px', fontSize: '12px', fontWeight: 700, color: 'white' }}>{i + 1} / {n}</div>}
     </div>
   )
 }
 
-// Player de vídeo ou imagem gerada (clique abre no popup); fallback pra "sem imagem".
+// Player de vídeo, carrossel (slides) ou imagem única. Clique abre no popup.
 export function PostMedia({ post, height = 150 }: { post: TestPost; height?: number }) {
   const [zoom, setZoom] = useState(false)
   if (post.video_url) return <video src={post.video_url} controls style={{ width: '100%', height, objectFit: 'cover', background: '#000' }} />
-  if (!post.image_url) return <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', color: MUTED, fontSize: '11px' }}>sem imagem</div>
+
+  const slideImgs = (post.slides ?? []).filter(s => s?.image_url).map(s => ({ url: s.image_url as string, text: s.text }))
+  const images: MediaItem[] = slideImgs.length > 0 ? slideImgs : (post.image_url ? [{ url: post.image_url }] : [])
+  if (images.length === 0) return <div style={{ width: '100%', height, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.03)', color: MUTED, fontSize: '11px' }}>sem imagem</div>
+
   return (
     <>
-      <img src={post.image_url} alt="" onClick={() => setZoom(true)} title="Clique pra ampliar"
-        style={{ width: '100%', height, objectFit: 'cover', cursor: 'zoom-in' }} />
-      {zoom && post.image_url && <ImageModal url={post.image_url} onClose={() => setZoom(false)} />}
+      <div onClick={() => setZoom(true)} title="Clique pra ampliar" style={{ position: 'relative', cursor: 'zoom-in' }}>
+        <img src={images[0].url} alt="" style={{ width: '100%', height, objectFit: 'cover', display: 'block' }} />
+        {images.length > 1 && <span style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.65)', color: 'white', fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '99px' }}>🖼 1/{images.length}</span>}
+      </div>
+      {zoom && <ImageModal images={images} onClose={() => setZoom(false)} />}
     </>
+  )
+}
+
+// Barra de progresso indeterminada (usada enquanto gera + avalia).
+export function ProgressBar({ label }: { label?: string }) {
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      <style>{`@keyframes sbslide{0%{left:-40%}100%{left:100%}}`}</style>
+      {label && <div style={{ fontSize: '11px', color: MUTED, marginBottom: '5px' }}>{label}</div>}
+      <div style={{ position: 'relative', height: '4px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: 0, height: '100%', width: '40%', background: ORANGE, borderRadius: '99px', animation: 'sbslide 1.1s ease-in-out infinite' }} />
+      </div>
+    </div>
   )
 }
 
@@ -209,6 +248,7 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
         </button>
       </div>
 
+      {generating && <ProgressBar label="Diretor Criativo criando + controle de qualidade avaliando... (pode levar ~1 min)" />}
       {error && <div style={{ color: '#f87171', fontSize: '11.5px', marginBottom: '12px' }}>{error}</div>}
       {okMsg && <div style={{ color: GREEN, fontSize: '11.5px', marginBottom: '12px' }}>{okMsg}</div>}
 
