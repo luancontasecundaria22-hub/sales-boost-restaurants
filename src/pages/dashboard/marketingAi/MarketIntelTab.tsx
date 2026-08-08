@@ -6,6 +6,7 @@ import {
   buildMarketDemo, MOVE_META,
   type CompetitorMove, type MarketTrend, type MarketOpportunity,
 } from './intelDemo'
+import PartnershipSection from './PartnershipSection'
 
 const ORANGE = '#FF6D29'
 const IMPACT_COLOR: Record<string, string> = { high: '#f87171', medium: '#FBBF24', low: MUTED }
@@ -90,6 +91,9 @@ export default function MarketIntelTab({ company }: { company: Pick<CompanyData,
           </div>
         </section>
       </div>
+
+      {/* Oportunidades de Parceria — capacidade real, nativa da Inteligência de Mercado */}
+      <PartnershipSection companyId={company.id} />
     </div>
   )
 }
