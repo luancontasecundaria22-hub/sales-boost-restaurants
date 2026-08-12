@@ -4,7 +4,7 @@ import type { JSX } from 'react'
 // O FormatStudio renderiza um destes em tamanho cheio e exporta como PNG.
 // Adicionar um formato novo = adicionar um item aqui (campos + função render).
 
-export interface Brand { primary: string; name: string }
+export interface Brand { primary: string; name: string; primary2?: string; accent?: string; accent2?: string; text?: string; bg?: string; logoUrl?: string; heading?: string; body?: string }
 export interface FieldDef { key: string; label: string; type?: 'text' | 'textarea'; placeholder?: string }
 export interface Template {
   key: string
@@ -19,6 +19,13 @@ export interface Template {
 
 const FONT = "'Bricolage Grotesque', system-ui, sans-serif"
 const initials = (name: string) => (name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
+// Fonte da marca (título) quando definida no Kit, com fallback.
+const bfont = (b: Brand) => b.heading ? `'${b.heading}', ${FONT}` : FONT
+// Logo da marca no canto (quando existe no Kit).
+function Logo({ b, dark }: { b: Brand; dark?: boolean }) {
+  if (!b.logoUrl) return null
+  return <img src={b.logoUrl} crossOrigin="anonymous" alt="" style={{ position: 'absolute', bottom: '54px', right: '64px', height: '58px', maxWidth: '220px', objectFit: 'contain', opacity: dark ? 0.9 : 1 }} />
+}
 
 // ── Print de Tweet ──────────────────────────────────────────────────────────
 function tweet(f: Record<string, string>, brand: Brand): JSX.Element {
@@ -28,7 +35,7 @@ function tweet(f: Record<string, string>, brand: Brand): JSX.Element {
   const muted = dark ? '#8b98a5' : '#536471'
   const line = dark ? '#38444d' : '#eff3f4'
   return (
-    <div style={{ width: '100%', height: '100%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+    <div style={{ width: '100%', height: '100%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: bfont(brand) }}>
       <div style={{ width: '84%', background: bg }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' }}>
           <div style={{ width: '92px', height: '92px', borderRadius: '50%', background: brand.primary, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '38px', fontWeight: 800, flexShrink: 0 }}>{initials(f.name)}</div>
@@ -55,7 +62,7 @@ function tweet(f: Record<string, string>, brand: Brand): JSX.Element {
 // ── Card de Citação ─────────────────────────────────────────────────────────
 function quote(f: Record<string, string>, brand: Brand): JSX.Element {
   return (
-    <div style={{ width: '100%', height: '100%', background: `linear-gradient(155deg, ${brand.primary}, ${shade(brand.primary, -30)})`, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '110px', boxSizing: 'border-box', fontFamily: FONT, color: '#fff' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: `linear-gradient(155deg, ${brand.primary}, ${shade(brand.primary, -30)})`, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '110px', boxSizing: 'border-box', fontFamily: bfont(brand), color: '#fff' }}>
       <div style={{ fontSize: '150px', lineHeight: 0.6, fontWeight: 800, opacity: 0.35 }}>“</div>
       <div style={{ fontSize: '58px', lineHeight: 1.3, fontWeight: 800, margin: '20px 0 44px' }}>{f.quote || 'A frase de efeito que resume a sua marca vai aqui.'}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
@@ -65,6 +72,7 @@ function quote(f: Record<string, string>, brand: Brand): JSX.Element {
           {f.role && <div style={{ fontSize: '24px', opacity: 0.85 }}>{f.role}</div>}
         </div>
       </div>
+      <Logo b={brand} />
     </div>
   )
 }
@@ -72,12 +80,13 @@ function quote(f: Record<string, string>, brand: Brand): JSX.Element {
 // ── Anúncio / Promoção ──────────────────────────────────────────────────────
 function announcement(f: Record<string, string>, brand: Brand): JSX.Element {
   return (
-    <div style={{ width: '100%', height: '100%', background: '#0E0B0A', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '100px', boxSizing: 'border-box', fontFamily: FONT, color: '#fff' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: brand.bg || '#0E0B0A', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '100px', boxSizing: 'border-box', fontFamily: bfont(brand), color: brand.text || '#fff' }}>
       {f.eyebrow && <div style={{ fontSize: '30px', fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: brand.primary, marginBottom: '28px' }}>{f.eyebrow}</div>}
       <div style={{ fontSize: '92px', lineHeight: 1.05, fontWeight: 800, marginBottom: '30px' }}>{f.headline || 'Sua chamada principal'}</div>
       {f.subtext && <div style={{ fontSize: '38px', lineHeight: 1.4, color: '#BABABA', marginBottom: '44px' }}>{f.subtext}</div>}
-      {f.offer && <div style={{ alignSelf: 'flex-start', background: brand.primary, color: '#000', fontSize: '46px', fontWeight: 800, padding: '18px 40px', borderRadius: '18px', marginBottom: '44px' }}>{f.offer}</div>}
-      {f.cta && <div style={{ fontSize: '34px', fontWeight: 700, color: '#fff', border: `2px solid ${brand.primary}`, borderRadius: '999px', padding: '18px 42px', alignSelf: 'flex-start' }}>{f.cta} →</div>}
+      {f.offer && <div style={{ alignSelf: 'flex-start', background: brand.accent || brand.primary, color: '#000', fontSize: '46px', fontWeight: 800, padding: '18px 40px', borderRadius: '18px', marginBottom: '44px' }}>{f.offer}</div>}
+      {f.cta && <div style={{ fontSize: '34px', fontWeight: 700, color: brand.text || '#fff', border: `2px solid ${brand.primary}`, borderRadius: '999px', padding: '18px 42px', alignSelf: 'flex-start' }}>{f.cta} →</div>}
+      <Logo b={brand} />
     </div>
   )
 }
@@ -85,11 +94,12 @@ function announcement(f: Record<string, string>, brand: Brand): JSX.Element {
 // ── Estatística / Destaque ──────────────────────────────────────────────────
 function stat(f: Record<string, string>, brand: Brand): JSX.Element {
   return (
-    <div style={{ width: '100%', height: '100%', background: '#150E08', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '90px', boxSizing: 'border-box', fontFamily: FONT, color: '#fff', textAlign: 'center' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: brand.bg || '#150E08', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '90px', boxSizing: 'border-box', fontFamily: bfont(brand), color: brand.text || '#fff', textAlign: 'center' }}>
       {f.label && <div style={{ fontSize: '38px', fontWeight: 700, color: '#BABABA', marginBottom: '20px' }}>{f.label}</div>}
       <div style={{ fontSize: '230px', lineHeight: 1, fontWeight: 800, color: brand.primary }}>{f.value || '87%'}</div>
       {f.context && <div style={{ fontSize: '42px', lineHeight: 1.35, marginTop: '30px', maxWidth: '80%' }}>{f.context}</div>}
       {f.source && <div style={{ fontSize: '24px', color: '#7a7a7a', marginTop: '40px' }}>{f.source}</div>}
+      <Logo b={brand} />
     </div>
   )
 }

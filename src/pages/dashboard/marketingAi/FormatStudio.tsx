@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { toPng } from 'html-to-image'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
@@ -51,27 +52,60 @@ export default function FormatStudio({ companyId, template, brand, onClose, onSa
     setFilling(false)
   }
 
-  const generate = async () => {
-    if (!nodeRef.current) return
-    setSaving(true); setErr(''); setMsg('')
+  // Renderiza o template com um brand/fields específicos FORA da tela e captura
+  // em resolução natural — usado tanto pela geração quanto pelas variações.
+  const captureToPng = async (fl: Record<string, string>, br: Brand): Promise<string> => {
+    const holder = document.createElement('div')
+    holder.style.cssText = `position:fixed;left:-99999px;top:0;width:${template.w}px;height:${template.h}px;`
+    holder.innerHTML = renderToStaticMarkup(template.render(fl, br))
+    document.body.appendChild(holder)
     try {
       await document.fonts.ready
-      const dataUrl = await toPng(nodeRef.current, { width: template.w, height: template.h, cacheBust: true, pixelRatio: 1 })
-      const blob = await (await fetch(dataUrl)).blob()
-      const path = `renders/${companyId}/${crypto.randomUUID()}.png`
-      const { error: upErr } = await supabase.storage.from('post-images').upload(path, blob, { contentType: 'image/png', upsert: false })
-      if (upErr) throw upErr
-      const { data: pub } = supabase.storage.from('post-images').getPublicUrl(path)
-      const { error: insErr } = await supabase.from('marketing_ai_test_content').insert({
-        company_id: companyId, kind: mod, idea: subject || template.label, caption: caption || null,
-        format: template.label, image_url: pub.publicUrl,
-      })
-      if (insErr) throw insErr
+      return await toPng(holder.firstElementChild as HTMLElement, { width: template.w, height: template.h, cacheBust: true, pixelRatio: 1 })
+    } finally { holder.remove() }
+  }
+
+  const saveDraft = async (dataUrl: string) => {
+    const blob = await (await fetch(dataUrl)).blob()
+    const path = `renders/${companyId}/${crypto.randomUUID()}.png`
+    const { error: upErr } = await supabase.storage.from('post-images').upload(path, blob, { contentType: 'image/png', upsert: false })
+    if (upErr) throw upErr
+    const { data: pub } = supabase.storage.from('post-images').getPublicUrl(path)
+    const { error: insErr } = await supabase.from('marketing_ai_test_content').insert({
+      company_id: companyId, kind: mod, idea: subject || template.label, caption: caption || null,
+      format: template.label, image_url: pub.publicUrl,
+    })
+    if (insErr) throw insErr
+  }
+
+  const generate = async () => {
+    setSaving(true); setErr(''); setMsg('')
+    try {
+      await saveDraft(await captureToPng(fields, brand))
       track('content_generated', `Gerou imagem de formato (${template.label})`, { template: template.key })
       setMsg('Imagem gerada! Está na Área de Testes (seção Conteúdo), esperando sua aprovação.')
       onSaved()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Erro ao gerar imagem')
+    }
+    setSaving(false)
+  }
+
+  // Variações "de graça": recompõe a MESMA peça trocando a cor principal pelas
+  // outras do kit (e o tema, no tweet). Sem nova chamada de IA — só montagem.
+  const generateVariations = async () => {
+    setSaving(true); setErr(''); setMsg('')
+    try {
+      const alts = [brand.primary2, brand.accent, brand.accent2].filter((c): c is string => !!c && c !== brand.primary).slice(0, 3)
+      const jobs: { fl: Record<string, string>; br: Brand }[] = alts.map(c => ({ fl: fields, br: { ...brand, primary: c } }))
+      if (template.key === 'tweet') jobs.unshift({ fl: { ...fields, theme: (fields.theme === 'light' ? 'dark' : 'light') }, br: brand })
+      if (jobs.length === 0) { setErr('Defina cores 2ª/destaque no Kit da Marca pra gerar variações.'); setSaving(false); return }
+      for (const j of jobs) await saveDraft(await captureToPng(j.fl, j.br))
+      track('content_generated', `Gerou ${jobs.length} variações (${template.label})`, { template: template.key, variations: jobs.length })
+      setMsg(`${jobs.length} variações geradas (de graça) na Área de Testes.`)
+      onSaved()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erro ao gerar variações')
     }
     setSaving(false)
   }
@@ -126,6 +160,7 @@ export default function FormatStudio({ companyId, template, brand, onClose, onSa
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '18px' }}>
           <button onClick={generate} disabled={saving} style={{ padding: '10px 22px', background: saving ? 'rgba(255,109,41,0.4)' : ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: saving ? 'wait' : 'pointer', fontFamily: D }}>{saving ? 'Gerando...' : '🎨 Gerar imagem'}</button>
+          <button onClick={generateVariations} disabled={saving} title="Recompõe a mesma peça com as outras cores do kit — sem custo de IA" style={{ padding: '10px 18px', background: 'transparent', border: `1px solid ${BORDER}`, color: 'white', fontWeight: 700, fontSize: '12.5px', borderRadius: '9px', cursor: saving ? 'wait' : 'pointer', fontFamily: D }}>🎨✕ Variações grátis</button>
           {msg && <span style={{ fontSize: '11.5px', color: '#4ade80' }}>{msg}</span>}
           {err && <span style={{ fontSize: '11.5px', color: '#f87171' }}>{err}</span>}
         </div>

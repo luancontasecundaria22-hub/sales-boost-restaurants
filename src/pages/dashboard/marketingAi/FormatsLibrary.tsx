@@ -32,13 +32,20 @@ export default function FormatsLibrary({ companyId }: { companyId: string }) {
   const [example, setExample] = useState('')
 
   const load = useCallback(async () => {
-    const [{ data }, { data: comp }] = await Promise.all([
+    const [{ data }, { data: comp }, { data: bd }] = await Promise.all([
       supabase.from('marketing_ai_knowledge').select('id, title, content, meta, created_at').eq('company_id', companyId).eq('module', 'formato').order('created_at', { ascending: false }),
-      supabase.from('companies').select('business_name, business_dna').eq('id', companyId).maybeSingle(),
+      supabase.from('companies').select('business_name').eq('id', companyId).maybeSingle(),
+      supabase.from('brand_dna').select('kit, logo_url').eq('company_id', companyId).maybeSingle(),
     ])
     setFormats((data ?? []) as Fmt[])
-    const dna = (comp?.business_dna as { primary_color?: string; brand_color?: string } | null) ?? null
-    setBrand({ primary: dna?.primary_color || dna?.brand_color || ORANGE, name: comp?.business_name || 'Sua marca' })
+    const kit = (bd?.kit as { colors?: { primary?: string[]; accent?: string[]; text?: string; bg?: string }; typography?: { heading?: string; body?: string } } | null) ?? null
+    const c = kit?.colors ?? {}
+    setBrand({
+      name: comp?.business_name || 'Sua marca',
+      primary: c.primary?.[0] || ORANGE, primary2: c.primary?.[1], accent: c.accent?.[0], accent2: c.accent?.[1],
+      text: c.text, bg: c.bg, logoUrl: (bd?.logo_url as string | null) ?? undefined,
+      heading: kit?.typography?.heading, body: kit?.typography?.body,
+    })
     setLoading(false)
   }, [companyId])
   useEffect(() => { load() }, [load])

@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { CARD, MUTED, BORDER, D, inputStyle, timeAgo } from './shared'
 import { ImageModal } from './TestingArea'
+import BrandKit from './BrandKit'
+import BrandComponents from './BrandComponents'
 
 const ORANGE = '#FF6D29'
 
@@ -18,7 +20,7 @@ interface ArchivePost { id: string; instagram_media_id: string | null; caption: 
 //  • Padrões Vencedores (identificados por performance — próxima fase)
 // Reusa marketing_ai_knowledge (module='visual'), instagram_posts e o Storage.
 export default function VisualLibrary({ companyId }: { companyId: string }) {
-  const [tab, setTab] = useState<'refs' | 'archive'>('refs')
+  const [tab, setTab] = useState<'kit' | 'components' | 'refs' | 'archive'>('kit')
   const [refs, setRefs] = useState<Reference[]>([])
   const [archive, setArchive] = useState<ArchivePost[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,15 +99,16 @@ export default function VisualLibrary({ companyId }: { companyId: string }) {
   return (
     <div>
       <div style={{ padding: '12px 16px', background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '16px' }}>
-        🎨 <strong>Layouts & Estilos.</strong> Guarde referências visuais (prints, inspirações, sistemas visuais) com metadados. O Diretor Criativo usa as mais relevantes ao criar. <strong>Referências</strong> = inspiração escolhida por você · <strong>Arquivo</strong> = seus posts publicados (via Meta) · <strong>Padrões vencedores</strong> = o que performa melhor (próxima fase).
+        🎨 <strong>Estilos e Visuais — a identidade visual da marca.</strong> <strong>Kit</strong> = logo, cores, tipografia e composição (o DNA visual) · <strong>Componentes</strong> = peças reutilizáveis · <strong>Referências</strong> = inspirações · <strong>Arquivo</strong> = seus posts publicados. A geração filtra e monta as peças a partir daqui.
       </div>
 
-      <div style={{ display: 'inline-flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '10px', marginBottom: '18px' }}>
-        {([['refs', '⭐ Referências Visuais'], ['archive', '🗂️ Arquivo de Conteúdo']] as const).map(([k, label]) => (
+      <div style={{ display: 'inline-flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '10px', marginBottom: '18px', flexWrap: 'wrap' }}>
+        {([['kit', '🎨 Kit da Marca'], ['components', '🧩 Componentes'], ['refs', '⭐ Referências'], ['archive', '🗂️ Arquivo']] as const).map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)} style={{ padding: '7px 13px', background: tab === k ? 'rgba(167,139,250,0.15)' : 'transparent', border: `1px solid ${tab === k ? 'rgba(167,139,250,0.4)' : 'transparent'}`, borderRadius: '7px', color: tab === k ? '#A78BFA' : 'white', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: D }}>{label}</button>
         ))}
       </div>
 
+      {tab === 'kit' ? <BrandKit companyId={companyId} /> : tab === 'components' ? <BrandComponents companyId={companyId} /> : (<>
       {err && <div style={{ color: '#f87171', fontSize: '11.5px', marginBottom: '12px' }}>{err}</div>}
       {loading ? <div style={{ fontSize: '12px', color: MUTED }}>Carregando...</div> : tab === 'refs' ? (
         <>
@@ -195,6 +198,7 @@ export default function VisualLibrary({ companyId }: { companyId: string }) {
           </div>
         )
       )}
+      </>)}
 
       {zoom && <ImageModal images={[{ url: zoom }]} onClose={() => setZoom(null)} />}
     </div>

@@ -66,12 +66,12 @@ function extractOne(raw: string): Record<string, unknown> | null {
   return null
 }
 
-async function generateImage(businessType: string | null, idea: string, visualSystem?: string): Promise<string | null> {
+async function generateImage(businessType: string | null, idea: string, visualSystem?: string, brandStyle?: string): Promise<string | null> {
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')
   if (!supabaseUrl || !serviceKey) return null
   try {
-    const prompt = `Professional social media photo for a Brazilian small business (${businessType ?? 'negócio'}).${visualSystem ? ` Visual style: ${visualSystem}.` : ''} Commercial photography, warm natural lighting, appetizing and inviting, no people, no text, no logos, no watermark. Evokes: ${idea}`
+    const prompt = `Professional social media photo for a Brazilian small business (${businessType ?? 'negócio'}).${visualSystem ? ` Visual style: ${visualSystem}.` : ''}${brandStyle ? ` ${brandStyle}` : ''} Commercial photography, warm natural lighting, appetizing and inviting, no people, no text, no logos, no watermark. Evokes: ${idea}`
     const res = await fetch(`${supabaseUrl}/functions/v1/generate-image`, {
       method: 'POST', headers: { Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ prompt, size: '1024x1024' }),
@@ -113,12 +113,13 @@ Deno.serve(async (req) => {
 
     const kind = ['organico', 'stories', 'campanhas'].includes(String(body.kind)) ? String(body.kind) : 'organico'
 
-    const [{ data: cfgRow }, { data: insRows }, { data: libRows }, { data: visRows }, { data: fmtRows }] = await Promise.all([
+    const [{ data: cfgRow }, { data: insRows }, { data: libRows }, { data: visRows }, { data: fmtRows }, { data: bdRow }] = await Promise.all([
       admin.from('marketing_ai_config').select('agent_name, brand_voice, tone, target_audience, content_pillars, marketing_goals, business_objectives').eq('company_id', company.id).maybeSingle(),
       admin.from('marketing_ai_insights').select('pillar, title, description').eq('company_id', company.id).eq('status', 'open').order('created_at', { ascending: false }).limit(6),
       admin.from('marketing_ai_knowledge').select('kind, title, content, module').or(`company_id.is.null,company_id.eq.${company.id}`).in('module', ['core', kind]),
       admin.from('marketing_ai_knowledge').select('title, meta').eq('company_id', company.id).eq('module', 'visual').order('created_at', { ascending: false }).limit(6),
       admin.from('marketing_ai_knowledge').select('title, content, meta').eq('company_id', company.id).eq('module', 'formato').order('created_at', { ascending: false }).limit(10),
+      admin.from('brand_dna').select('colors, design_notes').eq('company_id', company.id).maybeSingle(),
     ])
     const config = (cfgRow as Config | null) ?? defaultConfig(company)
     const insights = (insRows ?? []) as { pillar: string; title: string; description: string }[]
@@ -135,6 +136,12 @@ Deno.serve(async (req) => {
     // campos/componentes a IA precisa preencher pra montar aquela imagem.
     const formatsRef = ((fmtRows ?? []) as { title: string; content: string | null; meta: { fields?: string[]; example?: string } | null }[])
       .map(f => { const fields = f.meta?.fields?.length ? ` — campos: ${f.meta.fields.join(', ')}` : ''; return `- ${f.title}${f.content ? `: ${f.content}` : ''}${fields}` }).join('\n')
+
+    // Estilo da marca (Kit): cores + direção de arte entram na foto gerada pela
+    // IA — é o "sem asset, a IA gera do zero seguindo o kit".
+    const bd = (bdRow as { colors: string[] | null; design_notes: string | null } | null) ?? null
+    const brandColors = (bd?.colors ?? []).slice(0, 4).join(', ')
+    const brandStyle = [brandColors ? `Brand color palette: ${brandColors}.` : '', bd?.design_notes ? `Art direction: ${bd.design_notes}.` : ''].filter(Boolean).join(' ') || undefined
 
     // Ideia-semente vinda do Creative Agent (opcional): o dono escolheu uma
     // ideia; o Diretor constrói o brief em cima dela em vez de inventar do zero.
@@ -225,11 +232,11 @@ Escreva 1 post de Instagram pronto pra publicar sobre o negócio (formato ${brie
     let mainImage: string | null = null
     let slides: { text: string; image_prompt: string; image_url: string | null }[] | null = null
     if (fmt === 'carrossel' && rawSlides.length > 0) {
-      const urls = await Promise.all(rawSlides.map(s => generateImage(company.business_type, String(s.image ?? s.text ?? idea ?? ''), visual)))
+      const urls = await Promise.all(rawSlides.map(s => generateImage(company.business_type, String(s.image ?? s.text ?? idea ?? ''), visual, brandStyle)))
       slides = rawSlides.map((s, i) => ({ text: String(s.text ?? ''), image_prompt: String(s.image ?? ''), image_url: urls[i] }))
       mainImage = slides.find(s => s.image_url)?.image_url ?? null
     } else {
-      mainImage = await generateImage(company.business_type, String(idea ?? caption ?? ''), visual)
+      mainImage = await generateImage(company.business_type, String(idea ?? caption ?? ''), visual, brandStyle)
     }
     await admin.from('marketing_ai_test_content').update({ image_url: mainImage, slides }).eq('id', inserted.id)
 
