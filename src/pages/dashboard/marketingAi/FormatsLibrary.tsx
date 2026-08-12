@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { CARD, MUTED, BORDER, D, inputStyle } from './shared'
+import { TEMPLATES, type Template, type Brand } from './formatTemplates'
+import FormatStudio from './FormatStudio'
 
 const ORANGE = '#FF6D29'
 
@@ -21,6 +23,8 @@ const PRESETS: { title: string; content: string; fields: string[] }[] = [
 export default function FormatsLibrary({ companyId }: { companyId: string }) {
   const [formats, setFormats] = useState<Fmt[]>([])
   const [loading, setLoading] = useState(true)
+  const [studio, setStudio] = useState<Template | null>(null)
+  const [brand, setBrand] = useState<Brand>({ primary: ORANGE, name: 'Sua marca' })
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [desc, setDesc] = useState('')
@@ -28,8 +32,13 @@ export default function FormatsLibrary({ companyId }: { companyId: string }) {
   const [example, setExample] = useState('')
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('marketing_ai_knowledge').select('id, title, content, meta, created_at').eq('company_id', companyId).eq('module', 'formato').order('created_at', { ascending: false })
+    const [{ data }, { data: comp }] = await Promise.all([
+      supabase.from('marketing_ai_knowledge').select('id, title, content, meta, created_at').eq('company_id', companyId).eq('module', 'formato').order('created_at', { ascending: false }),
+      supabase.from('companies').select('business_name, business_dna').eq('id', companyId).maybeSingle(),
+    ])
     setFormats((data ?? []) as Fmt[])
+    const dna = (comp?.business_dna as { primary_color?: string; brand_color?: string } | null) ?? null
+    setBrand({ primary: dna?.primary_color || dna?.brand_color || ORANGE, name: comp?.business_name || 'Sua marca' })
     setLoading(false)
   }, [companyId])
   useEffect(() => { load() }, [load])
@@ -51,8 +60,26 @@ export default function FormatsLibrary({ companyId }: { companyId: string }) {
   return (
     <div>
       <div style={{ padding: '12px 16px', background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '16px' }}>
-        🧩 <strong>Formatos.</strong> Cada formato é a <strong>anatomia</strong> de um tipo de post — os campos/componentes que a IA precisa pra montar aquela imagem (ex: <em>Print de Tweet</em> → @usuário, nome, avatar, texto...). O <strong>Diretor Criativo consulta esses formatos</strong> ao gerar, e escolhe a anatomia certa. Quanto mais formatos, mais tipos de imagem ele sabe montar.
+        🧩 <strong>Formatos.</strong> Cada formato é a <strong>anatomia</strong> de um tipo de post. Os formatos com <strong>motor de imagem</strong> (abaixo) você <strong>gera de verdade</strong> — a imagem é montada campo a campo, não é foto de IA. Os formatos que você cadastra no catálogo (mais abaixo) <strong>guiam o Diretor Criativo</strong> ao gerar. Quanto mais formatos, mais tipos de imagem o agente sabe montar.
       </div>
+
+      {/* Motor de imagem — formatos que geram a imagem real, campo a campo */}
+      <div style={{ marginBottom: '22px' }}>
+        <div style={{ fontSize: '12.5px', fontWeight: 800, color: 'white', marginBottom: '3px' }}>🎨 Gerar imagem de formato</div>
+        <div style={{ fontSize: '11px', color: MUTED, marginBottom: '11px' }}>Escolha um formato, preencha (ou deixe a IA preencher) e gere a imagem real. Ela cai na Área de Testes pra aprovação.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '10px' }}>
+          {TEMPLATES.map(t => (
+            <button key={t.key} onClick={() => setStudio(t)} style={{ textAlign: 'left', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '11px', padding: '13px', cursor: 'pointer', fontFamily: D }}>
+              <div style={{ fontSize: '22px', marginBottom: '6px' }}>{t.icon}</div>
+              <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'white', marginBottom: '2px' }}>{t.label}</div>
+              <div style={{ fontSize: '9.5px', color: MUTED }}>{t.w}×{t.h} · {t.fields.length} campos</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ fontSize: '12.5px', fontWeight: 800, color: 'white', marginBottom: '3px' }}>📚 Catálogo de formatos</div>
+      <div style={{ fontSize: '11px', color: MUTED, marginBottom: '13px' }}>Formatos que guiam a IA na hora de gerar (sem motor de imagem próprio ainda).</div>
 
       {/* Modelos prontos */}
       <div style={{ marginBottom: '14px' }}>
@@ -104,6 +131,8 @@ export default function FormatsLibrary({ companyId }: { companyId: string }) {
           ))}
         </div>
       )}
+
+      {studio && <FormatStudio companyId={companyId} template={studio} brand={brand} onClose={() => setStudio(null)} onSaved={() => { /* fica na Área de Testes */ }} />}
     </div>
   )
 }
