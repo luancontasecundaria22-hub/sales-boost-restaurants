@@ -69,8 +69,8 @@ Deno.serve(async (req) => {
       return json({ ok: true })
     }
 
-    // Fetch company detail + agent messages + telegram conversations
-    const [companyRes, messagesRes, telegramRes, marketingAiRes] = await Promise.all([
+    // Fetch company detail + agent messages + telegram conversations + client diary
+    const [companyRes, messagesRes, telegramRes, marketingAiRes, activityRes] = await Promise.all([
       admin.from('companies')
         .select('id, business_name, business_type, city, goal, plan, instagram_url, website_url, google_rating, google_review_count, telegram_chat_id, business_dna, jarvis_enabled, agent_enabled, marketing_ai_enabled, created_at')
         .eq('id', company_id)
@@ -85,6 +85,11 @@ Deno.serve(async (req) => {
         .eq('customer_id', company_id)
         .order('created_at', { ascending: false }),
       admin.from('marketing_ai_config').select('*').eq('company_id', company_id).maybeSingle(),
+      admin.from('client_activity')
+        .select('id, event, label, meta, created_at')
+        .eq('company_id', company_id)
+        .order('created_at', { ascending: false })
+        .limit(Math.max(limit, 50)),
     ])
 
     // Fetch last messages for each telegram conversation
@@ -106,6 +111,7 @@ Deno.serve(async (req) => {
       messages: messagesRes.data ?? [],
       telegram: telegramMessages,
       marketing_ai: marketingAiRes.data ?? null,
+      activity: activityRes.data ?? [],
     })
   } catch (err) {
     return json({ error: String(err) }, 500)

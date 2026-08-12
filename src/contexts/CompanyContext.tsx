@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './AuthContext'
+import { identifyCompany, resetAnalytics } from '../lib/analytics'
 
 export interface CompanyData {
   id: string
@@ -39,14 +40,18 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const fetchCompany = useCallback(async () => {
-    if (!user) { setCompany(null); setLoading(false); return }
+    if (!user) { setCompany(null); setLoading(false); resetAnalytics(); return }
     const { data } = await supabase
       .from('companies')
       .select('id, business_name, business_type, city, phone, website_url, instagram_url, facebook_url, google_place_id, google_rating, google_review_count, instagram_user_id, plan, jarvis_enabled, agent_enabled, marketing_ai_enabled')
       .eq('user_id', user.id)
       .maybeSingle()
-    setCompany(data as CompanyData | null)
+    const c = data as CompanyData | null
+    setCompany(c)
     setLoading(false)
+    // Amarra o analytics à empresa deste cliente (owners não têm company → não
+    // são identificados como empresa nenhuma).
+    if (c) identifyCompany(c, user.id)
   }, [user])
 
   useEffect(() => { fetchCompany() }, [fetchCompany])

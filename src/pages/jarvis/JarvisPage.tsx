@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { track } from '../../lib/analytics'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import JarvisOrb from '../../components/JarvisOrb'
@@ -74,6 +75,8 @@ export default function JarvisPage() {
   useEffect(() => { autoListenRef.current = autoListen  }, [autoListen])
   useEffect(() => { voiceStateRef.current = voiceState  }, [voiceState])
   useEffect(() => { agentRoleRef.current  = agentRole   }, [agentRole])
+
+  useEffect(() => { track('jarvis_opened', 'Abriu o Jarvis') }, [])
 
   useEffect(() => () => {
     recognitionRef.current?.abort()

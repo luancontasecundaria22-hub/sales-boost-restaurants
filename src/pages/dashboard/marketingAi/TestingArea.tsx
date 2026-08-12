@@ -1,7 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
+import { track } from '../../../lib/analytics'
 import { CARD, MUTED, BORDER, D, SUPABASE_URL, timeAgo } from './shared'
+
+const KIND_PT: Record<string, string> = { organico: 'Orgânico', stories: 'Stories', campanhas: 'Campanhas' }
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -204,6 +207,7 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
       const r = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(r.error ?? 'Erro ao gerar post de teste')
       await load()
+      track('content_generated', `Gerou conteúdo (${KIND_PT[kind] ?? kind})`, { kind })
       // Passo 3: controle de qualidade (content-test)
       if (r?.id) { await callContentTest(token, { action: 'score', test_id: r.id }); await load() }
     } catch (e) {
@@ -219,7 +223,7 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
       if (okText) setOkMsg(okText)
       if (payload.action === 'regenerate') setOkMsg(`Regenerado (${r.regenerated}) → nova nota ${r.quality_score}`)
       await load()
-      if (payload.action === 'to_vault') onVaultChange?.()
+      if (payload.action === 'to_vault') { onVaultChange?.(); track('post_approved', 'Aprovou conteúdo pro Vault', { kind, test_id: id }) }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro')
     }

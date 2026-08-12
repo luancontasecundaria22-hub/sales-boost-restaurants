@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { track } from '../../../lib/analytics'
 import { ORANGE, CARD, MUTED, BORDER, D, callMarketingAi, type ChatMessage } from './shared'
 
 export default function ChatTab({ companyId, accessToken, agentName }: { companyId: string; accessToken: string; agentName: string }) {
@@ -24,6 +25,7 @@ export default function ChatTab({ companyId, accessToken, agentName }: { company
     if (!text || loading) return
     setInput('')
     setMessages(prev => [...prev, { role: 'user', content: text }])
+    track('agent_message_sent', 'Falou com o agente')
     setLoading(true)
     try {
       const data = await callMarketingAi(accessToken, 'chat', { message: text })

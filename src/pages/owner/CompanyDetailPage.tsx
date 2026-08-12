@@ -51,12 +51,25 @@ interface MarketingAiConfig {
 const CONTENT_TYPE_OPTIONS = ['reel', 'carrossel', 'foto', 'story']
 
 interface AgentMessage { id: string; role: string; content: string; agent_role: string | null; created_at: string }
+interface ClientActivity { id: string; event: string; label: string | null; meta: Record<string, unknown> | null; created_at: string }
 interface TelegramConv {
   id: string; bot_type: string; telegram_chat_id: string; status: string; created_at: string
   messages: { id: string; role: string; content: string; created_at: string }[]
 }
 
 const AGENT_EMOJI: Record<string, string> = { ceo: '🗂️', researcher: '🔍', cmo: '📣', sales: '💼', analyst: '📊', cs: '⭐' }
+
+// Diário do cliente: ícone + rótulo amigável por tipo de evento. Eventos novos
+// caem no fallback (ponto + a própria chave), então nada some se faltar aqui.
+const EVENT_META: Record<string, { icon: string; label: string }> = {
+  content_generated: { icon: '🎨', label: 'Gerou conteúdo' },
+  post_approved: { icon: '✅', label: 'Aprovou um post' },
+  post_rejected: { icon: '🗑️', label: 'Descartou um post' },
+  agent_message_sent: { icon: '💬', label: 'Falou com o agente' },
+  jarvis_opened: { icon: '🎙️', label: 'Abriu o Jarvis' },
+  channel_connected: { icon: '🔗', label: 'Conectou um canal' },
+}
+const eventMeta = (e: string) => EVENT_META[e] ?? { icon: '•', label: e.replace(/_/g, ' ') }
 
 const inputStyle = { width: '100%', padding: '9px 12px', boxSizing: 'border-box' as const, background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none' }
 
@@ -69,7 +82,8 @@ export default function CompanyDetailPage() {
   const [detail, setDetail] = useState<CompanyDetail | null>(null)
   const [messages, setMessages] = useState<AgentMessage[]>([])
   const [telegram, setTelegram] = useState<TelegramConv[]>([])
-  const [activityTab, setActivityTab] = useState<'telegram' | 'agent'>('telegram')
+  const [activity, setActivity] = useState<ClientActivity[]>([])
+  const [activityTab, setActivityTab] = useState<'cliente' | 'telegram' | 'agent'>('cliente')
 
   const [form, setForm] = useState({ business_name: '', business_type: '', city: '', goal: '', plan: '' })
   const [dna, setDna] = useState<BusinessDna>({})
@@ -114,13 +128,14 @@ export default function CompanyDetailPage() {
         headers: { Authorization: `Bearer ${session!.access_token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ company_id: id, limit: 30 }),
       })
-      const data = await res.json() as { company?: CompanyDetail; messages?: AgentMessage[]; telegram?: TelegramConv[]; marketing_ai?: MarketingAiConfig | null; error?: string }
+      const data = await res.json() as { company?: CompanyDetail; messages?: AgentMessage[]; telegram?: TelegramConv[]; marketing_ai?: MarketingAiConfig | null; activity?: ClientActivity[]; error?: string }
       if (!res.ok || !data.company) {
         setLoadError(data.error ?? `Erro ao carregar (${res.status}).`)
       } else {
         setDetail(data.company)
         setMessages(data.messages ?? [])
         setTelegram(data.telegram ?? [])
+        setActivity(data.activity ?? [])
         setForm({
           business_name: data.company.business_name ?? '',
           business_type: data.company.business_type ?? '',
@@ -471,7 +486,7 @@ export default function CompanyDetailPage() {
 
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '22px' }}>
           <div style={{ display: 'flex', gap: '6px', marginBottom: '16px' }}>
-            {([['telegram', '📱 Telegram'], ['agent', '🤖 Agente IA']] as const).map(([tab, label]) => (
+            {([['cliente', '👤 Cliente'], ['telegram', '📱 Telegram'], ['agent', '🤖 Agente IA']] as const).map(([tab, label]) => (
               <button key={tab} onClick={() => setActivityTab(tab)}
                 style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '7px', border: `1px solid ${activityTab === tab ? 'rgba(255,109,41,0.4)' : BORDER}`, background: activityTab === tab ? 'rgba(255,109,41,0.1)' : 'transparent', color: activityTab === tab ? ORANGE : MUTED, cursor: 'pointer', fontWeight: activityTab === tab ? 700 : 400 }}>
                 {label}
@@ -479,7 +494,27 @@ export default function CompanyDetailPage() {
             ))}
           </div>
 
-          {activityTab === 'telegram' ? (
+          {activityTab === 'cliente' ? (
+            activity.length === 0 ? (
+              <div style={{ fontSize: '13px', color: MUTED }}>Nenhuma ação registrada ainda. Assim que o cliente usar o app (gerar conteúdo, aprovar post, falar com o agente), aparece aqui.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '520px', overflowY: 'auto' }}>
+                {activity.map(a => {
+                  const m = eventMeta(a.event)
+                  return (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '11px', padding: '11px 14px', borderRadius: '9px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${BORDER}` }}>
+                      <span style={{ fontSize: '15px', flexShrink: 0 }}>{m.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', color: 'white', fontWeight: 600 }}>{a.label || m.label}</div>
+                        {a.label && a.label !== m.label && <div style={{ fontSize: '10.5px', color: MUTED }}>{m.label}</div>}
+                      </div>
+                      <span style={{ fontSize: '11px', color: MUTED, flexShrink: 0 }}>{new Date(a.created_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          ) : activityTab === 'telegram' ? (
             telegram.length === 0 ? (
               <div style={{ fontSize: '13px', color: MUTED }}>Telegram não conectado ainda.</div>
             ) : (
