@@ -4,6 +4,8 @@ import { CARD, MUTED, BORDER, D, inputStyle } from './shared'
 import BrandCard from './BrandCard'
 import BrandDnaPanel from './BrandDnaPanel'
 import VisualLibrary from './VisualLibrary'
+import CreativeAgent from './CreativeAgent'
+import FormatsLibrary from './FormatsLibrary'
 
 const ORANGE = '#FF6D29'
 
@@ -17,12 +19,19 @@ interface Entry {
   created_at: string
 }
 
+// Abas de topo da Biblioteca.
+const TOP_TABS: { key: string; icon: string; label: string }[] = [
+  { key: 'recursos', icon: '📚', label: 'Recursos' },
+  { key: 'creative', icon: '💡', label: 'Creative Agent' },
+  { key: 'formatos', icon: '🧩', label: 'Formatos' },
+  { key: 'visual', icon: '🎨', label: 'Estilos e Visuais' },
+]
+// Sub-abas dentro de Recursos: os três formatos + o núcleo comum.
 const MODULES: { key: string; icon: string; label: string }[] = [
   { key: 'organico', icon: '✍️', label: 'Orgânico' },
   { key: 'stories', icon: '📖', label: 'Stories' },
   { key: 'campanhas', icon: '🎯', label: 'Campanhas' },
   { key: 'core', icon: '🌐', label: 'Núcleo comum' },
-  { key: 'visual', icon: '🎨', label: 'Layouts & Estilos' },
 ]
 
 export const KIND_LABEL: Record<string, string> = {
@@ -42,6 +51,7 @@ export const kindLabel = (k: string) => KIND_LABEL[k] ?? k.charAt(0).toUpperCase
 export default function ContentLibrary({ companyId }: { companyId: string }) {
   const [entries, setEntries] = useState<Entry[]>([])
   const [loading, setLoading] = useState(true)
+  const [top, setTop] = useState('recursos')
   const [mod, setMod] = useState('organico')
   const [adding, setAdding] = useState(false)
   const [kind, setKind] = useState('hook')
@@ -73,11 +83,30 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
     <div>
       <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '18px' }}>
         <div style={{ flex: 1, minWidth: '300px', padding: '12px 16px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
-          📚 <strong>Biblioteca de Conhecimento por módulo.</strong> Cada formato (Orgânico, Stories, Campanhas) tem seu acervo especializado + o <strong>núcleo comum</strong>. A IA usa automaticamente a biblioteca do formato que está criando — nada de regra genérica. Os itens embutidos já valem; você pode adicionar os seus.
+          📚 <strong>Biblioteca do Agente de Conteúdo.</strong> Aqui você ensina o agente: <strong>Recursos</strong> (hooks, frameworks, personalidades por formato), <strong>Creative Agent</strong> (ideias de post), <strong>Formatos</strong> (a anatomia de cada tipo de imagem) e <strong>Estilos e Visuais</strong> (referências de layout). O agente usa tudo isso automaticamente ao criar.
         </div>
         <BrandCard companyId={companyId} />
       </div>
 
+      {/* Abas de topo da Biblioteca */}
+      <div style={{ display: 'inline-flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '11px', marginBottom: '18px', flexWrap: 'wrap' }}>
+        {TOP_TABS.map(t => {
+          const active = top === t.key
+          return (
+            <button key={t.key} onClick={() => setTop(t.key)}
+              style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 15px', background: active ? 'rgba(255,109,41,0.14)' : 'transparent', border: `1px solid ${active ? 'rgba(255,109,41,0.4)' : 'transparent'}`, borderRadius: '8px', cursor: 'pointer', fontFamily: D }}>
+              <span style={{ fontSize: '14px' }}>{t.icon}</span>
+              <span style={{ fontSize: '12.5px', fontWeight: 800, color: active ? ORANGE : 'white' }}>{t.label}</span>
+            </button>
+          )
+        })}
+      </div>
+
+      {top === 'creative' ? <CreativeAgent companyId={companyId} />
+        : top === 'formatos' ? <FormatsLibrary companyId={companyId} />
+        : top === 'visual' ? <VisualLibrary companyId={companyId} />
+        : (<>
+      {/* Recursos — o Business DNA e as sub-abas por formato */}
       <div style={{ marginBottom: '20px' }}>
         <BrandDnaPanel company={{ id: companyId }} />
       </div>
@@ -95,7 +124,6 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
         })}
       </div>
 
-      {mod === 'visual' ? <VisualLibrary companyId={companyId} /> : (<>
       <div style={{ marginBottom: '16px' }}>
         <button onClick={() => setAdding(a => !a)} style={{ padding: '6px 13px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '7px', color: ORANGE, fontSize: '11.5px', cursor: 'pointer', fontFamily: D }}>
           {adding ? 'Cancelar' : `+ Adicionar recurso em ${MODULES.find(m => m.key === mod)?.label}`}

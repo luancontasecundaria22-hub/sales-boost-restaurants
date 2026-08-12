@@ -113,11 +113,12 @@ Deno.serve(async (req) => {
 
     const kind = ['organico', 'stories', 'campanhas'].includes(String(body.kind)) ? String(body.kind) : 'organico'
 
-    const [{ data: cfgRow }, { data: insRows }, { data: libRows }, { data: visRows }] = await Promise.all([
+    const [{ data: cfgRow }, { data: insRows }, { data: libRows }, { data: visRows }, { data: fmtRows }] = await Promise.all([
       admin.from('marketing_ai_config').select('agent_name, brand_voice, tone, target_audience, content_pillars, marketing_goals, business_objectives').eq('company_id', company.id).maybeSingle(),
       admin.from('marketing_ai_insights').select('pillar, title, description').eq('company_id', company.id).eq('status', 'open').order('created_at', { ascending: false }).limit(6),
       admin.from('marketing_ai_knowledge').select('kind, title, content, module').or(`company_id.is.null,company_id.eq.${company.id}`).in('module', ['core', kind]),
       admin.from('marketing_ai_knowledge').select('title, meta').eq('company_id', company.id).eq('module', 'visual').order('created_at', { ascending: false }).limit(6),
+      admin.from('marketing_ai_knowledge').select('title, content, meta').eq('company_id', company.id).eq('module', 'formato').order('created_at', { ascending: false }).limit(10),
     ])
     const config = (cfgRow as Config | null) ?? defaultConfig(company)
     const insights = (insRows ?? []) as { pillar: string; title: string; description: string }[]
@@ -130,14 +131,28 @@ Deno.serve(async (req) => {
     const MOD_LABEL: Record<string, string> = { organico: 'Post Orgânico', stories: 'Stories', campanhas: 'Campanha (mídia paga)' }
     const modLabel = MOD_LABEL[kind] ?? kind
 
+    // Formatos disponíveis (aba Formatos): anatomia de cada tipo de post — quais
+    // campos/componentes a IA precisa preencher pra montar aquela imagem.
+    const formatsRef = ((fmtRows ?? []) as { title: string; content: string | null; meta: { fields?: string[]; example?: string } | null }[])
+      .map(f => { const fields = f.meta?.fields?.length ? ` — campos: ${f.meta.fields.join(', ')}` : ''; return `- ${f.title}${f.content ? `: ${f.content}` : ''}${fields}` }).join('\n')
+
+    // Ideia-semente vinda do Creative Agent (opcional): o dono escolheu uma
+    // ideia; o Diretor constrói o brief em cima dela em vez de inventar do zero.
+    const seed = body.idea && typeof body.idea === 'object' ? body.idea as { title?: string; hook?: string; angle?: string; format?: string } : null
+    const seedBlock = seed ? `\nIDEIA ESCOLHIDA PELO DONO (construa o brief em cima dela, não invente outra):
+- Título: ${seed.title ?? '—'}
+- Gancho: ${seed.hook ?? '—'}
+- Ângulo: ${seed.angle ?? '—'}
+- Formato sugerido: ${seed.format ?? '—'}\n` : ''
+
     // ── Passo 1: Diretor Criativo → BRIEF ────────────────────────────────
     const directorPrompt = `${preamble(config, company)}
 
 Você é o DIRETOR CRIATIVO de uma agência. Vai criar um conteúdo do tipo "${modLabel}". Decida o brief usando os insights reais e as boas práticas ESPECÍFICAS desse formato (não use regra genérica).
-${insights.length ? `\nInsights abertos:\n${insights.map(i => `- [${i.pillar}] ${i.title}: ${i.description}`).join('\n')}` : ''}
+${seedBlock}${insights.length ? `\nInsights abertos:\n${insights.map(i => `- [${i.pillar}] ${i.title}: ${i.description}`).join('\n')}` : ''}
 
 Boas práticas do formato ${modLabel}:\n${moduleKnow}
-
+${formatsRef ? `\nFormatos disponíveis (escolha a anatomia certa e cite em "format" quando usar um):\n${formatsRef}` : ''}
 Personalidades disponíveis:\n${listByKind(lib, 'personality')}
 Frameworks de copy:\n${listByKind(lib, 'framework')}
 Sistemas visuais:\n${listByKind(lib, 'visual_system')}
@@ -217,6 +232,9 @@ Escreva 1 post de Instagram pronto pra publicar sobre o negócio (formato ${brie
       mainImage = await generateImage(company.business_type, String(idea ?? caption ?? ''), visual)
     }
     await admin.from('marketing_ai_test_content').update({ image_url: mainImage, slides }).eq('id', inserted.id)
+
+    // Se veio de uma ideia do Creative Agent, marca ela como usada.
+    if (body.idea_id) await admin.from('marketing_ai_ideas').update({ status: 'used' }).eq('id', String(body.idea_id)).eq('company_id', company.id)
 
     return json({ ok: true, id: inserted.id, image_generated: !!mainImage, slides: slides?.length ?? 0, personality, brief })
   } catch (err) {
