@@ -1,7 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import { toPng } from 'html-to-image'
-import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { track } from '../../../lib/analytics'
 import { CARD, MUTED, BORDER, D, inputStyle, SUPABASE_URL } from './shared'
@@ -11,10 +8,9 @@ const ORANGE = '#FF6D29'
 const MODS: { key: string; label: string }[] = [{ key: 'organico', label: 'Orgânico' }, { key: 'stories', label: 'Stories' }, { key: 'campanhas', label: 'Campanhas' }]
 
 // Studio de um formato: preenche os campos (à mão ou com IA), vê o preview ao
-// vivo e exporta a imagem REAL (html-to-image) — que cai na Área de Testes pra
-// aprovação. Renderiza o template em tamanho cheio (escondido/escalado) e
-// captura esse nó em resolução natural.
-export default function FormatStudio({ companyId, template, brand, onClose, onSaved }: { companyId: string; template: Template; brand: Brand; onClose: () => void; onSaved: () => void }) {
+// vivo e gera a imagem no SERVIDOR (render-format: SVG→PNG, sem navegador) — o
+// mesmo motor do piloto automático. O resultado cai na Área de Testes.
+export default function FormatStudio({ template, brand, onClose, onSaved }: { template: Template; brand: Brand; onClose: () => void; onSaved: () => void }) {
   const { session } = useAuth()
   const token = session?.access_token ?? ''
   const nodeRef = useRef<HTMLDivElement>(null)
@@ -52,36 +48,23 @@ export default function FormatStudio({ companyId, template, brand, onClose, onSa
     setFilling(false)
   }
 
-  // Renderiza o template com um brand/fields específicos FORA da tela e captura
-  // em resolução natural — usado tanto pela geração quanto pelas variações.
-  const captureToPng = async (fl: Record<string, string>, br: Brand): Promise<string> => {
-    const holder = document.createElement('div')
-    holder.style.cssText = `position:fixed;left:-99999px;top:0;width:${template.w}px;height:${template.h}px;`
-    holder.innerHTML = renderToStaticMarkup(template.render(fl, br))
-    document.body.appendChild(holder)
-    try {
-      await document.fonts.ready
-      return await toPng(holder.firstElementChild as HTMLElement, { width: template.w, height: template.h, cacheBust: true, pixelRatio: 1 })
-    } finally { holder.remove() }
-  }
-
-  const saveDraft = async (dataUrl: string) => {
-    const blob = await (await fetch(dataUrl)).blob()
-    const path = `renders/${companyId}/${crypto.randomUUID()}.png`
-    const { error: upErr } = await supabase.storage.from('post-images').upload(path, blob, { contentType: 'image/png', upsert: false })
-    if (upErr) throw upErr
-    const { data: pub } = supabase.storage.from('post-images').getPublicUrl(path)
-    const { error: insErr } = await supabase.from('marketing_ai_test_content').insert({
-      company_id: companyId, kind: mod, idea: subject || template.label, caption: caption || null,
-      format: template.label, image_url: pub.publicUrl,
+  // Renderiza no SERVIDOR (render-format: SVG→PNG, sem navegador, sem custo de
+  // IA de imagem). O MESMO motor do piloto automático — então o que você gera
+  // aqui é idêntico ao que sai sozinho. Cai em rascunho na Área de Testes.
+  const callRender = async (fl: Record<string, string>, br: Brand) => {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/render-format`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template: template.key, fields: fl, brand: br, kind: mod, caption: caption || null, subject: subject || template.label, format: template.label }),
     })
-    if (insErr) throw insErr
+    const r = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(r.error ?? 'Erro ao gerar imagem')
+    return r
   }
 
   const generate = async () => {
     setSaving(true); setErr(''); setMsg('')
     try {
-      await saveDraft(await captureToPng(fields, brand))
+      await callRender(fields, brand)
       track('content_generated', `Gerou imagem de formato (${template.label})`, { template: template.key })
       setMsg('Imagem gerada! Está na Área de Testes (seção Conteúdo), esperando sua aprovação.')
       onSaved()
@@ -100,7 +83,7 @@ export default function FormatStudio({ companyId, template, brand, onClose, onSa
       const jobs: { fl: Record<string, string>; br: Brand }[] = alts.map(c => ({ fl: fields, br: { ...brand, primary: c } }))
       if (template.key === 'tweet') jobs.unshift({ fl: { ...fields, theme: (fields.theme === 'light' ? 'dark' : 'light') }, br: brand })
       if (jobs.length === 0) { setErr('Defina cores 2ª/destaque no Kit da Marca pra gerar variações.'); setSaving(false); return }
-      for (const j of jobs) await saveDraft(await captureToPng(j.fl, j.br))
+      for (const j of jobs) await callRender(j.fl, j.br)
       track('content_generated', `Gerou ${jobs.length} variações (${template.label})`, { template: template.key, variations: jobs.length })
       setMsg(`${jobs.length} variações geradas (de graça) na Área de Testes.`)
       onSaved()
@@ -165,7 +148,7 @@ export default function FormatStudio({ companyId, template, brand, onClose, onSa
           {err && <span style={{ fontSize: '11.5px', color: '#f87171' }}>{err}</span>}
         </div>
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '8px', padding: '9px 12px', marginTop: '12px', fontSize: '10.5px', color: MUTED, lineHeight: 1.5 }}>
-          A imagem é montada campo a campo (não é foto de IA). Depois de gerar, ela entra na Área de Testes pra você aprovar antes de publicar.
+          A imagem é montada campo a campo <strong>no servidor</strong> (não é foto de IA, custo zero) — o mesmo motor do piloto automático, então sai igual com ou sem você na tela. O preview ao lado é uma prévia (a fonte final pode variar um pouco). Depois de gerar, cai na Área de Testes pra você aprovar.
         </div>
       </div>
     </div>

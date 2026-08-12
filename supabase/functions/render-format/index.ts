@@ -1,0 +1,200 @@
+/**
+ * render-format — renderizador de formatos NO SERVIDOR (sem navegador).
+ *
+ * Monta a imagem do formato (Print de Tweet, Card de Citação, Anúncio,
+ * Estatística) como SVG e rasteriza pra PNG com resvg-wasm — 100% no servidor,
+ * então funciona no piloto automático (cron), não só quando alguém está na tela.
+ * NÃO usa a IA de imagem: é montagem, custo de crédito = 0.
+ *
+ * Fluxo: {template, fields, brand, kind, caption} → SVG → PNG → Storage → grava
+ * rascunho em marketing_ai_test_content (cai na Área de Testes; nada publica).
+ * `selftest:true` renderiza uma amostra e devolve o tamanho (pra validar wasm+fontes).
+ */
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { Resvg, initWasm } from 'https://esm.sh/@resvg/resvg-wasm@2.6.2'
+
+const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' }
+
+const FONT_REG = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/Poppins-Regular.ttf'
+const FONT_BOLD = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/poppins/Poppins-Bold.ttf'
+
+let wasmReady = false
+let fontBuffers: Uint8Array[] | null = null
+async function ensureEngine(): Promise<Uint8Array[]> {
+  if (!wasmReady) { await initWasm(fetch('https://unpkg.com/@resvg/resvg-wasm@2.6.2/index_bg.wasm')); wasmReady = true }
+  if (!fontBuffers) {
+    const [r, b] = await Promise.all([fetch(FONT_REG).then(x => x.arrayBuffer()), fetch(FONT_BOLD).then(x => x.arrayBuffer())])
+    fontBuffers = [new Uint8Array(r), new Uint8Array(b)]
+  }
+  return fontBuffers
+}
+
+function renderPng(svg: string, width: number): Uint8Array {
+  const resvg = new Resvg(svg, { font: { fontBuffers: fontBuffers!, defaultFontFamily: 'Poppins', loadSystemFonts: false }, fitTo: { mode: 'width', value: width } })
+  return resvg.render().asPng()
+}
+
+const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+const initials = (n: string) => (n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
+// Quebra por número aproximado de caracteres por linha (Poppins ~0.55·fontSize).
+function wrap(text: string, size: number, maxWidth: number): string[] {
+  const max = Math.max(6, Math.floor(maxWidth / (size * 0.55)))
+  const words = String(text ?? '').split(/\s+/); const lines: string[] = []; let cur = ''
+  for (const w of words) { if ((cur + ' ' + w).trim().length > max) { if (cur) lines.push(cur); cur = w } else cur = (cur + ' ' + w).trim() }
+  if (cur) lines.push(cur); return lines.length ? lines : ['']
+}
+function block(lines: string[], x: number, y: number, size: number, fill: string, weight: number, lh: number, anchor = 'start'): string {
+  return `<text x="${x}" y="${y}" font-family="Poppins" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}">` +
+    lines.map((l, i) => `<tspan x="${x}" dy="${i === 0 ? 0 : lh}">${esc(l)}</tspan>`).join('') + `</text>`
+}
+function shade(hex: string, amt: number): string {
+  const h = (hex || '#000').replace('#', ''); const num = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h.padEnd(6, '0'), 16)
+  const cl = (v: number) => Math.max(0, Math.min(255, v)); const r = cl((num >> 16) + amt), g = cl(((num >> 8) & 0xff) + amt), b = cl((num & 0xff) + amt)
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
+}
+
+interface Brand { primary: string; name: string; primary2?: string; accent?: string; accent2?: string; text?: string; bg?: string }
+type F = Record<string, string>
+
+// ── SVG por template ────────────────────────────────────────────────────────
+function svgTweet(f: F, b: Brand): { svg: string; w: number; h: number } {
+  const W = 1080, H = 1080, dark = (f.theme || 'dark') === 'dark'
+  const bg = dark ? '#15202b' : '#ffffff', fg = dark ? '#e7e9ea' : '#0f1419', muted = dark ? '#8b98a5' : '#536471', line = dark ? '#38444d' : '#eff3f4'
+  const tl = wrap(f.text || 'O texto do tweet aparece aqui.', 44, 900)
+  const bodyY = 340, afterBody = bodyY + tl.length * 60 + 30
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+<rect width="${W}" height="${H}" fill="${bg}"/>
+<circle cx="150" cy="185" r="48" fill="${b.primary}"/>
+<text x="150" y="200" font-family="Poppins" font-size="38" font-weight="700" fill="#fff" text-anchor="middle">${esc(initials(f.name))}</text>
+${block([f.name || 'Nome'], 226, 172, 36, fg, 700, 0)}
+${block(['@' + (f.handle || 'usuario')], 226, 214, 30, muted, 400, 0)}
+${block(tl, 90, bodyY, 44, fg, 500, 60)}
+${block([`${f.time || '14:22'} · ${f.date || 'hoje'}`], 90, afterBody, 26, muted, 400, 0)}
+<rect x="90" y="${afterBody + 26}" width="900" height="2" fill="${line}"/>
+${block([`${f.retweets || '128'} Retuites     ${f.likes || '1.204'} Curtidas`], 90, afterBody + 78, 28, muted, 700, 0)}
+</svg>`
+  return { svg, w: W, h: H }
+}
+
+function svgQuote(f: F, b: Brand): { svg: string; w: number; h: number } {
+  const W = 1080, H = 1080
+  const ql = wrap(f.quote || 'A frase de efeito que resume a sua marca vai aqui.', 58, 860)
+  const startY = 470 - (ql.length * 74) / 2
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${b.primary}"/><stop offset="1" stop-color="${shade(b.primary, -30)}"/></linearGradient></defs>
+<rect width="${W}" height="${H}" fill="url(#g)"/>
+<text x="110" y="300" font-family="Poppins" font-size="200" font-weight="700" fill="#ffffff" opacity="0.3">&#8220;</text>
+${block(ql, 110, startY, 58, '#ffffff', 700, 74)}
+<circle cx="146" cy="900" r="40" fill="#ffffff" fill-opacity="0.2"/>
+<text x="146" y="913" font-family="Poppins" font-size="28" font-weight="700" fill="#fff" text-anchor="middle">${esc(initials(f.author || b.name))}</text>
+${block([f.author || b.name], 206, 892, 32, '#ffffff', 700, 0)}
+${f.role ? block([f.role], 206, 928, 24, '#ffffff', 400, 0) : ''}
+</svg>`
+  return { svg, w: W, h: H }
+}
+
+function svgAnnouncement(f: F, b: Brand): { svg: string; w: number; h: number } {
+  const W = 1080, H = 1350, text = b.text || '#ffffff', bg = b.bg || '#0E0B0A'
+  const hl = wrap(f.headline || 'Sua chamada principal', 88, 880)
+  let y = 470
+  const parts: string[] = []
+  if (f.eyebrow) { parts.push(block([f.eyebrow.toUpperCase()], 100, y, 30, b.primary, 700, 0)); y += 56 }
+  parts.push(block(hl, 100, y + 20, 88, text, 700, 100)); y += 20 + hl.length * 100 + 20
+  if (f.subtext) { const sl = wrap(f.subtext, 38, 880); parts.push(block(sl, 100, y + 20, 38, '#BABABA', 400, 52)); y += 20 + sl.length * 52 + 20 }
+  if (f.offer) { const ow = (f.offer.length * 27) + 80; parts.push(`<rect x="100" y="${y}" width="${ow}" height="86" rx="18" fill="${b.accent || b.primary}"/>` + block([f.offer], 140, y + 58, 46, '#000', 700, 0)); y += 130 }
+  if (f.cta) { const cw = (f.cta.length * 20) + 90; parts.push(`<rect x="100" y="${y}" width="${cw}" height="76" rx="38" fill="none" stroke="${b.primary}" stroke-width="3"/>` + block([f.cta + '  →'], 140, y + 50, 34, text, 700, 0)) }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${bg}"/>${parts.join('')}</svg>`
+  return { svg, w: W, h: H }
+}
+
+function svgStat(f: F, b: Brand): { svg: string; w: number; h: number } {
+  const W = 1080, H = 1080, text = b.text || '#ffffff', bg = b.bg || '#150E08'
+  const cl = wrap(f.context || '', 42, 820)
+  const parts: string[] = []
+  if (f.label) parts.push(block([f.label], 540, 360, 38, '#BABABA', 700, 0, 'middle'))
+  parts.push(block([f.value || '87%'], 540, 620, 200, b.primary, 700, 0, 'middle'))
+  if (cl[0]) parts.push(block(cl, 540, 720, 42, text, 400, 54, 'middle'))
+  if (f.source) parts.push(block([f.source], 540, 720 + cl.length * 54 + 50, 24, '#7a7a7a', 400, 0, 'middle'))
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="${bg}"/>${parts.join('')}</svg>`
+  return { svg, w: W, h: H }
+}
+
+function buildSvg(template: string, f: F, b: Brand): { svg: string; w: number; h: number } {
+  switch (template) {
+    case 'tweet': return svgTweet(f, b)
+    case 'quote': return svgQuote(f, b)
+    case 'announcement': return svgAnnouncement(f, b)
+    case 'stat': return svgStat(f, b)
+    default: return svgQuote(f, b)
+  }
+}
+
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
+  try {
+    const body = await req.json().catch(() => ({})) as Record<string, unknown>
+
+    // Autoteste (sem empresa): valida que wasm + fontes + resvg funcionam aqui.
+    if (body.selftest) {
+      await ensureEngine()
+      const { svg, w } = svgStat({ value: 'OK', label: 'selftest', context: 'render server' }, { primary: '#FF6D29', name: 'Test' })
+      const png = renderPng(svg, w)
+      return json({ ok: true, bytes: png.length })
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? anonKey
+    const admin = createClient(supabaseUrl, serviceKey)
+
+    // Autenticação: JWT do dono (interativo) ou cron_secret (automático).
+    let companyId = ''
+    const cronSecret = Deno.env.get('CRON_SECRET')
+    if (cronSecret && body.cron_secret === cronSecret && body.company_id) {
+      companyId = String(body.company_id)
+    } else {
+      const bearer = req.headers.get('Authorization') ?? ''
+      if (!bearer) return json({ error: 'Unauthorized' }, 401)
+      const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: bearer } } })
+      const { data: { user } } = await userClient.auth.getUser()
+      if (!user) return json({ error: 'Unauthorized' }, 401)
+      const { data: comp } = await admin.from('companies').select('id').eq('user_id', user.id).maybeSingle()
+      if (!comp) return json({ error: 'Empresa não encontrada.' }, 404)
+      companyId = comp.id as string
+    }
+
+    const template = String(body.template ?? 'quote')
+    const fields = (body.fields ?? {}) as F
+    const brand = { primary: '#FF6D29', name: 'Marca', ...(body.brand as Partial<Brand> ?? {}) } as Brand
+    const kind = ['organico', 'stories', 'campanhas'].includes(String(body.kind)) ? String(body.kind) : 'organico'
+    const caption = body.caption ? String(body.caption) : null
+    const subject = body.subject ? String(body.subject) : template
+
+    await ensureEngine()
+    const { svg, w } = buildSvg(template, fields, brand)
+    const png = renderPng(svg, w)
+
+    const path = `renders/${companyId}/${crypto.randomUUID()}.png`
+    const { error: upErr } = await admin.storage.from('post-images').upload(path, png, { contentType: 'image/png', upsert: false })
+    if (upErr) return json({ error: upErr.message }, 500)
+    const { data: pub } = admin.storage.from('post-images').getPublicUrl(path)
+
+    let id: string | null = null
+    if (body.save !== false) {
+      const { data: ins, error: insErr } = await admin.from('marketing_ai_test_content')
+        .insert({ company_id: companyId, kind, idea: subject, caption, format: String(body.format ?? template), image_url: pub.publicUrl })
+        .select('id').single()
+      if (insErr) return json({ error: insErr.message }, 500)
+      id = ins.id as string
+    }
+
+    return json({ ok: true, url: pub.publicUrl, id })
+  } catch (err) {
+    console.error('render-format error:', err)
+    return json({ error: err instanceof Error ? err.message : String(err) }, 500)
+  }
+})
+
+function json(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), { status, headers: { ...cors, 'Content-Type': 'application/json' } })
+}

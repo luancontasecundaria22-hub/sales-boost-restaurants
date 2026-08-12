@@ -139,7 +139,7 @@ export default function FormatsLibrary({ companyId }: { companyId: string }) {
         </div>
       )}
 
-      {studio && <FormatStudio companyId={companyId} template={studio} brand={brand} onClose={() => setStudio(null)} onSaved={() => { /* fica na Área de Testes */ }} />}
+      {studio && <FormatStudio template={studio} brand={brand} onClose={() => setStudio(null)} onSaved={() => { /* fica na Área de Testes */ }} />}
     </div>
   )
 }
