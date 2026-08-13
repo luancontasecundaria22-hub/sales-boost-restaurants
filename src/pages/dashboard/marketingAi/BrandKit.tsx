@@ -43,6 +43,9 @@ function ColorInput({ label, value, onChange }: { label: string; value: string; 
 export default function BrandKit({ companyId }: { companyId: string }) {
   const [kit, setKit] = useState<Kit>(EMPTY)
   const [logo, setLogo] = useState('')
+  const [voice, setVoice] = useState('')
+  const [tone, setTone] = useState('')
+  const [avoid, setAvoid] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -50,10 +53,11 @@ export default function BrandKit({ companyId }: { companyId: string }) {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('brand_dna').select('kit, logo_url').eq('company_id', companyId).maybeSingle()
-    const d = data as { kit: Kit | null; logo_url: string | null } | null
+    const { data } = await supabase.from('brand_dna').select('kit, logo_url, voice, tone, avoid').eq('company_id', companyId).maybeSingle()
+    const d = data as { kit: Kit | null; logo_url: string | null; voice: string | null; tone: string | null; avoid: string | null } | null
     if (d?.kit) setKit({ ...EMPTY, ...d.kit, colors: { ...EMPTY.colors, ...d.kit.colors }, typography: { ...EMPTY.typography, ...d.kit.typography } })
     setLogo(d?.logo_url ?? '')
+    setVoice(d?.voice ?? ''); setTone(d?.tone ?? ''); setAvoid(d?.avoid ?? '')
     setLoading(false)
   }, [companyId])
   useEffect(() => { load() }, [load])
@@ -74,8 +78,12 @@ export default function BrandKit({ companyId }: { companyId: string }) {
     setSaving(true)
     const flat = [...kit.colors.primary, ...kit.colors.accent].filter(Boolean)
     await supabase.from('brand_dna').upsert({
-      company_id: companyId, kit, logo_url: logo, colors: flat, fonts: kit.typography.heading, updated_at: new Date().toISOString(),
+      company_id: companyId, kit, logo_url: logo, colors: flat, fonts: kit.typography.heading,
+      voice: voice || null, tone: tone || null, avoid: avoid || null, updated_at: new Date().toISOString(),
     }, { onConflict: 'company_id' })
+    // Best-effort: espelha voz/tom no config do agente (é de lá que a geração lê
+    // brand_voice/tone). Só atualiza se já existe config — não cria linha nova.
+    if (voice || tone) await supabase.from('marketing_ai_config').update({ brand_voice: voice || null, tone: tone || null }).eq('company_id', companyId)
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2500)
   }
 
@@ -86,8 +94,24 @@ export default function BrandKit({ companyId }: { companyId: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '760px' }}>
       <div style={{ padding: '12px 16px', background: 'rgba(167,139,250,0.07)', border: '1px solid rgba(167,139,250,0.25)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
-        🎨 <strong>Kit da Marca (DNA visual).</strong> Logo, tipografia, cores e composição. É daqui que a geração <strong>filtra e monta as peças</strong> pra tudo sair na sua identidade — e é o que faz as variações saírem de graça. Sem um asset, a IA gera do zero seguindo estas regras.
+        🎨 <strong>Kit da Marca (DNA da marca).</strong> Tudo num lugar só: voz, logo, cores, tipografia e composição. É daqui que a geração <strong>filtra e monta as peças</strong> pra tudo sair na sua identidade — e é o que faz as variações saírem de graça. Sem um asset, a IA gera do zero seguindo estas regras.
       </div>
+
+      {/* Voz da marca */}
+      <section>
+        <div style={{ fontSize: '11px', fontWeight: 800, color: ORANGE, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>Voz da marca</div>
+        <textarea value={voice} onChange={e => setVoice(e.target.value)} rows={2} placeholder="Jeito de falar / personalidade. Ex: próxima e acolhedora, fala como uma amiga que entende do assunto." style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: D, marginBottom: '10px' }} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+          <div>
+            <div style={{ fontSize: '10px', color: MUTED, marginBottom: '4px' }}>Tom</div>
+            <input value={tone} onChange={e => setTone(e.target.value)} placeholder="acolhedor, leve, confiante" style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <div style={{ fontSize: '10px', color: MUTED, marginBottom: '4px' }}>O que a marca NUNCA faz/diz</div>
+            <input value={avoid} onChange={e => setAvoid(e.target.value)} placeholder="Ex: nunca usa gírias, nunca fala de preço baixo" style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
+          </div>
+        </div>
+      </section>
 
       {/* Logo */}
       <section>

@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import { CARD, MUTED, BORDER, D, inputStyle } from './shared'
-import BrandCard from './BrandCard'
-import BrandDnaPanel from './BrandDnaPanel'
 import VisualLibrary from './VisualLibrary'
 import CreativeAgent from './CreativeAgent'
 import FormatsLibrary from './FormatsLibrary'
@@ -81,11 +79,11 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: '18px' }}>
-        <div style={{ flex: 1, minWidth: '300px', padding: '12px 16px', background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
-          📚 <strong>Biblioteca do Agente de Conteúdo.</strong> Aqui você ensina o agente: <strong>Recursos</strong> (hooks, frameworks, personalidades por formato), <strong>Creative Agent</strong> (ideias de post), <strong>Formatos</strong> (a anatomia de cada tipo de imagem) e <strong>Estilos e Visuais</strong> (referências de layout). O agente usa tudo isso automaticamente ao criar.
+      <div style={{ marginBottom: '18px' }}>
+        <div style={{ fontSize: '15px', fontWeight: 800, color: 'white', marginBottom: '3px' }}>📚 Biblioteca do Agente de Conteúdo</div>
+        <div style={{ fontSize: '11.5px', color: MUTED, lineHeight: 1.55, maxWidth: '760px' }}>
+          O que você ensina aqui, o agente usa automaticamente ao criar: <strong style={{ color: 'white' }}>Recursos</strong> (hooks, frameworks, personalidades), <strong style={{ color: 'white' }}>Creative Agent</strong> (ideias de post), <strong style={{ color: 'white' }}>Formatos</strong> (a anatomia de cada imagem) e <strong style={{ color: 'white' }}>Estilos e Visuais</strong> (o Kit da marca — logo, cores, voz).
         </div>
-        <BrandCard companyId={companyId} />
       </div>
 
       {/* Abas de topo da Biblioteca */}
@@ -106,11 +104,7 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
         : top === 'formatos' ? <FormatsLibrary companyId={companyId} />
         : top === 'visual' ? <VisualLibrary companyId={companyId} />
         : (<>
-      {/* Recursos — o Business DNA e as sub-abas por formato */}
-      <div style={{ marginBottom: '20px' }}>
-        <BrandDnaPanel company={{ id: companyId }} />
-      </div>
-
+      {/* Recursos — sub-abas por formato (a identidade da marca vive no Kit, em Estilos e Visuais) */}
       <div style={{ display: 'inline-flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '11px', marginBottom: '20px', flexWrap: 'wrap' }}>
         {MODULES.map(m => {
           const active = mod === m.key
