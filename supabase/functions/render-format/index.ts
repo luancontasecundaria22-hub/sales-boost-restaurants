@@ -143,33 +143,46 @@ function svgStat(f: F, b: Brand): { svg: string; w: number; h: number } {
   return { svg, w: W, h: H }
 }
 
-// Post com foto: camadas = fundo (asset/IA) + scrim + marca (texto/selo/logo).
-function svgPhoto(f: F, b: Brand, bg: string | null, logo: string | null): { svg: string; w: number; h: number } {
-  const W = 1080, H = 1350
-  const hl = wrap(f.headline || '', 84, 900)
-  let y = 900
-  const overlay: string[] = []
-  if (f.eyebrow) { overlay.push(block([f.eyebrow.toUpperCase()], 90, y, 30, b.primary, 700, 0)); y += 54 }
-  overlay.push(block(hl, 90, y + 20, 84, '#ffffff', 700, 96)); y += 20 + hl.length * 96 + 24
-  if (f.offer) { const ow = f.offer.length * 27 + 80; overlay.push(`<rect x="90" y="${y}" width="${ow}" height="86" rx="18" fill="${b.accent || b.primary}"/>` + block([f.offer], 130, y + 58, 46, '#000', 700, 0)); y += 118 }
-  if (f.cta) { const cw = f.cta.length * 20 + 90; overlay.push(`<rect x="90" y="${y}" width="${cw}" height="72" rx="36" fill="#ffffff"/>` + block([f.cta + '  →'], 128, y + 48, 32, '#000', 700, 0)) }
+interface Safe { top: number; right: number; bottom: number; left: number }
+
+// Post com foto — composer ADAPTATIVO: recebe qualquer tamanho (W×H) e safe
+// areas e RECOMPÕE (não estica) o mesmo conceito. Camadas: fundo (asset/IA) +
+// scrim + componente (sticker) + logo + texto/selo/cta, tudo dentro do safe.
+function svgPhoto(f: F, b: Brand, bg: string | null, logo: string | null, sticker: string | null, W: number, H: number, safe: Safe): { svg: string; w: number; h: number } {
+  const s = W / 1080
+  const leftX = safe.left, maxW = W - safe.left - safe.right
+  const hs = Math.round(84 * s), lh = Math.round(hs * 1.14), es = Math.round(30 * s), ofs = Math.round(46 * s), cs = Math.round(32 * s)
+  const hlLines = wrap(f.headline || 'Sua chamada principal', hs, maxW)
+  const gap = Math.round(20 * s)
+  const blocks: { h: number; draw: (y: number) => string }[] = []
+  if (f.eyebrow) blocks.push({ h: es + gap, draw: y => block([f.eyebrow.toUpperCase()], leftX, y + es, es, b.primary, 700, 0) })
+  blocks.push({ h: hlLines.length * lh + gap, draw: y => block(hlLines, leftX, y + hs, hs, '#ffffff', 700, lh) })
+  if (f.offer) { const oh = Math.round(86 * s), ow = Math.round(f.offer.length * ofs * 0.62 + 70 * s); blocks.push({ h: oh + gap, draw: y => `<rect x="${leftX}" y="${y}" width="${ow}" height="${oh}" rx="${Math.round(18 * s)}" fill="${b.accent || b.primary}"/>` + block([f.offer], leftX + Math.round(36 * s), y + Math.round(oh * 0.66), ofs, '#000', 700, 0) }) }
+  if (f.cta) { const ch = Math.round(72 * s), cw = Math.round(f.cta.length * cs * 0.62 + 90 * s); blocks.push({ h: ch, draw: y => `<rect x="${leftX}" y="${y}" width="${cw}" height="${ch}" rx="${Math.round(ch / 2)}" fill="#ffffff"/>` + block([f.cta + '  →'], leftX + Math.round(38 * s), y + Math.round(ch * 0.66), cs, '#000', 700, 0) }) }
+  const total = blocks.reduce((a, bl) => a + bl.h, 0)
+  let y = H - safe.bottom - total
+  const overlay = blocks.map(bl => { const svg = bl.draw(y); y += bl.h; return svg }).join('')
+  const logoW = Math.round(W * 0.17), logoH = Math.round(logoW * 0.5)
+  const logoSvg = logo ? `<image href="${logo}" x="${W - safe.right - logoW}" y="${safe.top}" width="${logoW}" height="${logoH}" preserveAspectRatio="xMidYMid meet"/>` : ''
+  const stW = Math.round(W * 0.24)
+  const stickerSvg = sticker ? `<image href="${sticker}" x="${safe.left}" y="${safe.top}" width="${stW}" height="${stW}" preserveAspectRatio="xMidYMid meet"/>` : ''
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-<defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0.35" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.88"/></linearGradient></defs>
+<defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0.35" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.9"/></linearGradient></defs>
 ${bg ? `<image href="${bg}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/>` : `<rect width="${W}" height="${H}" fill="${b.bg || '#0E0B0A'}"/>`}
 <rect width="${W}" height="${H}" fill="url(#scrim)"/>
-${logo ? `<image href="${logo}" x="${W - 250}" y="70" width="180" height="80" preserveAspectRatio="xMidYMid meet"/>` : ''}
-${overlay.join('')}
+${logoSvg}${stickerSvg}
+${overlay}
 </svg>`
   return { svg, w: W, h: H }
 }
 
-function buildSvg(template: string, f: F, b: Brand, bg: string | null, logo: string | null): { svg: string; w: number; h: number } {
+function buildSvg(template: string, f: F, b: Brand, bg: string | null, logo: string | null, sticker: string | null, W: number, H: number, safe: Safe): { svg: string; w: number; h: number } {
   switch (template) {
     case 'tweet': return svgTweet(f, b)
     case 'quote': return svgQuote(f, b)
     case 'announcement': return svgAnnouncement(f, b)
     case 'stat': return svgStat(f, b)
-    case 'photo': return svgPhoto(f, b, bg, logo)
+    case 'photo': return svgPhoto(f, b, bg, logo, sticker, W, H, safe)
     default: return svgQuote(f, b)
   }
 }
@@ -225,9 +238,15 @@ Deno.serve(async (req) => {
     }
     const bgData = bgUrl ? await toDataUri(bgUrl) : null
     const logoData = template === 'photo' && brand.logoUrl ? await toDataUri(brand.logoUrl) : null
+    const stickerData = template === 'photo' && body.sticker ? await toDataUri(String(body.sticker)) : null
+
+    // Tamanho/safe do formato (só o 'photo' é adaptativo; os demais têm tamanho fixo).
+    const W = Math.max(200, Math.min(4000, Number(body.width) || 1080))
+    const H = Math.max(200, Math.min(4000, Number(body.height) || 1350))
+    const safe = (body.safe as Safe | undefined) ?? { top: Math.round(H * 0.06), right: Math.round(W * 0.08), bottom: Math.round(H * 0.09), left: Math.round(W * 0.08) }
 
     await ensureEngine()
-    const { svg, w } = buildSvg(template, fields, brand, bgData, logoData)
+    const { svg, w } = buildSvg(template, fields, brand, bgData, logoData, stickerData, W, H, safe)
     const png = renderPng(svg, w)
 
     const path = `renders/${companyId}/${crypto.randomUUID()}.png`

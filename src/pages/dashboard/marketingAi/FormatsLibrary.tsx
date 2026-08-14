@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { CARD, MUTED, BORDER, D, inputStyle } from './shared'
 import { TEMPLATES, type Template, type Brand } from './formatTemplates'
 import FormatStudio from './FormatStudio'
+import FormatsGallery from './FormatsGallery'
 
 const ORANGE = '#FF6D29'
 
@@ -69,6 +70,9 @@ export default function FormatsLibrary({ companyId }: { companyId: string }) {
       <div style={{ padding: '12px 16px', background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6, marginBottom: '16px' }}>
         🧩 <strong>Formatos.</strong> Cada formato é a <strong>anatomia</strong> de um tipo de post. Os formatos com <strong>motor de imagem</strong> (abaixo) você <strong>gera de verdade</strong> — a imagem é montada campo a campo, não é foto de IA. Os formatos que você cadastra no catálogo (mais abaixo) <strong>guiam o Diretor Criativo</strong> ao gerar. Quanto mais formatos, mais tipos de imagem o agente sabe montar.
       </div>
+
+      {/* Biblioteca de formatos & dimensões (tamanhos/placements + custom + presets) */}
+      <FormatsGallery companyId={companyId} />
 
       {/* Motor de imagem — formatos que geram a imagem real, campo a campo */}
       <div style={{ marginBottom: '22px' }}>
