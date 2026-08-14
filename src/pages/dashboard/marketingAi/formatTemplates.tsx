@@ -104,6 +104,25 @@ function stat(f: Record<string, string>, brand: Brand): JSX.Element {
   )
 }
 
+// ── Post com Foto ───────────────────────────────────────────────────────────
+// Camadas: fundo (asset/IA) + escurecimento + marca (texto/selo/logo).
+function photo(f: Record<string, string>, brand: Brand): JSX.Element {
+  const bg = f.background
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: brand.bg || '#0E0B0A', overflow: 'hidden', fontFamily: bfont(brand), color: '#fff' }}>
+      {bg && <img src={bg} crossOrigin="anonymous" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 35%, rgba(0,0,0,0.88))' }} />
+      {brand.logoUrl && <img src={brand.logoUrl} crossOrigin="anonymous" alt="" style={{ position: 'absolute', top: '70px', right: '70px', height: '80px', maxWidth: '180px', objectFit: 'contain' }} />}
+      <div style={{ position: 'absolute', left: '90px', right: '90px', bottom: '110px' }}>
+        {f.eyebrow && <div style={{ fontSize: '30px', fontWeight: 800, letterSpacing: '0.14em', textTransform: 'uppercase', color: brand.primary, marginBottom: '16px' }}>{f.eyebrow}</div>}
+        <div style={{ fontSize: '84px', lineHeight: 1.05, fontWeight: 800, marginBottom: '24px' }}>{f.headline || 'Sua chamada principal'}</div>
+        {f.offer && <div style={{ display: 'inline-block', background: brand.accent || brand.primary, color: '#000', fontSize: '46px', fontWeight: 800, padding: '14px 34px', borderRadius: '18px', marginBottom: '20px' }}>{f.offer}</div>}
+        {f.cta && <div style={{ fontSize: '32px', fontWeight: 800, background: '#fff', color: '#000', display: 'inline-block', padding: '14px 30px', borderRadius: '36px', marginTop: '6px' }}>{f.cta} →</div>}
+      </div>
+    </div>
+  )
+}
+
 // Clareia/escurece um hex (para o gradiente do card de citação).
 function shade(hex: string, amt: number): string {
   const h = hex.replace('#', '')
@@ -139,6 +158,15 @@ export const TEMPLATES: Template[] = [
     ],
     sample: { eyebrow: 'Novidade', headline: '', subtext: '', offer: '', cta: '' },
     render: announcement,
+  },
+  {
+    key: 'photo', label: 'Post com Foto', icon: '🖼️', w: 1080, h: 1350,
+    fields: [
+      { key: 'eyebrow', label: 'Etiqueta (topo)' }, { key: 'headline', label: 'Chamada principal', type: 'textarea' },
+      { key: 'offer', label: 'Oferta (destaque)' }, { key: 'cta', label: 'Chamada pra ação' },
+    ],
+    sample: { eyebrow: '', headline: '', offer: '', cta: '' },
+    render: photo,
   },
   {
     key: 'stat', label: 'Estatística / Destaque', icon: '📊', w: 1080, h: 1080,

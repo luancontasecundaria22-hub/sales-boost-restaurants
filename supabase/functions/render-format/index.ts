@@ -12,6 +12,7 @@
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { Resvg, initWasm } from 'https://esm.sh/@resvg/resvg-wasm@2.6.2'
+import { encodeBase64 } from 'https://deno.land/std@0.224.0/encoding/base64.ts'
 
 const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type' }
 
@@ -34,6 +35,29 @@ function renderPng(svg: string, width: number): Uint8Array {
   return resvg.render().asPng()
 }
 
+// Baixa uma imagem e embute como data URI (resvg não busca href remoto).
+async function toDataUri(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url); if (!res.ok) return null
+    const ct = res.headers.get('content-type') || 'image/png'
+    return `data:${ct};base64,${encodeBase64(new Uint8Array(await res.arrayBuffer()))}`
+  } catch { return null }
+}
+
+// Gera 1 imagem de fundo com a IA (generate-image) — só quando NÃO há asset.
+async function generateBg(prompt: string): Promise<string | null> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL'), key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY')
+  if (!supabaseUrl || !key) return null
+  try {
+    const res = await fetch(`${supabaseUrl}/functions/v1/generate-image`, {
+      method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt, size: '1024x1024' }),
+    })
+    const d = await res.json().catch(() => ({})) as { url?: string }
+    return res.ok && d.url ? d.url : null
+  } catch { return null }
+}
+
 const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const initials = (n: string) => (n || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('')
 // Quebra por número aproximado de caracteres por linha (Poppins ~0.55·fontSize).
@@ -53,7 +77,7 @@ function shade(hex: string, amt: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`
 }
 
-interface Brand { primary: string; name: string; primary2?: string; accent?: string; accent2?: string; text?: string; bg?: string }
+interface Brand { primary: string; name: string; primary2?: string; accent?: string; accent2?: string; text?: string; bg?: string; logoUrl?: string }
 type F = Record<string, string>
 
 // ── SVG por template ────────────────────────────────────────────────────────
@@ -119,12 +143,33 @@ function svgStat(f: F, b: Brand): { svg: string; w: number; h: number } {
   return { svg, w: W, h: H }
 }
 
-function buildSvg(template: string, f: F, b: Brand): { svg: string; w: number; h: number } {
+// Post com foto: camadas = fundo (asset/IA) + scrim + marca (texto/selo/logo).
+function svgPhoto(f: F, b: Brand, bg: string | null, logo: string | null): { svg: string; w: number; h: number } {
+  const W = 1080, H = 1350
+  const hl = wrap(f.headline || '', 84, 900)
+  let y = 900
+  const overlay: string[] = []
+  if (f.eyebrow) { overlay.push(block([f.eyebrow.toUpperCase()], 90, y, 30, b.primary, 700, 0)); y += 54 }
+  overlay.push(block(hl, 90, y + 20, 84, '#ffffff', 700, 96)); y += 20 + hl.length * 96 + 24
+  if (f.offer) { const ow = f.offer.length * 27 + 80; overlay.push(`<rect x="90" y="${y}" width="${ow}" height="86" rx="18" fill="${b.accent || b.primary}"/>` + block([f.offer], 130, y + 58, 46, '#000', 700, 0)); y += 118 }
+  if (f.cta) { const cw = f.cta.length * 20 + 90; overlay.push(`<rect x="90" y="${y}" width="${cw}" height="72" rx="36" fill="#ffffff"/>` + block([f.cta + '  →'], 128, y + 48, 32, '#000', 700, 0)) }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+<defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1"><stop offset="0.35" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.88"/></linearGradient></defs>
+${bg ? `<image href="${bg}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/>` : `<rect width="${W}" height="${H}" fill="${b.bg || '#0E0B0A'}"/>`}
+<rect width="${W}" height="${H}" fill="url(#scrim)"/>
+${logo ? `<image href="${logo}" x="${W - 250}" y="70" width="180" height="80" preserveAspectRatio="xMidYMid meet"/>` : ''}
+${overlay.join('')}
+</svg>`
+  return { svg, w: W, h: H }
+}
+
+function buildSvg(template: string, f: F, b: Brand, bg: string | null, logo: string | null): { svg: string; w: number; h: number } {
   switch (template) {
     case 'tweet': return svgTweet(f, b)
     case 'quote': return svgQuote(f, b)
     case 'announcement': return svgAnnouncement(f, b)
     case 'stat': return svgStat(f, b)
+    case 'photo': return svgPhoto(f, b, bg, logo)
     default: return svgQuote(f, b)
   }
 }
@@ -170,8 +215,19 @@ Deno.serve(async (req) => {
     const caption = body.caption ? String(body.caption) : null
     const subject = body.subject ? String(body.subject) : template
 
+    // Camada de FUNDO (só pro template 'photo'): usa asset (reusa, grátis) OU
+    // gera 1x com IA quando não há asset. A regra "tem asset? reusa : gera".
+    let bgUrl: string | null = body.background ? String(body.background) : null
+    if (template === 'photo' && !bgUrl && body.generate_bg) {
+      const palette = (brand.primary ? `Brand colors ${[brand.primary, brand.primary2, brand.accent].filter(Boolean).join(', ')}.` : '')
+      const subj = String(body.bg_prompt ?? subject ?? fields.headline ?? 'the business')
+      bgUrl = await generateBg(`Professional social media background photo. ${subj}. ${palette} Warm natural lighting, appetizing, room at the bottom for text overlay, no people, no text, no logos, no watermark.`)
+    }
+    const bgData = bgUrl ? await toDataUri(bgUrl) : null
+    const logoData = template === 'photo' && brand.logoUrl ? await toDataUri(brand.logoUrl) : null
+
     await ensureEngine()
-    const { svg, w } = buildSvg(template, fields, brand)
+    const { svg, w } = buildSvg(template, fields, brand, bgData, logoData)
     const png = renderPng(svg, w)
 
     const path = `renders/${companyId}/${crypto.randomUUID()}.png`
@@ -188,7 +244,7 @@ Deno.serve(async (req) => {
       id = ins.id as string
     }
 
-    return json({ ok: true, url: pub.publicUrl, id })
+    return json({ ok: true, url: pub.publicUrl, id, bg_url: bgUrl })
   } catch (err) {
     console.error('render-format error:', err)
     return json({ error: err instanceof Error ? err.message : String(err) }, 500)

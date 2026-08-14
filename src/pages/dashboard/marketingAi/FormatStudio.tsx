@@ -22,6 +22,9 @@ export default function FormatStudio({ template, brand, onClose, onSaved }: { te
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
+  const isPhoto = template.key === 'photo'
+  const [bg, setBg] = useState('')          // URL do fundo (asset reusado)
+  const [genBg, setGenBg] = useState(true)  // gerar fundo com IA se vazio
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -51,20 +54,21 @@ export default function FormatStudio({ template, brand, onClose, onSaved }: { te
   // Renderiza no SERVIDOR (render-format: SVG→PNG, sem navegador, sem custo de
   // IA de imagem). O MESMO motor do piloto automático — então o que você gera
   // aqui é idêntico ao que sai sozinho. Cai em rascunho na Área de Testes.
-  const callRender = async (fl: Record<string, string>, br: Brand) => {
+  const callRender = async (fl: Record<string, string>, br: Brand, bgUrl?: string, gen?: boolean) => {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/render-format`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ template: template.key, fields: fl, brand: br, kind: mod, caption: caption || null, subject: subject || template.label, format: template.label }),
+      body: JSON.stringify({ template: template.key, fields: fl, brand: br, kind: mod, caption: caption || null, subject: subject || template.label, format: template.label, background: bgUrl || undefined, generate_bg: !!gen, bg_prompt: subject || fl.headline || undefined }),
     })
     const r = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(r.error ?? 'Erro ao gerar imagem')
-    return r
+    return r as { bg_url?: string | null }
   }
 
   const generate = async () => {
     setSaving(true); setErr(''); setMsg('')
     try {
-      await callRender(fields, brand)
+      const r = await callRender(fields, brand, bg || undefined, isPhoto && genBg)
+      if (isPhoto && !bg && r.bg_url) setBg(r.bg_url) // guarda o fundo pra reusar de graça
       track('content_generated', `Gerou imagem de formato (${template.label})`, { template: template.key })
       setMsg('Imagem gerada! Está na Área de Testes (seção Conteúdo), esperando sua aprovação.')
       onSaved()
@@ -75,7 +79,8 @@ export default function FormatStudio({ template, brand, onClose, onSaved }: { te
   }
 
   // Variações "de graça": recompõe a MESMA peça trocando a cor principal pelas
-  // outras do kit (e o tema, no tweet). Sem nova chamada de IA — só montagem.
+  // outras do kit (e o tema, no tweet). O fundo (foto) é REUSADO — no máximo 1
+  // chamada de IA na 1ª peça, as demais herdam o mesmo fundo sem custo.
   const generateVariations = async () => {
     setSaving(true); setErr(''); setMsg('')
     try {
@@ -83,9 +88,14 @@ export default function FormatStudio({ template, brand, onClose, onSaved }: { te
       const jobs: { fl: Record<string, string>; br: Brand }[] = alts.map(c => ({ fl: fields, br: { ...brand, primary: c } }))
       if (template.key === 'tweet') jobs.unshift({ fl: { ...fields, theme: (fields.theme === 'light' ? 'dark' : 'light') }, br: brand })
       if (jobs.length === 0) { setErr('Defina cores 2ª/destaque no Kit da Marca pra gerar variações.'); setSaving(false); return }
-      for (const j of jobs) await callRender(j.fl, j.br)
+      let useBg = bg
+      for (const j of jobs) {
+        const r = await callRender(j.fl, j.br, useBg || undefined, isPhoto && genBg && !useBg)
+        if (isPhoto && !useBg && r.bg_url) useBg = r.bg_url // gera 1x, reusa nas próximas
+      }
+      if (useBg && !bg) setBg(useBg)
       track('content_generated', `Gerou ${jobs.length} variações (${template.label})`, { template: template.key, variations: jobs.length })
-      setMsg(`${jobs.length} variações geradas (de graça) na Área de Testes.`)
+      setMsg(`${jobs.length} variações geradas (fundo reusado) na Área de Testes.`)
       onSaved()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Erro ao gerar variações')
@@ -119,6 +129,16 @@ export default function FormatStudio({ template, brand, onClose, onSaved }: { te
                   : <input value={fields[fd.key] ?? ''} onChange={e => set(fd.key, e.target.value)} style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />}
               </div>
             ))}
+            {isPhoto && (
+              <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: '6px', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                <label style={{ display: 'block', fontSize: '10px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fundo (foto)</label>
+                <input value={bg} onChange={e => setBg(e.target.value)} placeholder="Cole a URL de uma foto (asset) — ou deixe vazio e gere com IA" style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11px', color: 'rgba(255,255,255,0.75)', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={genBg} onChange={e => setGenBg(e.target.checked)} style={{ accentColor: ORANGE }} />
+                  Gerar fundo com IA se vazio <span style={{ color: MUTED }}>(gasta 1 crédito; variações reusam de graça)</span>
+                </label>
+              </div>
+            )}
             <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: '6px', paddingTop: '10px' }}>
               <label style={{ display: 'block', fontSize: '10px', color: MUTED, marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Legenda do post (vai junto)</label>
               <textarea value={caption} onChange={e => setCaption(e.target.value)} rows={2} placeholder="Legenda que acompanha a imagem no Instagram" style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', resize: 'vertical', fontFamily: D }} />
@@ -134,7 +154,7 @@ export default function FormatStudio({ template, brand, onClose, onSaved }: { te
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center' }}>
             <div style={{ width: template.w * scale, height: template.h * scale, overflow: 'hidden', borderRadius: '10px', border: `1px solid ${BORDER}` }}>
               <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
-                <div ref={nodeRef} style={{ width: template.w, height: template.h }}>{template.render(fields, brand)}</div>
+                <div ref={nodeRef} style={{ width: template.w, height: template.h }}>{template.render(isPhoto ? { ...fields, background: bg } : fields, brand)}</div>
               </div>
             </div>
             <div style={{ fontSize: '9.5px', color: MUTED }}>{template.w}×{template.h}px</div>
@@ -148,7 +168,7 @@ export default function FormatStudio({ template, brand, onClose, onSaved }: { te
           {err && <span style={{ fontSize: '11.5px', color: '#f87171' }}>{err}</span>}
         </div>
         <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '8px', padding: '9px 12px', marginTop: '12px', fontSize: '10.5px', color: MUTED, lineHeight: 1.5 }}>
-          A imagem é montada campo a campo <strong>no servidor</strong> (não é foto de IA, custo zero) — o mesmo motor do piloto automático, então sai igual com ou sem você na tela. O preview ao lado é uma prévia (a fonte final pode variar um pouco). Depois de gerar, cai na Área de Testes pra você aprovar.
+          A imagem é montada em camadas <strong>no servidor</strong> (mesmo motor do automático). Texto, cores, selo e logo = montagem, <strong>custo zero</strong>. Só o <strong>fundo</strong> (no "Post com Foto") pode gastar IA — e só quando não há um asset pra reusar. Variações reusam o mesmo fundo, de graça. O preview é uma prévia (a fonte final pode variar). Depois de gerar, cai na Área de Testes pra aprovar.
         </div>
       </div>
     </div>
