@@ -256,9 +256,15 @@ Deno.serve(async (req) => {
 
     let id: string | null = null
     if (body.save !== false) {
-      const { data: ins, error: insErr } = await admin.from('marketing_ai_test_content')
-        .insert({ company_id: companyId, kind, idea: subject, caption, format: String(body.format ?? template), image_url: pub.publicUrl })
-        .select('id').single()
+      // Guarda a RECEITA de render (concept) — permite re-renderizar em qualquer
+      // formato depois SEM nova IA (o background já resolvido é reusado).
+      const concept = { template, fields, brand, background: bgUrl, sticker: body.sticker ? String(body.sticker) : null, format: String(body.format ?? template), width: W, height: H, safe }
+      const row: Record<string, unknown> = {
+        company_id: companyId, kind, idea: subject, caption, format: String(body.format ?? template), image_url: pub.publicUrl, concept,
+        source_id: body.source_id ? String(body.source_id) : null, origin: body.origin ? String(body.origin) : null,
+      }
+      if (body.status) row.status = String(body.status)
+      const { data: ins, error: insErr } = await admin.from('marketing_ai_test_content').insert(row).select('id').single()
       if (insErr) return json({ error: insErr.message }, 500)
       id = ins.id as string
     }

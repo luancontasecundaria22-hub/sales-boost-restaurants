@@ -3,8 +3,10 @@ import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { CARD, MUTED, BORDER, D, timeAgo } from './shared'
 import { callContentTest, ScoreBreakdown, BriefBlock, PostMedia, VideoScript, type TestPost } from './TestingArea'
+import AdaptModal, { type VaultPost } from './AdaptModal'
 
 const GREEN = '#4ade80'
+const ORANGE = '#FF6D29'
 const KIND_LABEL: Record<string, string> = { organico: 'Orgânico', stories: 'Stories', campanhas: 'Campanhas' }
 
 // Content Vault: só o conteúdo aprovado pelo controle de qualidade (nota ≥90),
@@ -14,17 +16,26 @@ export default function ContentVault({ companyId, reloadKey }: { companyId: stri
   const { session } = useAuth()
   const token = session?.access_token ?? ''
   const [items, setItems] = useState<(TestPost & { kind: string })[]>([])
+  const [adapts, setAdapts] = useState<Record<string, (TestPost & { kind: string; source_id: string })[]>>({})
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [adaptFor, setAdaptFor] = useState<VaultPost | null>(null)
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [okMsg, setOkMsg] = useState('')
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('marketing_ai_test_content').select('*')
-      .eq('company_id', companyId).eq('status', 'vault').order('quality_score', { ascending: false })
+    const [{ data }, { data: a }] = await Promise.all([
+      supabase.from('marketing_ai_test_content').select('*').eq('company_id', companyId).eq('status', 'vault').order('quality_score', { ascending: false }),
+      supabase.from('marketing_ai_test_content').select('*').eq('company_id', companyId).eq('status', 'adapt').order('created_at', { ascending: false }),
+    ])
     setItems((data ?? []) as (TestPost & { kind: string })[])
+    const map: Record<string, (TestPost & { kind: string; source_id: string })[]> = {}
+    for (const row of (a ?? []) as (TestPost & { kind: string; source_id: string })[]) { if (row.source_id) (map[row.source_id] ||= []).push(row) }
+    setAdapts(map)
     setLoading(false)
   }, [companyId])
+  const toggleExpanded = (id: string) => setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   useEffect(() => { load() }, [load, reloadKey])
 
@@ -104,12 +115,43 @@ export default function ContentVault({ companyId, reloadKey }: { companyId: stri
                       🗑
                     </button>
                   </div>
+
+                  <button onClick={() => setAdaptFor(t as unknown as VaultPost)}
+                    style={{ padding: '8px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.35)', borderRadius: '8px', color: ORANGE, fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', fontFamily: D }}>
+                    ✨ Adaptar Conteúdo
+                  </button>
+
+                  {adapts[t.id]?.length ? (
+                    <div style={{ marginTop: '2px' }}>
+                      <button onClick={() => toggleExpanded(t.id)} style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: MUTED, fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: D, padding: '4px 0' }}>
+                        Adaptações ({adapts[t.id].length}) {expanded.has(t.id) ? '▴' : '▾'}
+                      </button>
+                      {expanded.has(t.id) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(84px, 1fr))', gap: '7px', marginTop: '4px' }}>
+                          {adapts[t.id].map(a => (
+                            <div key={a.id} style={{ border: `1px solid ${BORDER}`, borderRadius: '8px', overflow: 'hidden', background: 'rgba(255,255,255,0.02)' }}>
+                              {a.image_url && <img src={a.image_url} alt="" style={{ width: '100%', height: '70px', objectFit: 'cover' }} />}
+                              <div style={{ padding: '5px 6px' }}>
+                                <div style={{ fontSize: '8.5px', color: MUTED, marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.format}</div>
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                  <button onClick={() => publish(a.id)} disabled={busyId === a.id} title="Aprovar/Publicar" style={{ flex: 1, padding: '3px', background: 'rgba(74,222,128,0.14)', border: '1px solid rgba(74,222,128,0.35)', borderRadius: '5px', color: GREEN, fontSize: '9px', fontWeight: 700, cursor: 'pointer', fontFamily: D }}>✓</button>
+                                  <button onClick={() => discard(a.id)} disabled={busyId === a.id} title="Excluir" style={{ padding: '3px 6px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '5px', color: MUTED, fontSize: '9px', cursor: 'pointer', fontFamily: D }}>🗑</button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )
           })}
         </div>
       )}
+
+      {adaptFor && <AdaptModal post={adaptFor} companyId={companyId} onClose={() => setAdaptFor(null)} onDone={() => { load() }} />}
     </div>
   )
 }

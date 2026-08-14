@@ -189,7 +189,7 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('marketing_ai_test_content').select('*')
-      .eq('company_id', companyId).eq('kind', kind).neq('status', 'vault').order('created_at', { ascending: false })
+      .eq('company_id', companyId).eq('kind', kind).eq('status', 'draft').order('created_at', { ascending: false })
     setTests((data ?? []) as TestPost[])
     setLoading(false)
   }, [companyId, kind])
