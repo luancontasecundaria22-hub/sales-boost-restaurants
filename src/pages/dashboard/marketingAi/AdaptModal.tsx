@@ -23,6 +23,7 @@ export default function AdaptModal({ post, companyId, onClose, onDone }: { post:
   const [brand, setBrand] = useState<Brand>({ primary: ORANGE, name: 'Marca' })
   const [customFmts, setCustomFmts] = useState<FormatDef[]>([])
   const [sel, setSel] = useState<string[]>(['ig_story'])
+  const [smart, setSmart] = useState(true)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(''); const [err, setErr] = useState('')
 
@@ -52,10 +53,23 @@ export default function AdaptModal({ post, companyId, onClose, onDone }: { post:
       const bg = base.background ?? post.image_url ?? undefined
       const chosen = formats.filter(f => sel.includes(f.key))
       for (const f of chosen) {
+        // Adaptação inteligente: o Creative Agent ajusta o texto pro novo formato
+        // (só texto, sem custo de imagem). Se falhar, usa o texto original.
+        let fl = base.fields ?? {}
+        if (smart) {
+          try {
+            const pr = await fetch(`${SUPABASE_URL}/functions/v1/adapt-plan`, {
+              method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ fields: fl, caption: post.caption, format: { name: f.name, ratio: f.ratio, placement: f.placement, w: f.w, h: f.h } }),
+            })
+            const pj = await pr.json().catch(() => ({}))
+            if (pr.ok && pj.fields) fl = { ...fl, ...pj.fields }
+          } catch { /* mantém o texto original */ }
+        }
         const res = await fetch(`${SUPABASE_URL}/functions/v1/render-format`, {
           method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            template: 'photo', fields: base.fields ?? {}, brand: base.brand ?? brand, kind: post.kind,
+            template: 'photo', fields: fl, brand: base.brand ?? brand, kind: post.kind,
             caption: post.caption ?? null, subject: post.idea || 'Adaptação', format: f.name,
             background: bg || undefined, generate_bg: false, sticker: (base.sticker as string | null) || undefined,
             width: f.w, height: f.h, safe: safePx(f), source_id: post.id, origin: 'adapt', status: 'adapt',
@@ -102,6 +116,11 @@ export default function AdaptModal({ post, companyId, onClose, onDone }: { post:
             </button>
           ))}
         </div>
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '11.5px', color: 'rgba(255,255,255,0.8)', cursor: 'pointer', marginBottom: '12px' }}>
+          <input type="checkbox" checked={smart} onChange={e => setSmart(e.target.checked)} style={{ accentColor: ORANGE }} />
+          🧠 <strong>Adaptação inteligente</strong> — o Creative Agent ajusta o texto pra cada formato (encurta pro Story, etc). Só texto, <strong>sem custo de imagem</strong>.
+        </label>
 
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button onClick={adapt} disabled={busy || sel.length === 0} style={{ padding: '10px 22px', background: busy || sel.length === 0 ? 'rgba(255,109,41,0.4)' : ORANGE, color: '#000', fontWeight: 700, fontSize: '13px', borderRadius: '9px', border: 'none', cursor: busy || sel.length === 0 ? 'default' : 'pointer', fontFamily: D }}>{busy ? 'Adaptando...' : `✨ Adaptar (${sel.length})`}</button>

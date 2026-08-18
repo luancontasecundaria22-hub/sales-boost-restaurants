@@ -21,7 +21,7 @@ const PRESETS: { title: string; content: string; fields: string[] }[] = [
 // Formatos — a anatomia de cada tipo de post: quais campos/componentes a IA
 // precisa preencher pra montar aquela imagem. Reusa marketing_ai_knowledge
 // (module='formato'); o creative-generate consulta esses formatos ao criar.
-export default function FormatsLibrary({ companyId }: { companyId: string }) {
+export default function FormatsLibrary({ companyId, module }: { companyId: string; module?: string }) {
   const [formats, setFormats] = useState<Fmt[]>([])
   const [loading, setLoading] = useState(true)
   const [studio, setStudio] = useState<Template | null>(null)
@@ -143,7 +143,7 @@ export default function FormatsLibrary({ companyId }: { companyId: string }) {
         </div>
       )}
 
-      {studio && <FormatStudio template={studio} brand={brand} onClose={() => setStudio(null)} onSaved={() => { /* fica na Área de Testes */ }} />}
+      {studio && <FormatStudio template={studio} brand={brand} initialKind={module} onClose={() => setStudio(null)} onSaved={() => { /* fica na Área de Testes */ }} />}
     </div>
   )
 }

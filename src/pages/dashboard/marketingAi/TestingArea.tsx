@@ -3,6 +3,7 @@ import { supabase } from '../../../lib/supabase'
 import { useAuth } from '../../../contexts/AuthContext'
 import { track } from '../../../lib/analytics'
 import { CARD, MUTED, BORDER, D, SUPABASE_URL, timeAgo } from './shared'
+import AdaptModal, { type VaultPost } from './AdaptModal'
 
 const KIND_PT: Record<string, string> = { organico: 'Orgânico', stories: 'Stories', campanhas: 'Campanhas' }
 
@@ -181,6 +182,9 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
   const { session } = useAuth()
   const token = session?.access_token ?? ''
   const [tests, setTests] = useState<TestPost[]>([])
+  const [adapts, setAdapts] = useState<Record<string, (TestPost & { source_id: string })[]>>({})
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [adaptFor, setAdaptFor] = useState<VaultPost | null>(null)
   const [loading, setLoading] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -188,11 +192,17 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
   const [okMsg, setOkMsg] = useState('')
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('marketing_ai_test_content').select('*')
-      .eq('company_id', companyId).eq('kind', kind).eq('status', 'draft').order('created_at', { ascending: false })
+    const [{ data }, { data: a }] = await Promise.all([
+      supabase.from('marketing_ai_test_content').select('*').eq('company_id', companyId).eq('kind', kind).eq('status', 'draft').order('created_at', { ascending: false }),
+      supabase.from('marketing_ai_test_content').select('*').eq('company_id', companyId).eq('kind', kind).eq('status', 'adapt').order('created_at', { ascending: false }),
+    ])
     setTests((data ?? []) as TestPost[])
+    const map: Record<string, (TestPost & { source_id: string })[]> = {}
+    for (const row of (a ?? []) as (TestPost & { source_id: string })[]) { if (row.source_id) (map[row.source_id] ||= []).push(row) }
+    setAdapts(map)
     setLoading(false)
   }, [companyId, kind])
+  const toggleExpanded = (id: string) => setExpanded(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   useEffect(() => { load() }, [load])
 
@@ -309,12 +319,33 @@ export default function TestingArea({ companyId, kind, onVaultChange }: { compan
                       Descartar
                     </button>
                   </div>
+
+                  <button onClick={() => setAdaptFor(t as unknown as VaultPost)} style={{ padding: '7px', background: 'rgba(255,109,41,0.1)', border: '1px solid rgba(255,109,41,0.3)', borderRadius: '8px', color: '#FF6D29', fontSize: '11px', fontWeight: 700, cursor: 'pointer', fontFamily: D, marginTop: '2px' }}>✨ Adaptar</button>
+                  {adapts[t.id]?.length ? (
+                    <div>
+                      <button onClick={() => toggleExpanded(t.id)} style={{ width: '100%', textAlign: 'left', background: 'transparent', border: 'none', color: MUTED, fontSize: '10.5px', fontWeight: 700, cursor: 'pointer', fontFamily: D, padding: '3px 0' }}>Adaptações ({adapts[t.id].length}) {expanded.has(t.id) ? '▴' : '▾'}</button>
+                      {expanded.has(t.id) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))', gap: '6px', marginTop: '3px' }}>
+                          {adapts[t.id].map(a => (
+                            <div key={a.id} style={{ border: `1px solid ${BORDER}`, borderRadius: '7px', overflow: 'hidden' }}>
+                              {a.image_url && <img src={a.image_url} alt="" style={{ width: '100%', height: '64px', objectFit: 'cover' }} />}
+                              <div style={{ padding: '4px 5px' }}>
+                                <div style={{ fontSize: '8px', color: MUTED, marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.format}</div>
+                                <button onClick={() => discard(a.id)} title="Excluir" style={{ width: '100%', padding: '2px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '4px', color: MUTED, fontSize: '8px', cursor: 'pointer', fontFamily: D }}>🗑</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               </div>
             )
           })}
         </div>
       )}
+      {adaptFor && <AdaptModal post={adaptFor} companyId={companyId} onClose={() => setAdaptFor(null)} onDone={() => { load() }} />}
     </section>
   )
 }

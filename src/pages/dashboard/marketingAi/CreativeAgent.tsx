@@ -12,7 +12,7 @@ interface Idea { id: string; title: string; hook: string | null; angle: string |
 // Creative Agent — traz IDEIAS de post em cards. Cada ideia pode virar um post
 // de teste (creative-generate com a ideia como semente), que cai na Área de
 // Testes do módulo. Nada publica sozinho.
-export default function CreativeAgent({ companyId }: { companyId: string }) {
+export default function CreativeAgent({ companyId, module }: { companyId: string; module?: string }) {
   const { session } = useAuth()
   const token = session?.access_token ?? ''
   const [ideas, setIdeas] = useState<Idea[]>([])
@@ -33,7 +33,7 @@ export default function CreativeAgent({ companyId }: { companyId: string }) {
     setGenerating(true); setErr(''); setMsg('')
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/creative-ideas`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ focus_module: module }),
       })
       const r = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(r.error ?? 'Erro ao gerar ideias')
@@ -82,15 +82,16 @@ export default function CreativeAgent({ companyId }: { companyId: string }) {
         {err && <span style={{ fontSize: '11.5px', color: '#f87171' }}>{err}</span>}
       </div>
 
-      {loading ? (
+      {(() => { const visible = module ? ideas.filter(i => (i.module ?? 'organico') === module) : ideas; return (
+      loading ? (
         <div style={{ fontSize: '12px', color: MUTED }}>Carregando...</div>
-      ) : ideas.length === 0 ? (
+      ) : visible.length === 0 ? (
         <div style={{ padding: '28px', textAlign: 'center', color: MUTED, fontSize: '12.5px', background: CARD, border: `1px dashed ${BORDER}`, borderRadius: '12px' }}>
-          Nenhuma ideia ainda. Clique em <strong>Gerar ideias</strong> e o agente sugere conceitos de post com base na sua marca e nos insights.
+          Nenhuma ideia de {MOD_LABEL[module ?? ''] ?? 'post'} ainda. Clique em <strong>Gerar ideias</strong> e o agente sugere conceitos com base na sua marca e nos insights.
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
-          {ideas.map(i => (
+          {visible.map(i => (
             <div key={i.id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px', opacity: i.status === 'used' ? 0.6 : 1 }}>
               <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', alignItems: 'center' }}>
                 {i.module && <span style={{ fontSize: '8.5px', fontWeight: 700, color: ORANGE, border: '1px solid rgba(255,109,41,0.4)', borderRadius: '99px', padding: '1px 7px' }}>{MOD_LABEL[i.module] ?? i.module}</span>}
@@ -110,7 +111,8 @@ export default function CreativeAgent({ companyId }: { companyId: string }) {
             </div>
           ))}
         </div>
-      )}
+      )
+      ) })()}
     </div>
   )
 }

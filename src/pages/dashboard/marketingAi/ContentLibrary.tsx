@@ -100,24 +100,27 @@ export default function ContentLibrary({ companyId }: { companyId: string }) {
         })}
       </div>
 
-      {top === 'creative' ? <CreativeAgent companyId={companyId} />
-        : top === 'formatos' ? <FormatsLibrary companyId={companyId} />
+      {/* Sub-abas de módulo (Orgânico/Stories/Campanhas [+Núcleo em Recursos]) —
+          aparecem em todas as abas menos Estilos e Visuais (que é da marca toda). */}
+      {top !== 'visual' && (
+        <div style={{ display: 'inline-flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '11px', marginBottom: '20px', flexWrap: 'wrap' }}>
+          {MODULES.filter(m => top === 'recursos' || m.key !== 'core').map(m => {
+            const active = mod === m.key
+            return (
+              <button key={m.key} onClick={() => setMod(m.key)}
+                style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '8px 13px', background: active ? 'rgba(255,109,41,0.12)' : 'transparent', border: `1px solid ${active ? 'rgba(255,109,41,0.35)' : 'transparent'}`, borderRadius: '8px', cursor: 'pointer', fontFamily: D }}>
+                <span style={{ fontSize: '14px' }}>{m.icon}</span>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: active ? ORANGE : 'white' }}>{m.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {top === 'creative' ? <CreativeAgent companyId={companyId} module={mod === 'core' ? 'organico' : mod} />
+        : top === 'formatos' ? <FormatsLibrary companyId={companyId} module={mod === 'core' ? 'organico' : mod} />
         : top === 'visual' ? <VisualLibrary companyId={companyId} />
         : (<>
-      {/* Recursos — sub-abas por formato (a identidade da marca vive no Kit, em Estilos e Visuais) */}
-      <div style={{ display: 'inline-flex', gap: '4px', padding: '4px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '11px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {MODULES.map(m => {
-          const active = mod === m.key
-          return (
-            <button key={m.key} onClick={() => setMod(m.key)}
-              style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '8px 13px', background: active ? 'rgba(255,109,41,0.12)' : 'transparent', border: `1px solid ${active ? 'rgba(255,109,41,0.35)' : 'transparent'}`, borderRadius: '8px', cursor: 'pointer', fontFamily: D }}>
-              <span style={{ fontSize: '14px' }}>{m.icon}</span>
-              <span style={{ fontSize: '12px', fontWeight: 700, color: active ? ORANGE : 'white' }}>{m.label}</span>
-            </button>
-          )
-        })}
-      </div>
-
       <div style={{ marginBottom: '16px' }}>
         <button onClick={() => setAdding(a => !a)} style={{ padding: '6px 13px', background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: '7px', color: ORANGE, fontSize: '11.5px', cursor: 'pointer', fontFamily: D }}>
           {adding ? 'Cancelar' : `+ Adicionar recurso em ${MODULES.find(m => m.key === mod)?.label}`}

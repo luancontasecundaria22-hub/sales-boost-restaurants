@@ -16,14 +16,14 @@ const MODS: { key: string; label: string }[] = [{ key: 'organico', label: 'Orgâ
 // Studio de um formato: preenche os campos (à mão ou com IA), vê o preview ao
 // vivo e gera a imagem no SERVIDOR (render-format: SVG→PNG, sem navegador) — o
 // mesmo motor do piloto automático. O resultado cai na Área de Testes.
-export default function FormatStudio({ template, brand, onClose, onSaved }: { template: Template; brand: Brand; onClose: () => void; onSaved: () => void }) {
+export default function FormatStudio({ template, brand, initialKind, onClose, onSaved }: { template: Template; brand: Brand; initialKind?: string; onClose: () => void; onSaved: () => void }) {
   const { session } = useAuth()
   const token = session?.access_token ?? ''
   const nodeRef = useRef<HTMLDivElement>(null)
   const [fields, setFields] = useState<Record<string, string>>({ ...template.sample })
   const [subject, setSubject] = useState('')
   const [caption, setCaption] = useState('')
-  const [mod, setMod] = useState('organico')
+  const [mod, setMod] = useState(initialKind && ['organico', 'stories', 'campanhas'].includes(initialKind) ? initialKind : 'organico')
   const [filling, setFilling] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')

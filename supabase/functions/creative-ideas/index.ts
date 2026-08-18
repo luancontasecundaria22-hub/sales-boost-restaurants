@@ -55,6 +55,9 @@ Deno.serve(async (req) => {
     const company = companyRow as Company | null
     if (!company) return json({ error: 'Empresa não encontrada.' }, 404)
 
+    const body = await req.json().catch(() => ({})) as { focus_module?: string }
+    const focus = ['organico', 'stories', 'campanhas'].includes(String(body.focus_module)) ? String(body.focus_module) : null
+
     const [{ data: cfgRow }, { data: insRows }, { data: libRows }, { data: fmtRows }] = await Promise.all([
       admin.from('marketing_ai_config').select('brand_voice, tone, target_audience, content_pillars, marketing_goals').eq('company_id', company.id).maybeSingle(),
       admin.from('marketing_ai_insights').select('pillar, title, description').eq('company_id', company.id).eq('status', 'open').order('created_at', { ascending: false }).limit(8),
@@ -74,6 +77,7 @@ ${formats.length ? `\nFormatos disponíveis (prefira sugerir um destes quando en
 ${lib.length ? `\nRecursos na biblioteca (hooks/frameworks já cadastrados): ${lib.map(l => l.title).slice(0, 20).join(', ')}` : ''}
 
 Gere 6 IDEIAS de post FORTES e específicas desse negócio (nada genérico). Cada ideia deve poder virar um post real.
+${focus ? `IMPORTANTE: gere TODAS as 6 ideias para o formato "${focus}".` : ''}
 "module" é onde a ideia se encaixa: "organico" (feed), "stories" ou "campanhas" (mídia paga).
 "format" é o formato sugerido (ex: carrossel, reel, foto, story, tweet, infográfico...).
 Retorne APENAS um JSON array, sem texto antes ou depois:
@@ -89,7 +93,7 @@ Retorne APENAS um JSON array, sem texto antes ou depois:
       hook: i.hook ? String(i.hook) : null,
       angle: i.angle ? String(i.angle) : null,
       format: i.format ? String(i.format) : null,
-      module: MODS.includes(String(i.module)) ? String(i.module) : 'organico',
+      module: focus ?? (MODS.includes(String(i.module)) ? String(i.module) : 'organico'),
       rationale: i.rationale ? String(i.rationale) : null,
       status: 'new',
     }))
