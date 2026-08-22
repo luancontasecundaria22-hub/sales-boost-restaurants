@@ -764,6 +764,8 @@ function SiteFooter({ lang }: { lang: Lang }) {
               <span className="font-bold text-white text-lg tracking-tight">SalesBoost</span>
             </div>
             <p className="text-sm leading-relaxed" style={{ color: MUTED, maxWidth: '260px' }}>{tx.tagline}</p>
+            {/* Razão social — exigida pela verificação de negócio da Meta (nome legal no site). */}
+            <p className="text-xs mt-4" style={{ color: 'rgba(255,255,255,0.5)', maxWidth: '260px' }}>68.292.967 LUAN SOARES RIBEIRO</p>
           </div>
           <div>
             <div className="text-xs font-bold uppercase tracking-widest mb-5" style={{ color: 'rgba(255,255,255,0.3)' }}>Menu</div>
@@ -786,7 +788,7 @@ function SiteFooter({ lang }: { lang: Lang }) {
         </div>
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 pt-8" style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
           <div className="flex items-center gap-5 flex-wrap justify-center">
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>{tx.copy}</p>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>© 68.292.967 LUAN SOARES RIBEIRO — {tx.copy}</p>
             <Link to="/privacidade" className="text-xs transition-colors" style={{ color: 'rgba(255,255,255,0.4)', textDecoration: 'none' }} onMouseEnter={e => (e.currentTarget.style.color = '#fff')} onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.4)')}>
               Política de Privacidade
             </Link>
