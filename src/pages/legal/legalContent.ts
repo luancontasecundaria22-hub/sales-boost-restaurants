@@ -4,15 +4,15 @@
 // afetado — isto é só texto consumido pelas páginas legais.
 
 export const LEGAL_COMPANY = {
-  name: '[RAZÃO SOCIAL DA EMPRESA LTDA]',
+  name: '68.292.967 LUAN SOARES RIBEIRO',
   brand: 'SalesBoost',
-  cnpj: '[00.000.000/0001-00]',
+  cnpj: '68.292.967/0001-28',
   address: '[Rua/Av., nº, Bairro, Cidade/UF, CEP]',
-  email: '[contato@getsaleboost.com]',
-  privacyEmail: '[privacidade@getsaleboost.com]',
+  email: 'contato@getsaleboost.com',
+  privacyEmail: 'privacidade@getsaleboost.com',
   site: 'getsaleboost.com',
   jurisdiction: '[Comarca de Cidade/UF]',
-  updated: '[DD/MM/AAAA]',
+  updated: '22/08/2026',
 }
 
 export interface LegalSection { heading: string; paragraphs?: string[]; bullets?: string[] }

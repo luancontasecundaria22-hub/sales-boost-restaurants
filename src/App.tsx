@@ -765,7 +765,7 @@ function SiteFooter({ lang }: { lang: Lang }) {
             </div>
             <p className="text-sm leading-relaxed" style={{ color: MUTED, maxWidth: '260px' }}>{tx.tagline}</p>
             {/* Razão social — exigida pela verificação de negócio da Meta (nome legal no site). */}
-            <p className="text-xs mt-4" style={{ color: 'rgba(255,255,255,0.5)', maxWidth: '260px' }}>68.292.967 LUAN SOARES RIBEIRO</p>
+            <p className="text-xs mt-4" style={{ color: 'rgba(255,255,255,0.5)', maxWidth: '260px' }}>68.292.967 LUAN SOARES RIBEIRO — CNPJ 68.292.967/0001-28</p>
           </div>
           <div>
             <div className="text-xs font-bold uppercase tracking-widest mb-5" style={{ color: 'rgba(255,255,255,0.3)' }}>Menu</div>
