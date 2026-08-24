@@ -440,6 +440,25 @@ export default function IntegrationsTab() {
           )}
         </div>
 
+        {!igConnected && (
+          <div style={{ padding: '14px 24px', background: 'rgba(251,191,36,0.06)', borderBottom: `1px solid ${BORDER}` }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: '#FBBF24', marginBottom: '8px' }}>⚠️ Antes de conectar, confira 2 coisas (exigência da Meta):</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <div style={{ display: 'flex', gap: '8px', fontSize: '12.5px', color: 'white', lineHeight: 1.5 }}>
+                <span style={{ color: '#FBBF24', flexShrink: 0 }}>1.</span>
+                <span>Seu Instagram precisa ser <strong>Profissional (Business)</strong> — não pode ser conta pessoal.</span>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', fontSize: '12.5px', color: 'white', lineHeight: 1.5 }}>
+                <span style={{ color: '#FBBF24', flexShrink: 0 }}>2.</span>
+                <span>Ele precisa estar <strong>ligado a uma Página do Facebook</strong> (pelo app do Instagram ou pela Meta Business Suite).</span>
+              </div>
+            </div>
+            <div style={{ fontSize: '11px', color: MUTED, marginTop: '9px', lineHeight: 1.5 }}>
+              Sem os dois, a Meta bloqueia a conexão. É rápido de ajustar nas configurações do seu Instagram.
+            </div>
+          </div>
+        )}
+
         {(igOauthSuccess || igOauthError) && (
           <div style={{ padding: '12px 24px', background: igOauthSuccess ? 'rgba(74,222,128,0.06)' : 'rgba(239,68,68,0.08)', fontSize: '12px', color: igOauthSuccess ? '#4ade80' : '#f87171' }}>
             {igOauthSuccess ? '✓ Instagram conectado! O agente já pode publicar automaticamente.' : `Erro: ${igOauthError}`}
@@ -478,7 +497,7 @@ export default function IntegrationsTab() {
         {!igConnected && (
           <div style={{ padding: '16px 24px' }}>
             <div style={{ fontSize: '13px', color: MUTED, lineHeight: 1.7 }}>
-              O Agente de Marketing vai criar posts com IA, gerar imagem e publicar direto no seu Instagram todos os dias — sem você precisar fazer nada. Requer conta Instagram Business conectada a uma Página do Facebook.
+              O Agente de Marketing vai criar posts com IA, gerar imagem e publicar direto no seu Instagram todos os dias — sem você precisar fazer nada.
             </div>
           </div>
         )}
