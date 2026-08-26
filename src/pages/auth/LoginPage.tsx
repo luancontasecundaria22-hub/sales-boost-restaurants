@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 
 const D = "'Bricolage Grotesque', system-ui, sans-serif"
@@ -49,6 +49,8 @@ export default function LoginPage() {
   const [magicSent, setMagicSent] = useState(false)
   const { signIn, signInWithMagicLink, user, role, loading: authLoading } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const justCreated = searchParams.get('created') === '1'
 
   // Redirect already-logged-in users
   useEffect(() => {
@@ -73,8 +75,12 @@ export default function LoginPage() {
     setLoading(true)
     const { error } = await signInWithMagicLink(email)
     setLoading(false)
-    if (error) setError(error)
-    else setMagicSent(true)
+    if (error) {
+      // shouldCreateUser:false → e-mail sem conta não recebe link. Mensagem clara.
+      setError(/signup|not allowed|user/i.test(error)
+        ? 'Não encontramos uma conta com esse e-mail. Crie sua conta primeiro.'
+        : error)
+    } else setMagicSent(true)
   }
 
   return (
@@ -93,9 +99,15 @@ export default function LoginPage() {
           <h1 style={{ fontFamily: D, fontSize: '1.7rem', fontWeight: 800, color: 'white', marginBottom: '6px', letterSpacing: '-0.03em' }}>
             Bem-vindo de volta
           </h1>
-          <p style={{ color: MUTED, fontSize: '14px', marginBottom: '24px', lineHeight: 1.5 }}>
+          <p style={{ color: MUTED, fontSize: '14px', marginBottom: justCreated ? '16px' : '24px', lineHeight: 1.5 }}>
             Entre para ver seu painel de inteligência.
           </p>
+
+          {justCreated && (
+            <div style={{ background: 'rgba(74,222,128,0.08)', border: '1px solid rgba(74,222,128,0.25)', borderRadius: '10px', padding: '12px 16px', marginBottom: '20px', fontSize: '13px', color: '#4ade80', lineHeight: 1.5 }}>
+              ✓ Conta criada! Faça login com seu e-mail e senha para continuar.
+            </div>
+          )}
 
           {/* Tab switcher */}
           <div style={{ display: 'flex', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '3px', marginBottom: '24px' }}>
@@ -166,11 +178,6 @@ export default function LoginPage() {
             </form>
           )}
         </div>
-
-        <p style={{ textAlign: 'center', marginTop: '20px', fontSize: '14px', color: MUTED }}>
-          Não tem conta?{' '}
-          <Link to="/signup" style={{ color: ORANGE, textDecoration: 'none', fontWeight: 600 }}>Criar conta →</Link>
-        </p>
       </div>
     </div>
   )

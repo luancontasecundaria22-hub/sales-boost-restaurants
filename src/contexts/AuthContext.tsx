@@ -85,7 +85,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithMagicLink = async (email: string): Promise<{ error: string | null }> => {
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { shouldCreateUser: true },
+      // Login must never create an account. Magic link only signs IN existing
+      // users; new users go through /signup. Keeps login and cadastro separate.
+      options: { shouldCreateUser: false },
     })
     return { error: error?.message ?? null }
   }

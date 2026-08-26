@@ -41,7 +41,7 @@ export default function SignupPage() {
   const [accepted, setAccepted] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const { signUp } = useAuth()
+  const { signUp, signOut } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,8 +73,11 @@ export default function SignupPage() {
       }
     }
 
+    // Cadastro concluído → sempre leva para o login. Encerra qualquer sessão
+    // criada automaticamente para que a pessoa entre de forma limpa.
+    await signOut()
     setLoading(false)
-    navigate('/dashboard')
+    navigate('/login?created=1')
   }
 
   return (
