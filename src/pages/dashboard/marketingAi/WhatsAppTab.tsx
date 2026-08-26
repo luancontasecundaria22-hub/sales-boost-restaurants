@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import type { CompanyData } from '../../../contexts/CompanyContext'
 import { CARD, MUTED, BORDER, D } from './shared'
-import { buildWhatsAppDemo, WA_STATUS_META, AUTONOMY_META, TEMP_META, type DemoWaConversation, type AutonomyLevel, type FollowUpItem } from './salesDemo'
+import { buildWhatsAppDemo, WA_STATUS_META, AUTONOMY_META, TEMP_META, CHANNEL_META, type DemoWaConversation, type AutonomyLevel, type FollowUpItem } from './salesDemo'
+import ChannelFilter, { ChannelBadge, type ChannelFilterValue } from './ChannelFilter'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -97,7 +98,13 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
   const demo = useMemo(() => buildWhatsAppDemo(company), [company])
   const [activeId, setActiveId] = useState(demo.conversations[0]?.id ?? '')
   const [transferred, setTransferred] = useState<Set<string>>(new Set(['wa_3']))
-  const active = demo.conversations.find(c => c.id === activeId) ?? demo.conversations[0]
+  const [channel, setChannel] = useState<ChannelFilterValue>('all')
+
+  // Mesma lógica do Funil: uma só caixa de atendimento, filtrada pela origem.
+  const conversations = channel === 'all' ? demo.conversations : demo.conversations.filter(c => c.channelKey === channel)
+  const followUps = channel === 'all' ? demo.followUps : demo.followUps.filter(f => f.channelKey === channel)
+  // Conversa aberta precisa estar na lista visível; se não estiver, abre a 1ª.
+  const active = conversations.find(c => c.id === activeId) ?? conversations[0]
 
   const [autonomy, setAutonomy] = useState<AutonomyLevel>(demo.handoff.autonomy)
   const [from, setFrom] = useState(demo.handoff.activeFrom)
@@ -110,10 +117,16 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
       <div style={{ padding: '12px 16px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
-        ⏳ <strong>Modo demonstração.</strong> Com a WhatsApp Business API verificada, o agente responde, qualifica, agenda e <strong>passa pro humano quando precisa</strong> — e reaquece clientes que sumiram com <strong>follow-up automático</strong> (sempre esperando sua aprovação). Você controla a autonomia e o horário aqui embaixo.
+        ⏳ <strong>Modo demonstração.</strong> Com o WhatsApp e o Instagram conectados, o agente responde as conversas dos <strong>dois canais num lugar só</strong>, qualifica, agenda e <strong>passa pro humano quando precisa</strong> — e reaquece clientes que sumiram com <strong>follow-up automático</strong> (sempre esperando sua aprovação). Você controla a autonomia e o horário aqui embaixo.
       </div>
 
       <ControlBar autonomy={autonomy} setAutonomy={setAutonomy} from={from} to={to} setFrom={setFrom} setTo={setTo} paused={paused} setPaused={setPaused} />
+
+      {/* Filtro de canal — Instagram e WhatsApp na mesma caixa de atendimento */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <ChannelFilter value={channel} onChange={setChannel} />
+        <span style={{ fontSize: '11px', color: MUTED }}>Conversas do Instagram e do WhatsApp juntas — filtre pela origem.</span>
+      </div>
 
       {paused && (
         <div style={{ padding: '11px 15px', background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: '11px', fontSize: '12px', color: 'white' }}>
@@ -125,7 +138,10 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
         {/* Lista de conversas */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '2px' }}>Conversas</div>
-          {demo.conversations.map(c => {
+          {conversations.length === 0 && (
+            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', padding: '14px', textAlign: 'center', border: `1px dashed ${BORDER}`, borderRadius: '10px' }}>Nenhuma conversa neste canal.</div>
+          )}
+          {conversations.map(c => {
             const isActive = c.id === active?.id
             const isHuman = transferred.has(c.id)
             return (
@@ -135,6 +151,7 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
                   <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'white' }}>{c.name}</span>
                   {c.unread > 0 && <span style={{ fontSize: '9px', fontWeight: 700, background: ORANGE, color: '#000', borderRadius: '99px', padding: '1px 6px' }}>{c.unread}</span>}
                 </div>
+                <div style={{ marginBottom: '6px' }}><ChannelBadge channel={c.channelKey} /></div>
                 <div style={{ fontSize: '11px', color: MUTED, lineHeight: 1.4, marginBottom: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.lastPreview}</div>
                 {isHuman ? <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#FBBF24' }}>🙋 com humano</span> : <StatusBadge status={c.status} />}
               </button>
@@ -146,7 +163,7 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
         {active && (
           <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '13px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '13px 16px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>💬 {active.name}</span>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>{CHANNEL_META[active.channelKey].icon} {active.name}</span>
               {transferred.has(active.id) ? <span style={{ fontSize: '9.5px', fontWeight: 700, color: '#FBBF24' }}>🙋 com humano</span> : <StatusBadge status={active.status} />}
             </div>
 
@@ -194,15 +211,18 @@ export default function WhatsAppTab({ company }: { company: Pick<CompanyData, 'i
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
           <div style={{ fontSize: '13.5px', fontWeight: 800, color: 'white', fontFamily: D }}>🔁 Fila de follow-up</div>
-          <span style={{ fontSize: '10px', fontWeight: 700, color: ORANGE, background: 'rgba(255,109,41,0.1)', borderRadius: '99px', padding: '2px 9px' }}>{demo.followUps.length - approved.size} esperando você</span>
+          <span style={{ fontSize: '10px', fontWeight: 700, color: ORANGE, background: 'rgba(255,109,41,0.1)', borderRadius: '99px', padding: '2px 9px' }}>{followUps.filter(f => !approved.has(f.id)).length} esperando você</span>
         </div>
         <div style={{ fontSize: '11.5px', color: MUTED, marginBottom: '13px', lineHeight: 1.5 }}>
           Clientes que esfriaram. O agente já rascunhou a mensagem pra reaquecer cada um — você aprova e ele envia (nunca sozinho).
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '11px' }}>
-          {demo.followUps.map(f => (
+          {followUps.map(f => (
             <FollowUpCard key={f.id} item={f} done={approved.has(f.id)} onApprove={() => setApproved(prev => new Set(prev).add(f.id))} />
           ))}
+          {followUps.length === 0 && (
+            <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', padding: '14px', textAlign: 'center', border: `1px dashed ${BORDER}`, borderRadius: '10px' }}>Nenhum follow-up neste canal.</div>
+          )}
         </div>
       </div>
 

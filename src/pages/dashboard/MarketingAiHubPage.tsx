@@ -17,8 +17,8 @@ const GROWTH_MODULES: ModuleDef[] = [
   { section: 'avaliacoes', title: 'Avaliações', desc: 'A IA responde as avaliações do Google — rascunha e você aprova (ou liga o modo automático).', icon: '⭐' },
   { section: 'content', title: 'Agente de Conteúdo', desc: 'Calendário, ideias, roteiros de Reels, legendas e criativos.', icon: '✍️' },
   { section: 'meta-ads', title: 'Agente de Meta Ads', desc: 'Analisa campanhas, otimiza orçamento e cria testes de criativo.', icon: '🎯' },
-  { section: 'funil', title: 'Funil de Vendas', desc: 'CRM inteligente: captura, qualifica e faz follow-up dos leads.', icon: '🔀' },
-  { section: 'whatsapp', title: 'Atendimento WhatsApp', desc: 'Responde, qualifica interesse e passa pro humano quando precisa.', icon: '💬' },
+  { section: 'funil', title: 'Funil de Vendas', desc: 'CRM inteligente: captura e qualifica leads do Instagram e do WhatsApp.', icon: '🔀' },
+  { section: 'whatsapp', title: 'Atendimento', desc: 'Conversas do WhatsApp e do Instagram num lugar só — responde e passa pro humano quando precisa.', icon: '💬' },
 ]
 
 // Pilares de inteligência do hub. Conexões e Contexto do Negócio foram pra

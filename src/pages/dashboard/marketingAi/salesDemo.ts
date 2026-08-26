@@ -5,12 +5,22 @@
 import type { CompanyData } from '../../../contexts/CompanyContext'
 import { seededRng } from './growthDemo'
 
+// ── Canal de origem (Instagram | WhatsApp) ────────────────────────────────
+// Origem real do cliente/conversa. Vale para Funil e Atendimento: definida
+// pela integração que criou o registro (não é estado do frontend). Quando as
+// integrações reais entrarem, populam este mesmo campo.
+export type Channel = 'instagram' | 'whatsapp'
+export const CHANNEL_META: Record<Channel, { label: string; icon: string }> = {
+  instagram: { label: 'Instagram', icon: '📷' },
+  whatsapp: { label: 'WhatsApp', icon: '💬' },
+}
+
 // ── Funil ────────────────────────────────────────────────────────────────
 export type LeadTemp = 'quente' | 'morno' | 'frio'
 export type LeadStageKey = 'novo' | 'contato' | 'qualificado' | 'proposta' | 'venda'
 
 export interface DemoLead {
-  id: string; name: string; channel: string; stageKey: LeadStageKey
+  id: string; name: string; channel: string; channelKey: Channel; stageKey: LeadStageKey
   temperature: LeadTemp; value: number; lastContact: string; note: string; noReply: boolean
 }
 
@@ -61,10 +71,18 @@ export function buildFunnelDemo(company: Pick<CompanyData, 'id' | 'business_name
     for (let i = 0; i < count; i++) {
       const early = key === 'novo' || key === 'contato'
       const noReply = early && rng() < 0.4
+      const channel = pick(CHANNELS)
+      // Origem principal: leads de "Site"/"Anúncio Meta" caem no WhatsApp ou
+      // Instagram (é por onde a conversa acontece). WhatsApp e Instagram
+      // mantêm a própria origem.
+      const channelKey: Channel = channel === 'Instagram' ? 'instagram'
+        : channel === 'WhatsApp' ? 'whatsapp'
+        : (rng() < 0.5 ? 'whatsapp' : 'instagram')
       leads.push({
         id: `lead_${n}`,
         name: NAMES[n % NAMES.length],
-        channel: pick(CHANNELS),
+        channel,
+        channelKey,
         stageKey: key,
         temperature: pick(STAGE_TEMP[key]),
         value: iBetween(2, 30) * 100,
@@ -93,13 +111,13 @@ export const WA_STATUS_META: Record<WaStatus, { label: string; color: string }> 
 
 export interface DemoWaMessage { from: 'cliente' | 'agente'; text: string; time: string }
 export interface DemoWaConversation {
-  id: string; name: string; status: WaStatus; unread: number; lastPreview: string; messages: DemoWaMessage[]
+  id: string; name: string; channelKey: Channel; status: WaStatus; unread: number; lastPreview: string; messages: DemoWaMessage[]
 }
 
 // Fila de follow-up: clientes que esfriaram e o agente rascunhou uma mensagem
 // pra reaquecer — sempre esperando aprovação (nunca envia sozinho).
 export interface FollowUpItem {
-  id: string; name: string; channel: string; lastContact: string
+  id: string; name: string; channel: string; channelKey: Channel; lastContact: string
   reason: string; draft: string; temperature: LeadTemp
 }
 
@@ -123,7 +141,7 @@ export function buildWhatsAppDemo(company: Pick<CompanyData, 'id' | 'business_na
 
   const conversations: DemoWaConversation[] = [
     {
-      id: 'wa_1', name: 'Ana Costa', status: 'qualificado', unread: 0,
+      id: 'wa_1', name: 'Ana Costa', channelKey: 'whatsapp', status: 'qualificado', unread: 0,
       lastPreview: 'Perfeito, pode me mandar o orçamento?',
       messages: [
         { from: 'cliente', text: 'Oi, vi o anúncio de vocês. Como funciona?', time: '09:12' },
@@ -134,7 +152,7 @@ export function buildWhatsAppDemo(company: Pick<CompanyData, 'id' | 'business_na
       ],
     },
     {
-      id: 'wa_2', name: 'Bruno Lima', status: 'ia_respondendo', unread: 2,
+      id: 'wa_2', name: 'Bruno Lima', channelKey: 'instagram', status: 'ia_respondendo', unread: 2,
       lastPreview: 'E vocês atendem na zona sul?',
       messages: [
         { from: 'cliente', text: 'Bom dia! Vocês têm plano mensal?', time: '10:01' },
@@ -143,7 +161,7 @@ export function buildWhatsAppDemo(company: Pick<CompanyData, 'id' | 'business_na
       ],
     },
     {
-      id: 'wa_3', name: 'Carla Souza', status: 'aguardando_humano', unread: 1,
+      id: 'wa_3', name: 'Carla Souza', channelKey: 'whatsapp', status: 'aguardando_humano', unread: 1,
       lastPreview: 'Preciso de uma condição especial pra 3 unidades',
       messages: [
         { from: 'cliente', text: 'Oi, queria fechar pra minha empresa inteira', time: '11:20' },
@@ -152,7 +170,7 @@ export function buildWhatsAppDemo(company: Pick<CompanyData, 'id' | 'business_na
       ],
     },
     {
-      id: 'wa_4', name: 'Diego Alves', status: 'agendado', unread: 0,
+      id: 'wa_4', name: 'Diego Alves', channelKey: 'instagram', status: 'agendado', unread: 0,
       lastPreview: 'Combinado, quinta às 15h!',
       messages: [
         { from: 'cliente', text: 'Consigo uma demonstração?', time: '14:40' },
@@ -169,10 +187,10 @@ export function buildWhatsAppDemo(company: Pick<CompanyData, 'id' | 'business_na
   }
 
   const followUps: FollowUpItem[] = [
-    { id: 'fu_1', name: 'Gustavo Dias', channel: 'WhatsApp', lastContact: 'há 2 dias', temperature: 'quente', reason: 'Pediu orçamento e não respondeu depois do valor.', draft: `Oi, Gustavo! Passando pra saber se ficou alguma dúvida sobre o orçamento 😊 Se quiser, consigo segurar a condição até amanhã. Quer que eu reserve?` },
-    { id: 'fu_2', name: 'Helena Martins', channel: 'Instagram', lastContact: 'há 3 dias', temperature: 'morno', reason: 'Demonstrou interesse mas sumiu antes de agendar.', draft: `Oi, Helena! Vi que você tinha interesse em conhecer a ${biz}. Tenho um horário essa semana — quer que eu te mostre como funciona, sem compromisso?` },
-    { id: 'fu_3', name: 'Rafael Pinto', channel: 'WhatsApp', lastContact: 'há 5 dias', temperature: 'morno', reason: 'Conversou, pediu pra pensar e não voltou.', draft: `Oi, Rafael! Tudo certo? Fiquei à disposição pra qualquer dúvida sobre o que conversamos. Posso te ajudar a decidir?` },
-    { id: 'fu_4', name: 'Beatriz Nogueira', channel: 'Anúncio Meta', lastContact: 'há 6 dias', temperature: 'frio', reason: 'Clicou no anúncio, mandou "oi" e não seguiu.', draft: `Oi, Beatriz! Você chegou até a gente pelo anúncio 🙌 Ainda dá tempo de aproveitar. Quer que eu te explique rapidinho como funciona?` },
+    { id: 'fu_1', name: 'Gustavo Dias', channel: 'WhatsApp', channelKey: 'whatsapp', lastContact: 'há 2 dias', temperature: 'quente', reason: 'Pediu orçamento e não respondeu depois do valor.', draft: `Oi, Gustavo! Passando pra saber se ficou alguma dúvida sobre o orçamento 😊 Se quiser, consigo segurar a condição até amanhã. Quer que eu reserve?` },
+    { id: 'fu_2', name: 'Helena Martins', channel: 'Instagram', channelKey: 'instagram', lastContact: 'há 3 dias', temperature: 'morno', reason: 'Demonstrou interesse mas sumiu antes de agendar.', draft: `Oi, Helena! Vi que você tinha interesse em conhecer a ${biz}. Tenho um horário essa semana — quer que eu te mostre como funciona, sem compromisso?` },
+    { id: 'fu_3', name: 'Rafael Pinto', channel: 'WhatsApp', channelKey: 'whatsapp', lastContact: 'há 5 dias', temperature: 'morno', reason: 'Conversou, pediu pra pensar e não voltou.', draft: `Oi, Rafael! Tudo certo? Fiquei à disposição pra qualquer dúvida sobre o que conversamos. Posso te ajudar a decidir?` },
+    { id: 'fu_4', name: 'Beatriz Nogueira', channel: 'Instagram', channelKey: 'instagram', lastContact: 'há 6 dias', temperature: 'frio', reason: 'Comentou num post, mandou "oi" no direct e não seguiu.', draft: `Oi, Beatriz! Você chegou até a gente pelo Instagram 🙌 Ainda dá tempo de aproveitar. Quer que eu te explique rapidinho como funciona?` },
   ]
 
   return {

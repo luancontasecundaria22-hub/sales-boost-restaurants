@@ -3,6 +3,7 @@ import type { CompanyData } from '../../../contexts/CompanyContext'
 import { CARD, MUTED, BORDER, D } from './shared'
 import { fmtBRL, fmtNum } from './growthDemo'
 import { buildFunnelDemo, STAGE_ORDER, TEMP_META, type DemoLead, type LeadStageKey } from './salesDemo'
+import ChannelFilter, { ChannelBadge, type ChannelFilterValue } from './ChannelFilter'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -24,7 +25,7 @@ function LeadCard({ lead, drafted, onDraft, onAdvance }: { lead: DemoLead; draft
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '9.5px', color: MUTED, background: 'rgba(255,255,255,0.05)', borderRadius: '5px', padding: '1px 6px' }}>{lead.channel}</span>
+        <ChannelBadge channel={lead.channelKey} />
         <span style={{ fontSize: '11px', fontWeight: 700, color: ORANGE }}>{fmtBRL(lead.value)}</span>
         <span style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.3)' }}>{lead.lastContact}</span>
       </div>
@@ -56,8 +57,9 @@ function LeadCard({ lead, drafted, onDraft, onAdvance }: { lead: DemoLead; draft
 
 export default function FunnelTab({ company }: { company: Pick<CompanyData, 'id' | 'business_name'> }) {
   const demo = useMemo(() => buildFunnelDemo(company), [company])
-  const [leads, setLeads] = useState<DemoLead[]>(demo.leads)
+  const [allLeads, setLeads] = useState<DemoLead[]>(demo.leads)
   const [drafted, setDrafted] = useState<Set<string>>(new Set())
+  const [channel, setChannel] = useState<ChannelFilterValue>('all')
 
   const draft = (id: string) => setDrafted(prev => new Set(prev).add(id))
   const advance = (id: string) => setLeads(prev => prev.map(l => {
@@ -65,6 +67,9 @@ export default function FunnelTab({ company }: { company: Pick<CompanyData, 'id'
     const nx = nextStage(l.stageKey)
     return nx ? { ...l, stageKey: nx, noReply: false } : l
   }))
+
+  // Um único funil — o filtro apenas mostra os leads do canal escolhido.
+  const leads = channel === 'all' ? allLeads : allLeads.filter(l => l.channelKey === channel)
 
   const total = leads.length
   const sales = leads.filter(l => l.stageKey === 'venda').length
@@ -76,6 +81,12 @@ export default function FunnelTab({ company }: { company: Pick<CompanyData, 'id'
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       <div style={{ padding: '12px 16px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
         ⏳ <strong>Modo demonstração.</strong> O CRM captura leads do WhatsApp, do Instagram e dos anúncios automaticamente quando as integrações forem verificadas. A IA classifica cada lead (quente/morno/frio), rascunha o follow-up e avisa você — mas <strong>nada é enviado sem sua aprovação</strong>.
+      </div>
+
+      {/* Filtro de canal — um único funil, filtra por origem */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+        <ChannelFilter value={channel} onChange={setChannel} />
+        <span style={{ fontSize: '11px', color: MUTED }}>Instagram e WhatsApp no mesmo funil — filtre pela origem.</span>
       </div>
 
       {/* Resumo */}
