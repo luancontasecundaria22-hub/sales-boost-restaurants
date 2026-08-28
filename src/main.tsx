@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './lib/analytics' // inicializa o PostHog antes da app renderizar
+import './lib/facebookSdk' // carrega o Facebook SDK (JS) — exigência da Meta
 import './index.css'
 import App from './App.tsx'
 import { AuthProvider } from './contexts/AuthContext.tsx'
