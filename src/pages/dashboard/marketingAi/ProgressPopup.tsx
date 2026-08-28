@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCompany } from '../../../contexts/CompanyContext'
+import { useAuth } from '../../../contexts/AuthContext'
 import { supabase } from '../../../lib/supabase'
 import { D } from './shared'
 import { buildProgress, choosePopup, type ProgressData, type PopupVariant, type RealSignals } from './progressGame'
+import { fetchDiscoveries, revealDiscovery, DiscoveryChip, DiscoveryReveal, type Discovery } from './Discoveries'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -26,10 +28,14 @@ async function count(table: string, companyId: string, filter?: [string, string]
 // relevante pelos dados reais.
 export default function ProgressPopup() {
   const { company } = useCompany()
+  const { session } = useAuth()
   const navigate = useNavigate()
   const [data, setData] = useState<ProgressData | null>(null)
   const [variant, setVariant] = useState<PopupVariant>('status')
   const [open, setOpen] = useState(false)
+  const [pendingDisc, setPendingDisc] = useState<Discovery[]>([])
+  const [revealedDisc, setRevealedDisc] = useState<Discovery | null>(null)
+  const [revealing, setRevealing] = useState(false)
 
   useEffect(() => {
     if (!company?.id) return
@@ -53,11 +59,24 @@ export default function ProgressPopup() {
       try { lastSeenLeague = localStorage.getItem(LS_LEAGUE); lastStreakSeen = Number(localStorage.getItem(LS_STREAK) ?? '0') } catch { /* ignore */ }
       const v = choosePopup(d, { daysSinceVisit, lastSeenLeague, lastStreakSeen })
 
+      // Descobertas reais (curadas) — só surge o chip se houver algo notável.
+      if (session) {
+        try { const { pending } = await fetchDiscoveries(session.access_token, cid); if (alive) setPendingDisc(pending) } catch { /* opcional */ }
+      }
+
       if (!alive) return
       setData(d); setVariant(v); setOpen(true)
     })()
     return () => { alive = false }
-  }, [company?.id, company?.business_name])
+  }, [company?.id, company?.business_name, session])
+
+  const revealFirst = async () => {
+    if (!company?.id || !session || pendingDisc.length === 0 || revealing) return
+    setRevealing(true)
+    const d = await revealDiscovery(session.access_token, company.id, pendingDisc[0].id)
+    setRevealing(false)
+    if (d) { setRevealedDisc(d); setPendingDisc(prev => prev.slice(1)) }
+  }
 
   const dismiss = (go?: boolean) => {
     try {
@@ -169,7 +188,15 @@ export default function ProgressPopup() {
     <div onClick={() => dismiss(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', fontFamily: D, animation: 'sbfade 0.25s ease' }}>
       <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: '420px', background: 'linear-gradient(180deg, #1A1008, #120c07)', border: `1px solid ${c}44`, borderRadius: '20px', padding: '26px 26px 24px', position: 'relative', boxShadow: `0 24px 80px rgba(0,0,0,0.6), 0 0 60px ${c}18`, animation: 'sbpop 0.3s cubic-bezier(0.34,1.56,0.64,1)' }}>
         <button onClick={() => dismiss(false)} style={{ position: 'absolute', top: '14px', right: '16px', background: 'transparent', border: 'none', color: MUTED, fontSize: '18px', cursor: 'pointer', lineHeight: 1 }}>×</button>
-        {body()}
+        {revealedDisc ? (
+          <>
+            <DiscoveryReveal d={revealedDisc} />
+            <button onClick={() => dismiss(true)} style={{ width: '100%', marginTop: '18px', padding: '12px', background: ORANGE, color: '#000', fontWeight: 800, fontSize: '13px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontFamily: D }}>VER NO BUSINESS GAME →</button>
+          </>
+        ) : (<>
+          {body()}
+          {pendingDisc.length > 0 && <DiscoveryChip count={pendingDisc.length} onClick={revealFirst} />}
+        </>)}
       </div>
       <style>{`@keyframes sbfade{from{opacity:0}to{opacity:1}}@keyframes sbpop{from{opacity:0;transform:scale(0.9) translateY(10px)}to{opacity:1;transform:none}}`}</style>
     </div>

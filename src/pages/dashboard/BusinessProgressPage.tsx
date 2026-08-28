@@ -10,6 +10,7 @@ import {
   RewardsGrid, Timeline, NextBestAction, RecoveryCard, StreakCard,
   JourneyTrack, LeagueLadder,
 } from './marketingAi/progressParts'
+import { fetchDiscoveries, DiscoveriesSection, type Discovery } from './marketingAi/Discoveries'
 
 const GREEN = '#4ade80'
 const LS_VISIT = 'sb_progress_last_visit'
@@ -27,6 +28,7 @@ export default function BusinessProgressPage() {
   const [loading, setLoading] = useState(true)
   const [activating, setActivating] = useState<string | null>(null)
   const [toast, setToast] = useState<string>('')
+  const [disc, setDisc] = useState<{ pending: Discovery[]; revealed: Discovery[] }>({ pending: [], revealed: [] })
 
   const companyId = company?.id
   const businessName = company?.business_name ?? 'seu negócio'
@@ -79,6 +81,14 @@ export default function BusinessProgressPage() {
     })()
     return () => { alive = false }
   }, [companyId, businessName])
+
+  // Descobertas reais (detecta + lista). XP só credita quando o usuário revela.
+  useEffect(() => {
+    if (!companyId || !session) return
+    let alive = true
+    fetchDiscoveries(session.access_token, companyId).then(r => { if (alive) setDisc(r) }).catch(() => {})
+    return () => { alive = false }
+  }, [companyId, session])
 
   const activate = async (rewardKey: string) => {
     if (!companyId || !session || activating) return
@@ -146,6 +156,11 @@ export default function BusinessProgressPage() {
       </div>
 
       <JourneyTrack d={data} />
+
+      {(disc.pending.length > 0 || disc.revealed.length > 0) && session && companyId && (
+        <DiscoveriesSection token={session.access_token} companyId={companyId} pending={disc.pending} revealed={disc.revealed}
+          onRevealed={(d) => setDisc(prev => ({ pending: prev.pending.filter(p => p.id !== d.id), revealed: [d, ...prev.revealed] }))} />
+      )}
 
       <WhileAway d={data} onOpen={navigate} />
 
