@@ -1,5 +1,5 @@
 import { CARD, MUTED, BORDER, D } from './shared'
-import { RARITY_META, HEALTH_META, REWARD_CATEGORY_LABEL, type ProgressData, type Pin, type Reward } from './progressGame'
+import { RARITY_META, HEALTH_META, REWARD_CATEGORY_LABEL, LEAGUES, type ProgressData, type Pin, type Reward } from './progressGame'
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -14,28 +14,70 @@ function sectionTitle(icon: string, title: string, sub?: string) {
   )
 }
 
-// ── Nível + Growth Points + barra de progresso ─────────────────────────────
+// ── Liga (Business League) + XP + barra de progresso ───────────────────────
 export function LevelCard({ d }: { d: ProgressData }) {
-  const gpFmt = (n: number) => n.toLocaleString('pt-BR')
+  const xp = (n: number) => n.toLocaleString('pt-BR')
+  const c = d.level.color
   return (
-    <div style={{ background: `linear-gradient(135deg, rgba(255,109,41,0.10), rgba(255,109,41,0.02))`, border: '1px solid rgba(255,109,41,0.22)', borderRadius: '16px', padding: '20px 22px' }}>
+    <div style={{ background: `linear-gradient(135deg, ${c}22, ${c}05)`, border: `1px solid ${c}44`, borderRadius: '16px', padding: '20px 22px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginBottom: '14px' }}>
-        <div style={{ fontSize: '34px', lineHeight: 1 }}>{d.level.icon}</div>
+        <div style={{ fontSize: '38px', lineHeight: 1 }}>{d.level.icon}</div>
         <div style={{ flex: 1, minWidth: '160px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nível {d.level.level}</div>
-          <div style={{ fontSize: '22px', fontWeight: 900, color: 'white', lineHeight: 1.1 }}>{d.level.name}</div>
+          <div style={{ fontSize: '10px', fontWeight: 700, color: c, textTransform: 'uppercase', letterSpacing: '0.08em' }}>{d.level.identity}</div>
+          <div style={{ fontSize: '24px', fontWeight: 900, color: 'white', lineHeight: 1.1 }}>{d.level.name} League</div>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: '22px', fontWeight: 900, color: ORANGE, lineHeight: 1 }}>{gpFmt(d.totalGp)}</div>
-          <div style={{ fontSize: '10px', color: MUTED }}>Growth Points</div>
+          <div style={{ fontSize: '22px', fontWeight: 900, color: c, lineHeight: 1 }}>{xp(d.totalGp)}</div>
+          <div style={{ fontSize: '10px', color: MUTED }}>XP</div>
         </div>
       </div>
       <div style={{ height: '10px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden', marginBottom: '7px' }}>
-        <div style={{ width: `${d.levelPct}%`, height: '100%', background: `linear-gradient(90deg, ${ORANGE}, #ffb37a)`, borderRadius: '99px', transition: 'width 0.6s ease' }} />
+        <div style={{ width: `${d.levelPct}%`, height: '100%', background: `linear-gradient(90deg, ${c}, #ffffff88)`, borderRadius: '99px', transition: 'width 0.6s ease' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: MUTED }}>
-        <span>{d.nextLevel ? `${gpFmt(d.totalGp)} / ${gpFmt(d.nextLevel.minGp)} GP` : 'Nível máximo atingido 👑'}</span>
-        {d.nextLevel && <span><strong style={{ color: 'white' }}>{gpFmt(d.gpToNext)} GP</strong> até {d.nextLevel.name}</span>}
+        <span>{d.nextLevel ? `${xp(d.totalGp)} / ${xp(d.nextLevel.minGp)} XP` : 'Liga máxima atingida 🚀'}</span>
+        {d.nextLevel && <span><strong style={{ color: 'white' }}>{xp(d.gpToNext)} XP</strong> → {d.nextLevel.name}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Trilha da jornada do negócio (Foundation → Business Mastery) ────────────
+export function JourneyTrack({ d }: { d: ProgressData }) {
+  const dot = (s: string) => s === 'done' ? '🟢' : s === 'current' ? '🟡' : '⚪'
+  return (
+    <div>
+      {sectionTitle('🗺️', 'Sua jornada de negócio', 'Cada etapa acende conforme seu negócio evolui.')}
+      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '16px 18px', display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+        {d.journey.map(st => (
+          <div key={st.key} style={{ display: 'flex', alignItems: 'center', gap: '7px', padding: '7px 12px', borderRadius: '99px', background: st.state === 'current' ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.03)', border: `1px solid ${st.state === 'current' ? 'rgba(251,191,36,0.35)' : BORDER}`, opacity: st.state === 'locked' ? 0.5 : 1 }}>
+            <span style={{ fontSize: '11px' }}>{dot(st.state)}</span>
+            <span style={{ fontSize: '12px', fontWeight: st.state === 'locked' ? 500 : 700, color: st.state === 'locked' ? MUTED : 'white' }}>{st.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Escada de ligas (Bronze → Master) ──────────────────────────────────────
+export function LeagueLadder({ d }: { d: ProgressData }) {
+  return (
+    <div>
+      {sectionTitle('🏆', 'Business League', 'Seu status de longo prazo. O XP sobe com resultado real.')}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '9px' }}>
+        {LEAGUES.map(lg => {
+          const current = lg.key === d.level.key
+          const passed = d.totalGp >= (lg.maxGp ?? Infinity)
+          return (
+            <div key={lg.key} style={{ background: current ? `${lg.color}18` : CARD, border: `1px solid ${current ? lg.color : BORDER}`, borderRadius: '12px', padding: '13px 14px', opacity: passed || current ? 1 : 0.55 }}>
+              <div style={{ fontSize: '20px', marginBottom: '4px' }}>{lg.icon}</div>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: current ? lg.color : 'white' }}>{lg.name}{current && ' ·'}</div>
+              <div style={{ fontSize: '10px', color: MUTED }}>{lg.identity}</div>
+              <div style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.35)', marginTop: '4px' }}>{lg.minGp.toLocaleString('pt-BR')}{lg.maxGp ? `–${lg.maxGp.toLocaleString('pt-BR')}` : '+'} XP</div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -52,8 +94,8 @@ export function MilestoneCard({ d }: { d: ProgressData }) {
         <div style={{ width: `${m.pct}%`, height: '100%', background: `linear-gradient(90deg, #A78BFA, #c4b5fd)`, borderRadius: '99px', transition: 'width 0.6s ease' }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: MUTED, marginBottom: '12px' }}>
-        <span>{m.current.toLocaleString('pt-BR')} / {m.target.toLocaleString('pt-BR')} GP · {m.pct}%</span>
-        <span><strong style={{ color: 'white' }}>Faltam {m.remaining.toLocaleString('pt-BR')} GP</strong></span>
+        <span>{m.current.toLocaleString('pt-BR')} / {m.target.toLocaleString('pt-BR')} XP · {m.pct}%</span>
+        <span><strong style={{ color: 'white' }}>Faltam {m.remaining.toLocaleString('pt-BR')} XP</strong></span>
       </div>
       <div style={{ fontSize: '11.5px', color: MUTED, background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '9px', padding: '9px 12px' }}>
         🎯 Objetivo sugerido: <strong style={{ color: 'white' }}>{m.nextGoal}</strong>
@@ -207,7 +249,7 @@ export function Timeline({ d }: { d: ProgressData }) {
               <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'white' }}>{t.label}</div>
               <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>{t.when}</div>
             </div>
-            {t.gp != null && <span style={{ fontSize: '12px', fontWeight: 800, color: ORANGE, flexShrink: 0 }}>+{t.gp} GP</span>}
+            {t.gp != null && <span style={{ fontSize: '12px', fontWeight: 800, color: ORANGE, flexShrink: 0 }}>+{t.gp} XP</span>}
           </div>
         ))}
       </div>

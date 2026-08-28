@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useCompany } from '../../contexts/CompanyContext'
 import { LanguageProvider, useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
+import ProgressPopup from './marketingAi/ProgressPopup'
 
 const ORANGE = '#FF6D29'
 const SIDEBAR_BG = '#0D0A07'
@@ -163,6 +164,7 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+      <ProgressPopup />
     </LanguageProvider>
   )
 }

@@ -8,6 +8,7 @@ import { buildProgress, type RealSignals, type ProgressData } from './marketingA
 import {
   LevelCard, MilestoneCard, WhileAway, HealthCard, WeeklyCard, PinsGrid,
   RewardsGrid, Timeline, NextBestAction, RecoveryCard, StreakCard,
+  JourneyTrack, LeagueLadder,
 } from './marketingAi/progressParts'
 
 const GREEN = '#4ade80'
@@ -144,6 +145,8 @@ export default function BusinessProgressPage() {
         </div>
       </div>
 
+      <JourneyTrack d={data} />
+
       <WhileAway d={data} onOpen={navigate} />
 
       {data.recovery && <RecoveryCard d={data} onActivate={activate} activating={activating} />}
@@ -156,6 +159,7 @@ export default function BusinessProgressPage() {
       </div>
 
       <StreakCard d={data} />
+      <LeagueLadder d={data} />
       <PinsGrid pins={data.pins} onActivate={activate} activating={activating} />
       <RewardsGrid rewards={data.rewards} />
       <Timeline d={data} />

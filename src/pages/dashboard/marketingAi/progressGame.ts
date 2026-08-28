@@ -24,7 +24,8 @@ export interface RealSignals {
 
 export interface WhileAwayItem { key: string; icon: string; label: string; count: number; link?: string }
 export interface Delta { label: string; value: string; up: boolean }
-export interface LevelInfo { level: number; key: string; name: string; icon: string; minGp: number; maxGp: number | null }
+export interface LevelInfo { level: number; key: string; name: string; icon: string; minGp: number; maxGp: number | null; identity: string; color: string }
+export interface JourneyStage { key: string; label: string; state: 'done' | 'current' | 'locked' }
 export interface Pin { key: string; name: string; description: string; icon: string; rarity: Rarity; unlocked: boolean; unlockedAt?: string; rewardKey?: string }
 export interface Reward { key: string; category: string; name: string; description: string; icon: string; durationHours: number | null; unlocked: boolean; active: boolean; expiresLabel?: string }
 export interface TimelineItem { when: string; icon: string; label: string; gp?: number }
@@ -53,14 +54,51 @@ export interface ProgressData {
   nextBestAction: { title: string; cta: string; link: string }
   recovery: { declining: boolean; metrics: { label: string; value: string }[]; causes: string[] } | null
   streak: number
+  journey: JourneyStage[]
+  reachPct: number
+  engagementPct: number
+  contentCreated: number
+  newAchievement: string | null
 }
 
+// ── Smart Popup: escolhe a variante mais relevante ao abrir a plataforma ────
+export type PopupVariant = 'levelup' | 'while_away' | 'results' | 'almost' | 'streak' | 'status'
+
+export function choosePopup(d: ProgressData, ctx: { daysSinceVisit: number; lastSeenLeague: string | null; lastStreakSeen: number }): PopupVariant {
+  // Subiu de liga desde a última vez que viu → celebra.
+  if (ctx.lastSeenLeague && ctx.lastSeenLeague !== d.level.key) {
+    const order = LEVELS.map(l => l.key)
+    if (order.indexOf(d.level.key) > order.indexOf(ctx.lastSeenLeague)) return 'levelup'
+  }
+  if (d.levelPct >= 90 && d.nextLevel) return 'almost'           // quase lá → curiosidade
+  if (ctx.daysSinceVisit >= 2 && d.actionsCount > 0) return 'while_away'
+  if (d.gpEarnedSinceVisit >= 50) return 'results'               // resultado novo relevante
+  if (d.streak >= 7 && d.streak !== ctx.lastStreakSeen) return 'streak'
+  return 'status'                                                // só mostra onde está
+}
+
+// Ligas (substituem os níveis numéricos) — XP = Growth Points.
 export const LEVELS: LevelInfo[] = [
-  { level: 1, key: 'starter', name: 'Starter', icon: '🌱', minGp: 0, maxGp: 1000 },
-  { level: 2, key: 'growing', name: 'Growing', icon: '📈', minGp: 1000, maxGp: 5000 },
-  { level: 3, key: 'accelerator', name: 'Accelerator', icon: '🚀', minGp: 5000, maxGp: 15000 },
-  { level: 4, key: 'growth_machine', name: 'Growth Machine', icon: '🔥', minGp: 15000, maxGp: 50000 },
-  { level: 5, key: 'business_master', name: 'Business Master', icon: '👑', minGp: 50000, maxGp: null },
+  { level: 1, key: 'bronze',   name: 'Bronze',   icon: '🪨', minGp: 0,     maxGp: 2500,  identity: 'Starting Business', color: '#cd7f32' },
+  { level: 2, key: 'silver',   name: 'Silver',   icon: '🥈', minGp: 2500,  maxGp: 7500,  identity: 'Growing Business',  color: '#cbd5e1' },
+  { level: 3, key: 'gold',     name: 'Gold',     icon: '🥇', minGp: 7500,  maxGp: 15000, identity: 'Growth Business',   color: '#FBBF24' },
+  { level: 4, key: 'platinum', name: 'Platinum', icon: '💎', minGp: 15000, maxGp: 30000, identity: 'Advanced Business', color: '#67e8f9' },
+  { level: 5, key: 'diamond',  name: 'Diamond',  icon: '👑', minGp: 30000, maxGp: 60000, identity: 'Elite Business',    color: '#A78BFA' },
+  { level: 6, key: 'master',   name: 'Master',   icon: '🚀', minGp: 60000, maxGp: null,  identity: 'Business Master',   color: '#FF6D29' },
+]
+export { LEVELS as LEAGUES }
+
+// Jornada do negócio — estágios que acendem conforme o XP acumula.
+const JOURNEY_STAGES: { key: string; label: string; at: number }[] = [
+  { key: 'foundation', label: 'Foundation', at: 0 },
+  { key: 'visibility', label: 'Visibility', at: 1500 },
+  { key: 'audience', label: 'Audience', at: 3500 },
+  { key: 'engagement', label: 'Engagement', at: 6000 },
+  { key: 'leads', label: 'Leads', at: 9000 },
+  { key: 'conversion', label: 'Conversion', at: 14000 },
+  { key: 'growth', label: 'Growth', at: 22000 },
+  { key: 'scale', label: 'Scale', at: 40000 },
+  { key: 'mastery', label: 'Business Mastery', at: 60000 },
 ]
 
 export const RARITY_META: Record<Rarity, { label: string; color: string }> = {
@@ -136,6 +174,7 @@ export function buildProgress(company: Pick<CompanyData, 'id' | 'business_name'>
   const conversations = iB(3, 12)
   const conversions = iB(0, 3)
   const contentPublished = Math.max(real.postsPublished, iB(1, 6))
+  const contentCreated = Math.max(real.posts, contentPublished + iB(1, 4))
   const opportunities = Math.max(real.opportunities, iB(1, 4))
   const campaigns = Math.max(real.campaigns, iB(0, 2))
   const automations = iB(8, 30)
@@ -262,9 +301,21 @@ export function buildProgress(company: Pick<CompanyData, 'id' | 'business_name'>
   const lastVisitLabel = real.daysSinceVisit <= 0 ? 'hoje'
     : real.daysSinceVisit === 1 ? 'ontem' : `há ${real.daysSinceVisit} dias`
 
+  // Jornada do negócio: acende conforme o XP passa cada estágio.
+  const curIdx = JOURNEY_STAGES.reduce((acc, s, i) => (s.at <= totalGp ? i : acc), 0)
+  const journey: JourneyStage[] = JOURNEY_STAGES.map((s, i) => ({
+    key: s.key, label: s.label, state: i < curIdx ? 'done' : i === curIdx ? 'current' : 'locked',
+  }))
+
+  const reachPct = Math.round(iB(-40, 260)) / 10 // ex.: +18.4% (uma casa decimal)
+  const engagementPct = trend
+  const firstUnlocked = pins.find(p => p.unlocked && p.unlockedAt === 'hoje')
+  const newAchievement = firstUnlocked ? firstUnlocked.name : null
+
   return {
     lastVisitLabel, whileAway, actionsCount, gpEarnedSinceVisit, totalGp,
     level, nextLevel: next, gpToNext, levelPct, healthFrom, healthTo, deltas,
     milestone, health, weekly, pins, rewards, timeline, nextBestAction, recovery, streak,
+    journey, reachPct, engagementPct, contentCreated, newAchievement,
   }
 }
