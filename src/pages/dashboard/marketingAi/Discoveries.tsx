@@ -32,30 +32,49 @@ export async function revealDiscovery(token: string, companyId: string, id: stri
 // Chip discreto "algo especial te espera" — curadoria, não info comum escondida.
 export function DiscoveryChip({ count, onClick }: { count: number; onClick: () => void }) {
   return (
-    <button onClick={onClick}
+    <button onClick={onClick} className="sb-disc-btn sb-disc-pulse"
       style={{ width: '100%', marginTop: '12px', padding: '11px 14px', background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.35)', borderRadius: '11px', cursor: 'pointer', fontFamily: D, display: 'flex', alignItems: 'center', gap: '10px', textAlign: 'left' }}>
+      <style>{DISCOVERY_CSS}</style>
       <span style={{ fontSize: '18px' }}>🔒</span>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#c4b5fd' }}>{count === 1 ? '1 Business Discovery esperando' : `${count} Business Discoveries esperando`}</div>
-        <div style={{ fontSize: '10.5px', color: MUTED }}>👀 A IA encontrou algo especial sobre o seu negócio.</div>
+        <div style={{ fontSize: '10.5px', color: MUTED }}>✨ Descobrir e ganhar XP →</div>
       </div>
       <span style={{ fontSize: '13px', color: '#A78BFA' }}>→</span>
     </button>
   )
 }
 
-// Revelação (recompensa por curiosidade) — mostra o porquê + credita XP.
+// Animações da descoberta (reveal + pop de XP + pulso do botão).
+export const DISCOVERY_CSS = `
+@keyframes sbReveal{from{opacity:0;transform:scale(0.92)}to{opacity:1;transform:none}}
+@keyframes sbXpPop{0%{transform:scale(0);opacity:0}55%{transform:scale(1.3);opacity:1}75%{transform:scale(0.92)}100%{transform:scale(1);opacity:1}}
+@keyframes sbFloatIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes sbPulse{0%,100%{box-shadow:0 0 0 0 rgba(167,139,250,0)}50%{box-shadow:0 0 0 5px rgba(167,139,250,0.12)}}
+.sb-disc-btn{transition:transform .12s ease}
+.sb-disc-btn:hover{transform:translateY(-2px)}
+.sb-disc-btn:active{transform:scale(0.96)}
+.sb-disc-pulse{animation:sbPulse 2.6s ease-in-out infinite}
+`
+
+// Revelação (recompensa por curiosidade) — mostra o porquê + credita XP com pop.
 export function DiscoveryReveal({ d }: { d: Discovery }) {
   return (
-    <div style={{ textAlign: 'center' }}>
+    <div style={{ textAlign: 'center', animation: 'sbReveal 0.35s cubic-bezier(0.34,1.56,0.64,1)' }}>
+      <style>{DISCOVERY_CSS}</style>
       <div style={{ fontSize: '11px', fontWeight: 800, color: '#A78BFA', letterSpacing: '0.08em', marginBottom: '6px' }}>🔓 DISCOVERY REVEALED</div>
-      <div style={{ fontSize: '18px', fontWeight: 900, color: 'white', lineHeight: 1.25, marginBottom: '10px' }}>{d.title}</div>
-      <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.55, marginBottom: '10px' }}>{d.detail}</div>
-      <div style={{ fontSize: '11.5px', color: MUTED, lineHeight: 1.5, background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '9px', padding: '10px 12px', marginBottom: '12px', textAlign: 'left' }}>
+      <div style={{ fontSize: '18px', fontWeight: 900, color: 'white', lineHeight: 1.25, marginBottom: '10px', animation: 'sbFloatIn 0.4s ease 0.05s both' }}>{d.title}</div>
+      <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.9)', lineHeight: 1.55, marginBottom: '10px', animation: 'sbFloatIn 0.4s ease 0.12s both' }}>{d.detail}</div>
+      <div style={{ fontSize: '11.5px', color: MUTED, lineHeight: 1.5, background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '9px', padding: '10px 12px', marginBottom: '12px', textAlign: 'left', animation: 'sbFloatIn 0.4s ease 0.18s both' }}>
         <strong style={{ color: 'white' }}>Por que é especial:</strong> {d.reason}
       </div>
-      {d.achievement && <div style={{ fontSize: '14px', fontWeight: 800, color: '#FBBF24', marginBottom: '6px' }}>🏆 Conquista: {d.achievement}</div>}
-      {d.xp > 0 && <div style={{ fontSize: '16px', fontWeight: 900, color: GREEN }}>🟢 +{d.xp} XP</div>}
+      {d.achievement && <div style={{ fontSize: '14px', fontWeight: 800, color: '#FBBF24', marginBottom: '8px', animation: 'sbFloatIn 0.4s ease 0.24s both' }}>🏆 Conquista: {d.achievement}</div>}
+      {d.xp > 0 && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 18px', background: 'rgba(74,222,128,0.12)', border: `1px solid ${GREEN}55`, borderRadius: '99px', animation: 'sbXpPop 0.55s cubic-bezier(0.34,1.7,0.5,1) 0.3s both' }}>
+          <span style={{ fontSize: '18px' }}>🟢</span>
+          <span style={{ fontSize: '20px', fontWeight: 900, color: GREEN }}>+{d.xp} XP</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -79,17 +98,21 @@ export function DiscoveriesSection({ token, companyId, pending, revealed, onReve
 
   return (
     <div>
+      <style>{DISCOVERY_CSS}</style>
       <div style={{ marginBottom: '12px' }}>
         <div style={{ fontSize: '14px', fontWeight: 800, color: 'white', fontFamily: D }}>🎁 Business Discoveries</div>
         <div style={{ fontSize: '11.5px', color: MUTED, marginTop: '2px' }}>Achados que a IA marcou como notáveis nos seus dados reais. Revele pra ganhar XP.</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '11px' }}>
         {pending.map(d => (
-          <button key={d.id} onClick={() => open(d.id)} disabled={busy === d.id}
-            style={{ textAlign: 'left', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '13px', padding: '16px', cursor: 'pointer', fontFamily: D }}>
-            <div style={{ fontSize: '24px', marginBottom: '8px' }}>🔒</div>
-            <div style={{ fontSize: '13px', fontWeight: 800, color: '#c4b5fd', marginBottom: '4px' }}>Descoberta esperando</div>
-            <div style={{ fontSize: '11px', color: MUTED, lineHeight: 1.4 }}>{busy === d.id ? 'Revelando…' : '👀 A IA encontrou algo especial. Clique para revelar.'}</div>
+          <button key={d.id} onClick={() => open(d.id)} disabled={busy === d.id} className="sb-disc-btn sb-disc-pulse"
+            style={{ textAlign: 'left', background: 'rgba(167,139,250,0.06)', border: '1px solid rgba(167,139,250,0.3)', borderRadius: '13px', padding: '16px', cursor: 'pointer', fontFamily: D, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ fontSize: '24px' }}>{busy === d.id ? '✨' : '🔒'}</div>
+            <div style={{ fontSize: '13px', fontWeight: 800, color: '#c4b5fd' }}>Descoberta esperando</div>
+            <div style={{ fontSize: '11px', color: MUTED, lineHeight: 1.4 }}>👀 A IA encontrou algo especial nos seus dados.</div>
+            <div style={{ marginTop: '4px', alignSelf: 'flex-start', padding: '7px 14px', background: busy === d.id ? 'rgba(167,139,250,0.3)' : '#A78BFA', color: busy === d.id ? '#c4b5fd' : '#0E0B0A', fontWeight: 800, fontSize: '11.5px', borderRadius: '9px', fontFamily: D }}>
+              {busy === d.id ? 'Revelando…' : '✨ Descobrir e ganhar XP →'}
+            </div>
           </button>
         ))}
         {revealed.map(d => (
