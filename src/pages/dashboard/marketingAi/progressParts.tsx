@@ -1,0 +1,275 @@
+import { CARD, MUTED, BORDER, D } from './shared'
+import { RARITY_META, HEALTH_META, REWARD_CATEGORY_LABEL, type ProgressData, type Pin, type Reward } from './progressGame'
+
+const ORANGE = '#FF6D29'
+const GREEN = '#4ade80'
+const RED = '#f87171'
+
+function sectionTitle(icon: string, title: string, sub?: string) {
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      <div style={{ fontSize: '14px', fontWeight: 800, color: 'white', fontFamily: D }}>{icon} {title}</div>
+      {sub && <div style={{ fontSize: '11.5px', color: MUTED, marginTop: '2px' }}>{sub}</div>}
+    </div>
+  )
+}
+
+// ── Nível + Growth Points + barra de progresso ─────────────────────────────
+export function LevelCard({ d }: { d: ProgressData }) {
+  const gpFmt = (n: number) => n.toLocaleString('pt-BR')
+  return (
+    <div style={{ background: `linear-gradient(135deg, rgba(255,109,41,0.10), rgba(255,109,41,0.02))`, border: '1px solid rgba(255,109,41,0.22)', borderRadius: '16px', padding: '20px 22px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginBottom: '14px' }}>
+        <div style={{ fontSize: '34px', lineHeight: 1 }}>{d.level.icon}</div>
+        <div style={{ flex: 1, minWidth: '160px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Nível {d.level.level}</div>
+          <div style={{ fontSize: '22px', fontWeight: 900, color: 'white', lineHeight: 1.1 }}>{d.level.name}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: '22px', fontWeight: 900, color: ORANGE, lineHeight: 1 }}>{gpFmt(d.totalGp)}</div>
+          <div style={{ fontSize: '10px', color: MUTED }}>Growth Points</div>
+        </div>
+      </div>
+      <div style={{ height: '10px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden', marginBottom: '7px' }}>
+        <div style={{ width: `${d.levelPct}%`, height: '100%', background: `linear-gradient(90deg, ${ORANGE}, #ffb37a)`, borderRadius: '99px', transition: 'width 0.6s ease' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: MUTED }}>
+        <span>{d.nextLevel ? `${gpFmt(d.totalGp)} / ${gpFmt(d.nextLevel.minGp)} GP` : 'Nível máximo atingido 👑'}</span>
+        {d.nextLevel && <span><strong style={{ color: 'white' }}>{gpFmt(d.gpToNext)} GP</strong> até {d.nextLevel.name}</span>}
+      </div>
+    </div>
+  )
+}
+
+// ── Próximo milestone ──────────────────────────────────────────────────────
+export function MilestoneCard({ d }: { d: ProgressData }) {
+  const m = d.milestone
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '16px', padding: '20px 22px' }}>
+      <div style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '6px' }}>🚀 Próximo desbloqueio</div>
+      <div style={{ fontSize: '18px', fontWeight: 800, color: 'white', marginBottom: '12px' }}>{m.icon} {m.title}</div>
+      <div style={{ height: '10px', background: 'rgba(255,255,255,0.08)', borderRadius: '99px', overflow: 'hidden', marginBottom: '7px' }}>
+        <div style={{ width: `${m.pct}%`, height: '100%', background: `linear-gradient(90deg, #A78BFA, #c4b5fd)`, borderRadius: '99px', transition: 'width 0.6s ease' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: MUTED, marginBottom: '12px' }}>
+        <span>{m.current.toLocaleString('pt-BR')} / {m.target.toLocaleString('pt-BR')} GP · {m.pct}%</span>
+        <span><strong style={{ color: 'white' }}>Faltam {m.remaining.toLocaleString('pt-BR')} GP</strong></span>
+      </div>
+      <div style={{ fontSize: '11.5px', color: MUTED, background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '9px', padding: '9px 12px' }}>
+        🎯 Objetivo sugerido: <strong style={{ color: 'white' }}>{m.nextGoal}</strong>
+      </div>
+    </div>
+  )
+}
+
+// ── Enquanto você estava fora (clicável) ───────────────────────────────────
+export function WhileAway({ d, onOpen }: { d: ProgressData; onOpen: (l: string) => void }) {
+  return (
+    <div>
+      {sectionTitle('🤖', 'Enquanto você estava fora', `Seu SalesBoost trabalhou ${d.lastVisitLabel === 'hoje' ? 'hoje' : d.lastVisitLabel} — clique para abrir cada resultado.`)}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px' }}>
+        {d.whileAway.map(w => (
+          <button key={w.key} onClick={() => w.link && onOpen(w.link)}
+            style={{ textAlign: 'left', background: CARD, border: `1px solid ${BORDER}`, borderRadius: '12px', padding: '14px 15px', cursor: w.link ? 'pointer' : 'default', fontFamily: D, display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <span style={{ fontSize: '20px' }}>{w.icon}</span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '20px', fontWeight: 900, color: 'white', lineHeight: 1 }}>{w.count}</div>
+              <div style={{ fontSize: '11px', color: MUTED, marginTop: '2px' }}>{w.label} {w.link && <span style={{ color: ORANGE }}>→</span>}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Business Health ────────────────────────────────────────────────────────
+export function HealthCard({ d }: { d: ProgressData }) {
+  const meta = HEALTH_META[d.health.status]
+  return (
+    <div>
+      {sectionTitle('❤️‍🩹', 'Business Health', 'Saúde geral do negócio, calculada dos seus dados.')}
+      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '16px 18px' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '15px', fontWeight: 800, color: meta.color, marginBottom: '14px' }}>
+          {meta.dot} Business Health: {meta.label}
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '9px' }}>
+          {d.health.metrics.map(m => (
+            <div key={m.label} style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '10px', padding: '11px 12px' }}>
+              <div style={{ fontSize: '10px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '5px' }}>{m.label}</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+                <span style={{ fontSize: '16px', fontWeight: 800, color: 'white' }}>{m.value}</span>
+                <span style={{ fontSize: '10px', fontWeight: 700, color: m.delta >= 0 ? GREEN : RED }}>{m.delta >= 0 ? '▲' : '▼'}{Math.abs(m.delta)}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Progresso semanal ──────────────────────────────────────────────────────
+export function WeeklyCard({ d }: { d: ProgressData }) {
+  const max = Math.max(...d.weekly.map(w => Math.abs(w.pct)), 10)
+  return (
+    <div>
+      {sectionTitle('📊', 'Progresso semanal', 'Esta semana vs. semana passada.')}
+      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        {d.weekly.map(w => (
+          <div key={w.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+              <span style={{ fontSize: '12px', color: MUTED }}>{w.label}</span>
+              <span style={{ fontSize: '12px', fontWeight: 800, color: w.pct >= 0 ? GREEN : RED }}>{w.pct >= 0 ? '+' : ''}{w.pct}%</span>
+            </div>
+            <div style={{ height: '6px', background: 'rgba(255,255,255,0.06)', borderRadius: '99px', overflow: 'hidden' }}>
+              <div style={{ width: `${(Math.abs(w.pct) / max) * 100}%`, height: '100%', background: w.pct >= 0 ? GREEN : RED, borderRadius: '99px' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Pins / conquistas ──────────────────────────────────────────────────────
+export function PinsGrid({ pins, onActivate, activating }: { pins: Pin[]; onActivate: (k: string) => void; activating: string | null }) {
+  return (
+    <div>
+      {sectionTitle('🏅', 'Pins & Conquistas', 'Marcos importantes do seu negócio. Alguns viram recompensas.')}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '11px' }}>
+        {pins.map(p => {
+          const rm = RARITY_META[p.rarity]
+          return (
+            <div key={p.key} style={{ background: CARD, border: `1px solid ${p.unlocked ? rm.color + '55' : BORDER}`, borderRadius: '13px', padding: '15px', opacity: p.unlocked ? 1 : 0.5, position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '26px', filter: p.unlocked ? 'none' : 'grayscale(1)' }}>{p.icon}</span>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '13px', fontWeight: 800, color: 'white' }}>{p.name}</div>
+                  <span style={{ fontSize: '9px', fontWeight: 700, color: rm.color, border: `1px solid ${rm.color}44`, borderRadius: '99px', padding: '1px 7px' }}>{rm.label}</span>
+                </div>
+              </div>
+              <div style={{ fontSize: '11px', color: MUTED, lineHeight: 1.45, marginBottom: p.unlocked ? '9px' : 0 }}>{p.description}</div>
+              {p.unlocked && p.unlockedAt && <div style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.35)' }}>Desbloqueado {p.unlockedAt}</div>}
+              {p.unlocked && p.rewardKey && (
+                <button onClick={() => onActivate(p.rewardKey!)} disabled={activating === p.rewardKey}
+                  style={{ marginTop: '10px', width: '100%', padding: '8px', background: activating === p.rewardKey ? 'rgba(255,109,41,0.4)' : ORANGE, color: '#000', fontWeight: 800, fontSize: '11.5px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontFamily: D }}>
+                  {activating === p.rewardKey ? 'Ativando…' : '⚡ ATIVAR'}
+                </button>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── Rewards por categoria ──────────────────────────────────────────────────
+export function RewardsGrid({ rewards }: { rewards: Reward[] }) {
+  const cats = [...new Set(rewards.map(r => r.category))]
+  return (
+    <div>
+      {sectionTitle('🎁', 'Rewards', 'Capacidades que seu agente desbloqueia com o progresso.')}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {cats.map(cat => (
+          <div key={cat}>
+            <div style={{ fontSize: '10px', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '8px' }}>{REWARD_CATEGORY_LABEL[cat] ?? cat}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '9px' }}>
+              {rewards.filter(r => r.category === cat).map(r => (
+                <div key={r.key} style={{ background: CARD, border: `1px solid ${r.unlocked ? 'rgba(74,222,128,0.3)' : BORDER}`, borderRadius: '11px', padding: '13px 14px', opacity: r.unlocked ? 1 : 0.55 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '5px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>{r.icon} {r.name}</span>
+                    <span style={{ fontSize: '9px', fontWeight: 700, color: r.unlocked ? GREEN : MUTED }}>{r.unlocked ? '✓ Ativo' : '🔒'}</span>
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: MUTED, lineHeight: 1.45 }}>{r.description}</div>
+                  {r.durationHours && <div style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.35)', marginTop: '5px' }}>Boost de {r.durationHours}h</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Timeline de progresso recente ──────────────────────────────────────────
+export function Timeline({ d }: { d: ProgressData }) {
+  return (
+    <div>
+      {sectionTitle('🕒', 'Progresso recente', 'Cada resultado do negócio, em ordem.')}
+      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '6px 18px' }}>
+        {d.timeline.map((t, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 0', borderBottom: i < d.timeline.length - 1 ? `1px solid ${BORDER}` : 'none' }}>
+            <span style={{ fontSize: '18px' }}>{t.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'white' }}>{t.label}</div>
+              <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>{t.when}</div>
+            </div>
+            {t.gp != null && <span style={{ fontSize: '12px', fontWeight: 800, color: ORANGE, flexShrink: 0 }}>+{t.gp} GP</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Next Best Action ───────────────────────────────────────────────────────
+export function NextBestAction({ d, onOpen }: { d: ProgressData; onOpen: (l: string) => void }) {
+  return (
+    <div style={{ background: `linear-gradient(135deg, rgba(167,139,250,0.10), rgba(167,139,250,0.02))`, border: '1px solid rgba(167,139,250,0.25)', borderRadius: '16px', padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+      <div style={{ flex: 1, minWidth: '200px' }}>
+        <div style={{ fontSize: '10px', fontWeight: 700, color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>🎯 Next Best Action</div>
+        <div style={{ fontSize: '16px', fontWeight: 800, color: 'white', lineHeight: 1.35 }}>{d.nextBestAction.title}</div>
+      </div>
+      <button onClick={() => onOpen(d.nextBestAction.link)}
+        style={{ padding: '11px 20px', background: ORANGE, color: '#000', fontWeight: 800, fontSize: '13px', border: 'none', borderRadius: '10px', cursor: 'pointer', fontFamily: D, flexShrink: 0 }}>
+        {d.nextBestAction.cta} →
+      </button>
+    </div>
+  )
+}
+
+// ── Recovery Boost (só quando desacelera) ──────────────────────────────────
+export function RecoveryCard({ d, onActivate, activating }: { d: ProgressData; onActivate: (k: string) => void; activating: string | null }) {
+  if (!d.recovery) return null
+  return (
+    <div style={{ background: 'rgba(248,113,113,0.05)', border: '1px solid rgba(248,113,113,0.25)', borderRadius: '16px', padding: '20px 22px' }}>
+      <div style={{ fontSize: '15px', fontWeight: 800, color: RED, marginBottom: '10px' }}>⚠️ Seu crescimento desacelerou</div>
+      <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap', marginBottom: '14px' }}>
+        {d.recovery.metrics.map(m => (
+          <div key={m.label}><span style={{ fontSize: '18px', fontWeight: 900, color: RED }}>{m.value}</span> <span style={{ fontSize: '11px', color: MUTED }}>{m.label}</span></div>
+        ))}
+      </div>
+      <div style={{ fontSize: '12px', fontWeight: 700, color: 'white', marginBottom: '7px' }}>O SalesBoost encontrou {d.recovery.causes.length} possíveis causas:</div>
+      <ol style={{ margin: '0 0 14px', paddingLeft: '18px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+        {d.recovery.causes.map((c, i) => <li key={i} style={{ fontSize: '12px', color: 'rgba(255,255,255,0.85)', lineHeight: 1.5 }}>{c}</li>)}
+      </ol>
+      <div style={{ background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '11px', padding: '13px 15px' }}>
+        <div style={{ fontSize: '12.5px', color: 'white', lineHeight: 1.5, marginBottom: '10px' }}>🎁 <strong>Recovery Boost disponível.</strong> Seu agente ganha inteligência avançada por 24h para montar um plano de recuperação.</div>
+        <button onClick={() => onActivate('recovery_boost')} disabled={activating === 'recovery_boost'}
+          style={{ padding: '9px 18px', background: activating === 'recovery_boost' ? 'rgba(255,109,41,0.4)' : ORANGE, color: '#000', fontWeight: 800, fontSize: '12.5px', border: 'none', borderRadius: '9px', cursor: 'pointer', fontFamily: D }}>
+          {activating === 'recovery_boost' ? 'Ativando…' : 'Ativar Recovery Boost'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Streak ─────────────────────────────────────────────────────────────────
+export function StreakCard({ d }: { d: ProgressData }) {
+  const days = Array.from({ length: 7 }, (_, i) => i + 1)
+  return (
+    <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', padding: '16px 18px' }}>
+      <div style={{ fontSize: '13.5px', fontWeight: 800, color: 'white', marginBottom: '3px' }}>🔥 {d.streak} dias de progresso</div>
+      <div style={{ fontSize: '11px', color: MUTED, marginBottom: '12px' }}>Seu negócio evoluiu por {d.streak} dias seguidos — não é por abrir o app, é resultado real.</div>
+      <div style={{ display: 'flex', gap: '6px' }}>
+        {days.map(n => {
+          const on = n <= d.streak
+          return <div key={n} style={{ flex: 1, height: '30px', borderRadius: '7px', background: on ? `linear-gradient(180deg, ${ORANGE}, rgba(255,109,41,0.3))` : 'rgba(255,255,255,0.05)', border: `1px solid ${on ? 'rgba(255,109,41,0.4)' : BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 800, color: on ? '#000' : 'rgba(255,255,255,0.3)' }}>{n}</div>
+        })}
+      </div>
+    </div>
+  )
+}

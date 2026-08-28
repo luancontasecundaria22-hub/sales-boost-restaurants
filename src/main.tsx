@@ -18,6 +18,7 @@ import InsightsPage from './pages/dashboard/InsightsPage.tsx'
 import SettingsPage from './pages/dashboard/SettingsPage.tsx'
 import OpportunitiesPage from './pages/dashboard/OpportunitiesPage.tsx'
 import MarketingAiHubPage from './pages/dashboard/MarketingAiHubPage.tsx'
+import BusinessProgressPage from './pages/dashboard/BusinessProgressPage.tsx'
 import MarketingAiSectionPage from './pages/dashboard/MarketingAiSectionPage.tsx'
 import ApprovalsPage from './pages/dashboard/ApprovalsPage.tsx'
 import ReportPage from './pages/dashboard/ReportPage.tsx'
@@ -113,6 +114,7 @@ function RouterRoot() {
         <Route path="agente" element={<Navigate to="/dashboard/marketing-ai" replace />} />
         <Route path="marketing-ai" element={<MarketingAiHubPage />} />
         <Route path="marketing-ai/:section" element={<MarketingAiSectionPage />} />
+        <Route path="progresso" element={<BusinessProgressPage />} />
         <Route path="oportunidades" element={<OpportunitiesPage />} />
         <Route path="concorrentes" element={<Navigate to="/dashboard/marketing-ai/competitors" replace />} />
         <Route path="aprovacoes" element={<ApprovalsPage />} />
