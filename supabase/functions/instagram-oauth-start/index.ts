@@ -15,12 +15,15 @@ const cors = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Permissões do Instagram Login (não são as mesmas do Facebook Login).
+// Permissões do Instagram Login (não são as mesmas do Facebook Login) —
+// precisa bater com o que está configurado em Instagram > API setup with
+// Instagram login > "Add required messaging permissions" no App Dashboard.
 const SCOPES = [
   'instagram_business_basic',
   'instagram_business_content_publish',
   'instagram_business_manage_comments',
   'instagram_business_manage_messages',
+  'instagram_business_manage_insights',
 ]
 
 Deno.serve(async (req) => {
