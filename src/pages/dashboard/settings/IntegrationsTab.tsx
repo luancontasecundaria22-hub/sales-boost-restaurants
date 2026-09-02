@@ -93,6 +93,13 @@ export default function IntegrationsTab() {
   const [waConnectedAt, setWaConnectedAt] = useState<string | null>(null)
   const [waSaving, setWaSaving] = useState(false)
   const [waSaved, setWaSaved] = useState(false)
+  // Login com o Meta Business Suite — dá acesso real (não mock) às Páginas,
+  // Instagram vinculado e negócios do Business Manager.
+  const [metaBusinessName, setMetaBusinessName] = useState<string | null>(null)
+  const [metaBusinessConnectedAt, setMetaBusinessConnectedAt] = useState<string | null>(null)
+  const [metaBusinessPagesCount, setMetaBusinessPagesCount] = useState(0)
+  const metaBusinessError = searchParams.get('error')
+  const metaBusinessSuccess = searchParams.get('meta_business') === 'connected'
 
   useEffect(() => {
     if (!user) return
@@ -103,7 +110,7 @@ export default function IntegrationsTab() {
     setLoading(true)
     const { data: company } = await supabase
       .from('companies')
-      .select('id, instagram_url, social_data, social_scraped_at, instagram_user_id, instagram_auto_post, instagram_post_frequency, whatsapp_number, whatsapp_connected_at')
+      .select('id, instagram_url, social_data, social_scraped_at, instagram_user_id, instagram_auto_post, instagram_post_frequency, whatsapp_number, whatsapp_connected_at, meta_business_name, meta_business_connected_at')
       .eq('user_id', user!.id)
       .single()
 
@@ -119,6 +126,14 @@ export default function IntegrationsTab() {
     setIgFrequency(company.instagram_post_frequency ?? 'daily')
     setWaNumber(company.whatsapp_number ?? '')
     setWaConnectedAt(company.whatsapp_connected_at ?? null)
+    setMetaBusinessName(company.meta_business_name ?? null)
+    setMetaBusinessConnectedAt(company.meta_business_connected_at ?? null)
+
+    const { count: pagesCount } = await supabase
+      .from('company_meta_pages')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', company.id)
+    setMetaBusinessPagesCount(pagesCount ?? 0)
 
     const { data: integ } = await supabase
       .from('company_integrations')
@@ -241,12 +256,72 @@ export default function IntegrationsTab() {
     setWaConnectedAt(null)
   }
 
+  const handleDisconnectMetaBusiness = async () => {
+    if (!companyId) return
+    await supabase.from('companies').update({
+      meta_business_user_id: null, meta_business_name: null, meta_business_access_token: null,
+      meta_business_token_expires_at: null, meta_business_connected_at: null,
+    }).eq('id', companyId)
+    await supabase.from('company_meta_pages').delete().eq('company_id', companyId)
+    setMetaBusinessName(null)
+    setMetaBusinessConnectedAt(null)
+    setMetaBusinessPagesCount(0)
+  }
+
   if (loading) {
     return <div style={{ color: MUTED, fontSize: '14px' }}>Carregando...</div>
   }
 
   return (
     <div>
+      {/* Meta Business Suite — login real (Páginas, Instagram vinculado, Business Manager) */}
+      <div style={{ background: CARD, border: `1px solid ${metaBusinessConnectedAt ? 'rgba(74,222,128,0.25)' : 'rgba(255,109,41,0.2)'}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
+        <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: metaBusinessConnectedAt ? 'rgba(74,222,128,0.12)' : 'rgba(255,109,41,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>∞</div>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>
+                Meta Business Suite{' '}
+                {metaBusinessConnectedAt && (
+                  <span style={{ fontSize: '10px', background: 'rgba(74,222,128,0.15)', color: '#4ade80', padding: '2px 8px', borderRadius: 99, marginLeft: 6, verticalAlign: 'middle', fontWeight: 700 }}>✓ CONECTADO</span>
+                )}
+              </div>
+              <div style={{ fontSize: '12px', color: metaBusinessConnectedAt ? '#4ade80' : MUTED }}>
+                {metaBusinessConnectedAt
+                  ? `✓ Conectado como ${metaBusinessName ?? '—'} · ${metaBusinessPagesCount} página(s)`
+                  : 'Faça login com sua conta do Meta pra liberar dados reais (Páginas, Instagram, negócios)'}
+              </div>
+            </div>
+          </div>
+          {companyId && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <a href={`${SUPABASE_URL}/functions/v1/meta-business-oauth-start?company_id=${companyId}`}
+                style={{ padding: '8px 18px', background: metaBusinessConnectedAt ? 'rgba(255,255,255,0.04)' : ORANGE, color: metaBusinessConnectedAt ? MUTED : '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: metaBusinessConnectedAt ? `1px solid ${BORDER}` : 'none', textDecoration: 'none', display: 'inline-block', cursor: 'pointer' }}>
+                {metaBusinessConnectedAt ? 'Reconectar' : 'Conectar Meta Business Suite →'}
+              </a>
+              {metaBusinessConnectedAt && (
+                <button onClick={handleDisconnectMetaBusiness}
+                  style={{ padding: '8px 14px', background: 'transparent', color: '#f87171', fontWeight: 600, fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer' }}>
+                  Desconectar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {(metaBusinessSuccess || metaBusinessError) && (
+          <div style={{ padding: '12px 24px', background: metaBusinessSuccess ? 'rgba(74,222,128,0.06)' : 'rgba(239,68,68,0.08)', fontSize: '12px', color: metaBusinessSuccess ? '#4ade80' : '#f87171', borderTop: `1px solid ${BORDER}` }}>
+            {metaBusinessSuccess ? '✓ Conta do Meta conectada! Já sincronizamos suas Páginas.' : `Erro: ${metaBusinessError}`}
+          </div>
+        )}
+        {!metaBusinessConnectedAt && (
+          <div style={{ padding: '0 24px 20px' }}>
+            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6 }}>
+              Esse login é a fonte principal de dados reais da plataforma — dá acesso às suas Páginas do Facebook, à conta de Instagram vinculada e aos negócios do seu Business Manager, tudo de uma vez.
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Google Search Console Card */}
       <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
