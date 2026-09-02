@@ -6,7 +6,17 @@ export const t = {
       features: 'Funcionalidades',
       how: 'Como funciona',
       pricing: 'Preços',
-      cta: 'Começar grátis',
+      cta: '3 dias grátis',
+    },
+    trialModal: {
+      badge: 'Antes de começar',
+      title: 'Seus 3 dias grátis começam agora',
+      body: 'Se 3 dias não forem suficientes pra você ver todo o potencial que dá pra desbloquear, já deixamos separado um desconto pro seu primeiro mês:',
+      priceFrom: 'R$ 2.449',
+      priceTo: 'R$ 1.499',
+      priceNote: 'no primeiro mês',
+      cta: 'Começar meus 3 dias grátis →',
+      dismiss: 'Fechar',
     },
     hero: {
       meta: [
@@ -176,7 +186,17 @@ export const t = {
       features: 'Features',
       how: 'How it works',
       pricing: 'Pricing',
-      cta: 'Start for free',
+      cta: '3 free days',
+    },
+    trialModal: {
+      badge: 'Before you start',
+      title: 'Your 3 free days start now',
+      body: "If 3 days aren't enough to see the full potential we can unlock, we've already set aside a discount for your first month:",
+      priceFrom: 'R$ 2,449',
+      priceTo: 'R$ 1,499',
+      priceNote: 'first month',
+      cta: 'Start my 3 free days →',
+      dismiss: 'Close',
     },
     hero: {
       meta: [

@@ -80,9 +80,35 @@ function FireCursor() {
 }
 
 /* ══════════════════════════════════════════════════
+   TRIAL MODAL  — shown before sending people to /onboarding
+══════════════════════════════════════════════════ */
+function TrialModal({ lang, open, onClose }: { lang: Lang; open: boolean; onClose: () => void }) {
+  const tx = t[lang].trialModal
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }} onClick={onClose}>
+      <div className="relative w-full max-w-md rounded-2xl p-8" style={{ background: CARD, border: '1px solid rgba(255,109,41,0.25)', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }} onClick={e => e.stopPropagation()}>
+        <button onClick={onClose} aria-label={tx.dismiss} className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors" style={{ color: MUTED, background: 'rgba(255,255,255,0.05)' }}>✕</button>
+        <Badge text={tx.badge} />
+        <h3 className="font-black text-white leading-tight mb-4" style={{ fontFamily: D, fontSize: '1.6rem' }}>{tx.title}</h3>
+        <p className="text-sm leading-relaxed mb-6" style={{ color: MUTED }}>{tx.body}</p>
+        <div className="flex items-baseline gap-3 mb-8 p-4 rounded-xl" style={{ background: 'rgba(255,109,41,0.06)', border: '1px solid rgba(255,109,41,0.2)' }}>
+          <span className="text-sm line-through" style={{ color: 'rgba(255,255,255,0.35)' }}>{tx.priceFrom}</span>
+          <span className="font-black" style={{ fontFamily: D, fontSize: '2rem', color: ORANGE }}>{tx.priceTo}</span>
+          <span className="text-xs" style={{ color: MUTED }}>{tx.priceNote}</span>
+        </div>
+        <Link to="/onboarding" className="w-full font-bold text-sm px-6 py-4 rounded-xl text-black transition-all text-center" style={{ background: ORANGE, textDecoration: 'none', display: 'block' }}>
+          {tx.cta}
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════════════════
    NAVBAR  — smooth scroll on anchor clicks
 ══════════════════════════════════════════════════ */
-function Navbar({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
+function Navbar({ lang, setLang, onTrialClick }: { lang: Lang; setLang: (l: Lang) => void; onTrialClick: () => void }) {
   const tx = t[lang].nav
   const labels = [tx.features, tx.how, tx.pricing]
 
@@ -116,9 +142,9 @@ function Navbar({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = MUTED; (e.currentTarget as HTMLElement).style.borderColor = 'rgba(255,255,255,0.12)' }}>
           {lang === 'pt' ? 'Entrar' : 'Sign in'}
         </Link>
-        <Link to="/onboarding" className="font-semibold text-sm px-4 py-2 rounded-lg transition-all" style={{ background: ORANGE, color: '#000', textDecoration: 'none' }}>
+        <button onClick={onTrialClick} className="font-semibold text-sm px-4 py-2 rounded-lg transition-all" style={{ background: ORANGE, color: '#000', border: 'none', cursor: 'pointer' }}>
           {tx.cta}
-        </Link>
+        </button>
       </div>
     </nav>
   )
@@ -750,7 +776,7 @@ function PricingSection({ lang }: { lang: Lang }) {
 /* ══════════════════════════════════════════════════
    FOOTER
 ══════════════════════════════════════════════════ */
-function SiteFooter({ lang }: { lang: Lang }) {
+function SiteFooter({ lang, onTrialClick }: { lang: Lang; onTrialClick: () => void }) {
   const tx = t[lang].footer
   const nav = t[lang].nav
   const labels = [nav.features, nav.how, nav.pricing]
@@ -780,9 +806,9 @@ function SiteFooter({ lang }: { lang: Lang }) {
           <div className="flex flex-col justify-between">
             <div>
               <div className="text-xs font-bold uppercase tracking-widest mb-5" style={{ color: 'rgba(255,255,255,0.3)' }}>Começar</div>
-              <Link to="/onboarding" className="font-bold text-sm px-6 py-3 rounded-xl text-black transition-all" style={{ background: ORANGE, textDecoration: 'none', display: 'inline-block' }}>
+              <button onClick={onTrialClick} className="font-bold text-sm px-6 py-3 rounded-xl text-black transition-all" style={{ background: ORANGE, border: 'none', cursor: 'pointer' }}>
                 {nav.cta}
-              </Link>
+              </button>
             </div>
           </div>
         </div>
@@ -812,10 +838,11 @@ function SiteFooter({ lang }: { lang: Lang }) {
 ══════════════════════════════════════════════════ */
 export default function App() {
   const [lang, setLang] = useState<Lang>('pt')
+  const [trialOpen, setTrialOpen] = useState(false)
   return (
     <div style={{ background: BG }}>
       <FireCursor />
-      <Navbar lang={lang} setLang={setLang} />
+      <Navbar lang={lang} setLang={setLang} onTrialClick={() => setTrialOpen(true)} />
       <HeroSection lang={lang} />
       <StatsSection lang={lang} />
       <FeaturesSection lang={lang} />
@@ -823,7 +850,8 @@ export default function App() {
       <ShowcaseSection lang={lang} />
       <StatementSection lang={lang} />
       <PricingSection lang={lang} />
-      <SiteFooter lang={lang} />
+      <SiteFooter lang={lang} onTrialClick={() => setTrialOpen(true)} />
+      <TrialModal lang={lang} open={trialOpen} onClose={() => setTrialOpen(false)} />
     </div>
   )
 }
