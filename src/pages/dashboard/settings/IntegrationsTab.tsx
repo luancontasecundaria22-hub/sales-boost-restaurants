@@ -414,10 +414,17 @@ export default function IntegrationsTab() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
             <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: igConnected ? 'rgba(255,109,41,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🤖</div>
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Instagram Auto-post <span style={{ fontSize: '10px', background: 'rgba(255,109,41,0.15)', color: ORANGE, padding: '2px 8px', borderRadius: 99, marginLeft: 6, verticalAlign: 'middle' }}>NOVO</span></div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>
+                Instagram Auto-post{' '}
+                {igConnected ? (
+                  <span style={{ fontSize: '10px', background: 'rgba(74,222,128,0.15)', color: '#4ade80', padding: '2px 8px', borderRadius: 99, marginLeft: 6, verticalAlign: 'middle', fontWeight: 700 }}>✓ CONECTADO</span>
+                ) : (
+                  <span style={{ fontSize: '10px', background: 'rgba(255,109,41,0.15)', color: ORANGE, padding: '2px 8px', borderRadius: 99, marginLeft: 6, verticalAlign: 'middle' }}>NOVO</span>
+                )}
+              </div>
               <div style={{ fontSize: '12px', color: igConnected ? '#4ade80' : MUTED }}>
                 {igConnected
-                  ? igAutoPost ? '● Agente publicando automaticamente' : '○ Conectado · auto-post pausado'
+                  ? `✓ Conectado${igAutoPost ? ' · publicando automaticamente' : ' · auto-post pausado'}`
                   : 'Conecte para o Agente de Marketing publicar sozinho 24/7'}
               </div>
             </div>
