@@ -28,21 +28,24 @@ Deno.serve(async (req) => {
   const state = url.searchParams.get('state')
   const errorMsg = url.searchParams.get('error_description') || url.searchParams.get('error')
 
-  if (errorMsg) return htmlRedirect(`/dashboard/marketing-ai/conexoes?error=${encodeURIComponent(errorMsg)}`)
-  if (!code || !state) return htmlRedirect('/dashboard/marketing-ai/conexoes?error=missing_params')
+  // Conexões vive em Configurações agora (foi consolidado pra lá) — manda
+  // direto pro lugar certo, sem passar pelo endereço antigo (que hoje só
+  // redireciona e perde a mensagem de sucesso/erro no meio do caminho).
+  if (errorMsg) return htmlRedirect(`/dashboard/settings?tab=conexoes&error=${encodeURIComponent(errorMsg)}`)
+  if (!code || !state) return htmlRedirect('/dashboard/settings?tab=conexoes&error=missing_params')
 
   let companyId: string
   try {
     companyId = JSON.parse(atob(state)).company_id
   } catch {
-    return htmlRedirect('/dashboard/marketing-ai/conexoes?error=invalid_state')
+    return htmlRedirect('/dashboard/settings?tab=conexoes&error=invalid_state')
   }
 
   const appId = Deno.env.get('FACEBOOK_APP_ID')
   const appSecret = Deno.env.get('FACEBOOK_APP_SECRET')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  if (!appId || !appSecret) return htmlRedirect('/dashboard/marketing-ai/conexoes?error=meta_business_not_configured')
+  if (!appId || !appSecret) return htmlRedirect('/dashboard/settings?tab=conexoes&error=meta_business_not_configured')
 
   const redirectUri = `${supabaseUrl}/functions/v1/meta-business-oauth-callback`
 
@@ -93,10 +96,10 @@ Deno.serve(async (req) => {
       await admin.from('company_meta_pages').upsert(rows, { onConflict: 'company_id,page_id' })
     }
 
-    return htmlRedirect('/dashboard/marketing-ai/conexoes?meta_business=connected')
+    return htmlRedirect('/dashboard/settings?tab=conexoes&meta_business=connected')
   } catch (err) {
     console.error('Meta Business OAuth error:', err)
-    return htmlRedirect(`/dashboard/marketing-ai/conexoes?error=${encodeURIComponent(String(err))}`)
+    return htmlRedirect(`/dashboard/settings?tab=conexoes&error=${encodeURIComponent(String(err))}`)
   }
 })
 

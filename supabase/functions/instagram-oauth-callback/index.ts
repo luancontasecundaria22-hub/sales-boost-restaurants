@@ -25,21 +25,24 @@ Deno.serve(async (req) => {
   const state = url.searchParams.get('state')
   const errorMsg = url.searchParams.get('error_description') || url.searchParams.get('error')
 
-  if (errorMsg) return htmlRedirect(`/dashboard/marketing-ai/conexoes?error=${encodeURIComponent(errorMsg)}`)
-  if (!code || !state) return htmlRedirect('/dashboard/marketing-ai/conexoes?error=missing_params')
+  // Conexões vive em Configurações agora (foi consolidado pra lá) — manda
+  // direto pro lugar certo, sem passar pelo endereço antigo (que hoje só
+  // redireciona e perde a mensagem de sucesso/erro no meio do caminho).
+  if (errorMsg) return htmlRedirect(`/dashboard/settings?tab=conexoes&error=${encodeURIComponent(errorMsg)}`)
+  if (!code || !state) return htmlRedirect('/dashboard/settings?tab=conexoes&error=missing_params')
 
   let companyId: string
   try {
     companyId = JSON.parse(atob(state)).company_id
   } catch {
-    return htmlRedirect('/dashboard/marketing-ai/conexoes?error=invalid_state')
+    return htmlRedirect('/dashboard/settings?tab=conexoes&error=invalid_state')
   }
 
   const appId = Deno.env.get('INSTAGRAM_APP_ID')
   const appSecret = Deno.env.get('INSTAGRAM_APP_SECRET')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  if (!appId || !appSecret) return htmlRedirect('/dashboard/marketing-ai/conexoes?error=instagram_not_configured')
+  if (!appId || !appSecret) return htmlRedirect('/dashboard/settings?tab=conexoes&error=instagram_not_configured')
 
   const redirectUri = `${supabaseUrl}/functions/v1/instagram-oauth-callback`
   // O Instagram às vezes acrescenta "#_" no fim do code — remove.
@@ -100,10 +103,10 @@ Deno.serve(async (req) => {
       .eq('id', companyId)
     if (updateErr) throw new Error(updateErr.message)
 
-    return htmlRedirect('/dashboard/marketing-ai/conexoes?instagram=connected')
+    return htmlRedirect('/dashboard/settings?tab=conexoes&instagram=connected')
   } catch (err) {
     console.error('Instagram OAuth error:', err)
-    return htmlRedirect(`/dashboard/marketing-ai/conexoes?error=${encodeURIComponent(String(err))}`)
+    return htmlRedirect(`/dashboard/settings?tab=conexoes&error=${encodeURIComponent(String(err))}`)
   }
 })
 
