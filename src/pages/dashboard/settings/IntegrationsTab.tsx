@@ -86,6 +86,13 @@ export default function IntegrationsTab() {
   const [igTogglingAuto, setIgTogglingAuto] = useState(false)
   const igOauthError = searchParams.get('error')
   const igOauthSuccess = searchParams.get('instagram') === 'connected'
+  // WhatsApp — só guarda o número do cliente por enquanto (a resposta
+  // automática ainda depende de como várias empresas vão dividir o mesmo
+  // número do WhatsApp Business, isso ainda não foi decidido).
+  const [waNumber, setWaNumber] = useState('')
+  const [waConnectedAt, setWaConnectedAt] = useState<string | null>(null)
+  const [waSaving, setWaSaving] = useState(false)
+  const [waSaved, setWaSaved] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -96,7 +103,7 @@ export default function IntegrationsTab() {
     setLoading(true)
     const { data: company } = await supabase
       .from('companies')
-      .select('id, instagram_url, social_data, social_scraped_at, instagram_user_id, instagram_auto_post, instagram_post_frequency')
+      .select('id, instagram_url, social_data, social_scraped_at, instagram_user_id, instagram_auto_post, instagram_post_frequency, whatsapp_number, whatsapp_connected_at')
       .eq('user_id', user!.id)
       .single()
 
@@ -110,6 +117,8 @@ export default function IntegrationsTab() {
     setIgConnected(!!company.instagram_user_id)
     setIgAutoPost(company.instagram_auto_post ?? false)
     setIgFrequency(company.instagram_post_frequency ?? 'daily')
+    setWaNumber(company.whatsapp_number ?? '')
+    setWaConnectedAt(company.whatsapp_connected_at ?? null)
 
     const { data: integ } = await supabase
       .from('company_integrations')
@@ -209,6 +218,27 @@ export default function IntegrationsTab() {
     await supabase.from('companies').update({ instagram_user_id: null, instagram_auto_post: false }).eq('id', companyId)
     setIgConnected(false)
     setIgAutoPost(false)
+  }
+
+  const saveWhatsapp = async () => {
+    if (!companyId) return
+    setWaSaving(true)
+    setWaSaved(false)
+    const now = new Date().toISOString()
+    const { error } = await supabase.from('companies').update({ whatsapp_number: waNumber.trim() || null, whatsapp_connected_at: waNumber.trim() ? now : null }).eq('id', companyId)
+    setWaSaving(false)
+    if (!error) {
+      setWaConnectedAt(waNumber.trim() ? now : null)
+      setWaSaved(true)
+      setTimeout(() => setWaSaved(false), 2000)
+    }
+  }
+
+  const handleDisconnectWhatsapp = async () => {
+    if (!companyId) return
+    await supabase.from('companies').update({ whatsapp_number: null, whatsapp_connected_at: null }).eq('id', companyId)
+    setWaNumber('')
+    setWaConnectedAt(null)
   }
 
   if (loading) {
@@ -502,6 +532,46 @@ export default function IntegrationsTab() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* WhatsApp Business card */}
+      <div style={{ background: CARD, border: `1px solid ${waConnectedAt ? 'rgba(74,222,128,0.25)' : BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
+        <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: waConnectedAt ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>💬</div>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>
+                WhatsApp Business{' '}
+                {waConnectedAt && (
+                  <span style={{ fontSize: '10px', background: 'rgba(74,222,128,0.15)', color: '#4ade80', padding: '2px 8px', borderRadius: 99, marginLeft: 6, verticalAlign: 'middle', fontWeight: 700 }}>✓ CONECTADO</span>
+                )}
+              </div>
+              <div style={{ fontSize: '12px', color: waConnectedAt ? '#4ade80' : MUTED }}>
+                {waConnectedAt ? `✓ Conectado · ${waNumber}` : 'Guarde o número que os clientes usam pra falar com você'}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ padding: '16px 24px' }}>
+          <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', lineHeight: 1.6, marginBottom: '14px' }}>
+            Resposta automática pelo Agente ainda está em construção — por enquanto isso só guarda o número, pra já deixar pronto quando a automação ligar.
+          </div>
+          <label style={{ display: 'block', fontSize: '11px', color: MUTED, marginBottom: '6px' }}>Número do WhatsApp (com DDD)</label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input value={waNumber} onChange={e => setWaNumber(e.target.value)} placeholder="+55 21 99999-9999"
+              style={{ flex: 1, padding: '9px 12px', boxSizing: 'border-box', background: 'rgba(255,255,255,0.04)', border: `1px solid ${BORDER}`, borderRadius: '8px', color: 'white', fontSize: '13px', outline: 'none' }} />
+            <button onClick={saveWhatsapp} disabled={waSaving}
+              style={{ padding: '9px 18px', background: waSaved ? '#4ade80' : ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}>
+              {waSaved ? '✓ Salvo' : waSaving ? 'Salvando...' : 'Salvar'}
+            </button>
+            {waConnectedAt && (
+              <button onClick={handleDisconnectWhatsapp}
+                style={{ padding: '9px 14px', background: 'transparent', color: '#f87171', fontWeight: 600, fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer' }}>
+                Remover
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Google Business Profile card */}
