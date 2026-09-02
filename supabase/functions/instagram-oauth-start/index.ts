@@ -45,10 +45,10 @@ Deno.serve(async (req) => {
   authUrl.searchParams.set('response_type', 'code')
   authUrl.searchParams.set('scope', SCOPES.join(','))
   authUrl.searchParams.set('state', state)
-  // Não usamos Facebook Login em nenhum lugar do fluxo — esconde a opção
-  // "Continuar com Facebook" na tela do Instagram pra não confundir o dono
-  // (ele clicaria num caminho que a gente não suporta).
-  authUrl.searchParams.set('enable_fb_login', 'false')
+  // Força uma autorização nova a cada vez (em vez de reaproveitar uma sessão
+  // antiga guardada no navegador) — é assim que a URL gerada pelo próprio
+  // painel do Meta ("Embed URL") vem por padrão.
+  authUrl.searchParams.set('force_reauth', 'true')
 
   return Response.redirect(authUrl.toString(), 302)
 })
