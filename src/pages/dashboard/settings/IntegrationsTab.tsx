@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { supabase } from '../../../lib/supabase'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 
 function buildGbpAuthUrl(companyId: string): string {
   const params = new URLSearchParams({
@@ -52,27 +52,10 @@ function buildGscAuthUrl(companyId: string): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 }
 
-interface IgData {
-  username?: string
-  followers?: number
-  posts_count?: number
-  avg_likes?: number
-  avg_comments?: number
-  engagement_rate?: number
-  synced_at?: string
-}
-
 export default function IntegrationsTab() {
   const { user, session } = useAuth()
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [companyId, setCompanyId] = useState<string | null>(null)
-  const [instagramUrl, setInstagramUrl] = useState<string | null>(null)
-  const [igData, setIgData] = useState<IgData | null>(null)
-  const [socialScrapedAt, setSocialScrapedAt] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState(false)
-  const [syncError, setSyncError] = useState('')
-  const [syncSuccess, setSyncSuccess] = useState(false)
   const [integration, setIntegration] = useState<Integration | null>(null)
   const [gbpIntegration, setGbpIntegration] = useState<Integration | null>(null)
   const [metrics, setMetrics] = useState<GscMetrics | null>(null)
@@ -110,17 +93,12 @@ export default function IntegrationsTab() {
     setLoading(true)
     const { data: company } = await supabase
       .from('companies')
-      .select('id, instagram_url, social_data, social_scraped_at, instagram_user_id, instagram_auto_post, instagram_post_frequency, whatsapp_number, whatsapp_connected_at, meta_business_name, meta_business_connected_at')
+      .select('id, instagram_user_id, instagram_auto_post, instagram_post_frequency, whatsapp_number, whatsapp_connected_at, meta_business_name, meta_business_connected_at')
       .eq('user_id', user!.id)
       .single()
 
     if (!company) { setLoading(false); return }
     setCompanyId(company.id)
-    setInstagramUrl(company.instagram_url ?? null)
-    setSocialScrapedAt(company.social_scraped_at ?? null)
-    if (company.social_data?.instagram) {
-      setIgData(company.social_data.instagram as IgData)
-    }
     setIgConnected(!!company.instagram_user_id)
     setIgAutoPost(company.instagram_auto_post ?? false)
     setIgFrequency(company.instagram_post_frequency ?? 'daily')
@@ -152,27 +130,6 @@ export default function IntegrationsTab() {
     setIntegration(integ ?? null)
     setGbpIntegration(gbpInteg ?? null)
     setLoading(false)
-  }
-
-  const handleApifySync = async () => {
-    if (!session) return
-    setSyncing(true)
-    setSyncError('')
-    setSyncSuccess(false)
-    try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/apify-sync`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Erro na sincronização')
-      setSyncSuccess(true)
-      await loadIntegration()
-    } catch (e: unknown) {
-      setSyncError(e instanceof Error ? e.message : String(e))
-    }
-    setSyncing(false)
   }
 
   const loadGscMetrics = async () => {
@@ -323,14 +280,19 @@ export default function IntegrationsTab() {
       </div>
 
       {/* Google Search Console Card */}
-      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
+      <div style={{ background: CARD, border: `1px solid ${integration ? 'rgba(74,222,128,0.25)' : BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: integration ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
               🔍
             </div>
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Google Search Console</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>
+                Google Search Console{' '}
+                {integration && (
+                  <span style={{ fontSize: '10px', background: 'rgba(74,222,128,0.15)', color: '#4ade80', padding: '2px 8px', borderRadius: 99, marginLeft: 6, verticalAlign: 'middle', fontWeight: 700 }}>✓ CONECTADO</span>
+                )}
+              </div>
               <div style={{ fontSize: '12px', color: MUTED }}>
                 {integration ? (
                   <span style={{ color: '#4ade80' }}>✓ Conectado{integration.domain ? ` · ${integration.domain}` : ''}</span>
@@ -435,89 +397,11 @@ export default function IntegrationsTab() {
         )}
       </div>
 
-      {/* Instagram / Apify card */}
-      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
-        <div style={{ padding: '20px 24px', borderBottom: igData ? `1px solid ${BORDER}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>
-              📸
-            </div>
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Instagram</div>
-              <div style={{ fontSize: '12px', color: igData ? '#4ade80' : MUTED }}>
-                {igData
-                  ? `✓ @${igData.username ?? ''} · sincronizado ${socialScrapedAt ? new Date(socialScrapedAt).toLocaleDateString('pt-BR') : ''}`
-                  : instagramUrl ? 'Pronto para sincronizar' : 'Adicione seu Instagram em Sobre o negócio'}
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {!instagramUrl ? (
-              <button
-                onClick={() => navigate('/dashboard/settings?section=presenca')}
-                style={{ padding: '8px 16px', background: ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: 'pointer' }}
-              >
-                Configurar →
-              </button>
-            ) : (
-              <button
-                onClick={handleApifySync}
-                disabled={syncing}
-                style={{ padding: '8px 16px', background: syncing ? 'rgba(255,109,41,0.3)' : ORANGE, color: '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: 'none', cursor: syncing ? 'not-allowed' : 'pointer' }}
-              >
-                {syncing ? 'Sincronizando...' : igData ? 'Atualizar dados' : 'Sincronizar agora →'}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {syncError && (
-          <div style={{ padding: '12px 24px', background: 'rgba(239,68,68,0.08)', fontSize: '12px', color: '#f87171' }}>
-            {syncError}
-          </div>
-        )}
-
-        {syncSuccess && !syncError && (
-          <div style={{ padding: '12px 24px', background: 'rgba(74,222,128,0.06)', fontSize: '12px', color: '#4ade80' }}>
-            ✓ Dados sincronizados! O agente já usa essas informações.
-          </div>
-        )}
-
-        {igData && (
-          <div style={{ padding: '20px 24px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-              {[
-                { label: 'Seguidores', value: igData.followers?.toLocaleString('pt-BR') ?? '—', color: ORANGE },
-                { label: 'Posts', value: igData.posts_count?.toLocaleString('pt-BR') ?? '—', color: '#A78BFA' },
-                { label: 'Média curtidas', value: igData.avg_likes?.toLocaleString('pt-BR') ?? '—', color: '#4ade80' },
-                { label: 'Engajamento', value: igData.engagement_rate ? `${igData.engagement_rate}%` : '—', color: '#FBBF24' },
-              ].map(s => (
-                <div key={s.label} style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${BORDER}`, borderRadius: '10px', padding: '14px 16px' }}>
-                  <div style={{ fontSize: '10px', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: '6px' }}>{s.label}</div>
-                  <div style={{ fontFamily: D, fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.value}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{ marginTop: '12px', fontSize: '12px', color: MUTED }}>
-              Esses dados são usados pelo Agente para criar conteúdo mais relevante e personalizado.
-            </div>
-          </div>
-        )}
-
-        {!instagramUrl && (
-          <div style={{ padding: '16px 24px' }}>
-            <div style={{ fontSize: '13px', color: MUTED, lineHeight: 1.6 }}>
-              Adicione a URL do seu Instagram em "Sobre o negócio" para sincronizar seguidores, engajamento e posts recentes. O Agente usará esses dados para criar conteúdo personalizado.
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Instagram Auto-post (agente 24/7) */}
-      <div style={{ background: CARD, border: `1px solid ${igConnected ? 'rgba(255,109,41,0.25)' : BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
+      <div style={{ background: CARD, border: `1px solid ${igConnected ? 'rgba(74,222,128,0.25)' : BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
         <div style={{ padding: '20px 24px', borderBottom: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: igConnected ? 'rgba(255,109,41,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🤖</div>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: igConnected ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🤖</div>
             <div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>
                 Instagram Auto-post{' '}
@@ -650,12 +534,17 @@ export default function IntegrationsTab() {
       </div>
 
       {/* Google Business Profile card */}
-      <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
+      <div style={{ background: CARD, border: `1px solid ${gbpIntegration ? 'rgba(74,222,128,0.25)' : BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
         <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⭐</div>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: gbpIntegration ? 'rgba(74,222,128,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>⭐</div>
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Google Business Profile</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>
+                Google Business Profile{' '}
+                {gbpIntegration && (
+                  <span style={{ fontSize: '10px', background: 'rgba(74,222,128,0.15)', color: '#4ade80', padding: '2px 8px', borderRadius: 99, marginLeft: 6, verticalAlign: 'middle', fontWeight: 700 }}>✓ CONECTADO</span>
+                )}
+              </div>
               <div style={{ fontSize: '12px', color: gbpIntegration ? '#4ade80' : MUTED }}>
                 {gbpIntegration
                   ? `✓ Conectado${gbpIntegration.domain ? ` · ${gbpIntegration.domain}` : ''}`
