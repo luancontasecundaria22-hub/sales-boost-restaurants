@@ -11,6 +11,7 @@ import ConnectionsTab from './marketingAi/ConnectionsTab'
 import BusinessContextTab from './marketingAi/BusinessContextTab'
 import { buildGrowthDemo } from './marketingAi/growthDemo'
 import { fetchBusinessTypes, OTHER_BUSINESS_TYPE } from '../../lib/businessTypes'
+import { getTrialInfo, formatExpiresAt } from '../../lib/trialState'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string
 
@@ -373,6 +374,13 @@ export default function SettingsPage() {
     }
   }
 
+  const cancelTrial = async () => {
+    if (!companyId) return
+    if (!window.confirm('Cancelar o trial? Você perde o acesso ao dashboard, mas nada do que já foi feito (progresso, descobertas, conquistas) é apagado — pode voltar quando quiser.')) return
+    await supabase.from('companies').update({ trial_cancelled_at: new Date().toISOString() }).eq('id', companyId)
+    void refreshCompany()
+  }
+
   const handleUpgrade = async (plan: string) => {
     if (!session) return
     setUpgrading(plan)
@@ -653,6 +661,27 @@ export default function SettingsPage() {
               <button onClick={() => setUpgradeSuccess(false)} style={{ background: 'none', border: 'none', color: '#4ade80', cursor: 'pointer', float: 'right', fontSize: '16px', lineHeight: 1 }}>×</button>
             </div>
           )}
+
+          {/* Trial status */}
+          {(() => {
+            const trial = getTrialInfo(company)
+            if (!trial.isTrial && trial.state !== 'trial_expired' && trial.state !== 'cancelled') return null
+            return (
+              <div style={{ marginBottom: '20px', padding: '14px 16px', background: 'rgba(255,109,41,0.05)', border: '1px solid rgba(255,109,41,0.2)', borderRadius: '12px' }}>
+                <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'white', marginBottom: '4px' }}>
+                  {trial.isTrial ? `Trial de Crescimento — Dia ${trial.dayNumber} de 3` : trial.state === 'cancelled' ? 'Trial cancelado' : 'Trial encerrado'}
+                </div>
+                {trial.isTrial && trial.expiresAt && (
+                  <div style={{ fontSize: '11.5px', color: MUTED, marginBottom: '10px' }}>Termina em {formatExpiresAt(trial.expiresAt)} — sem cobrança automática.</div>
+                )}
+                {trial.isTrial && (
+                  <button onClick={cancelTrial} style={{ fontSize: '11.5px', color: '#f87171', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                    Cancelar trial
+                  </button>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Current plan badge */}
           <div style={{ marginBottom: '20px' }}>

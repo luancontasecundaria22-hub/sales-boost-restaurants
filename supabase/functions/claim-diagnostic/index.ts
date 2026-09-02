@@ -49,6 +49,12 @@ Deno.serve(async (req) => {
     if (existingCompany) {
       companyId = existingCompany.id
     } else {
+      // Trial de 3 dias começa aqui — o único lugar onde uma empresa nova é
+      // criada de verdade. Nunca calculado depois, sempre a partir desses
+      // dois timestamps (ver src/lib/trialState.ts no frontend).
+      const trialStartedAt = new Date()
+      const trialExpiresAt = new Date(trialStartedAt.getTime() + 3 * 24 * 60 * 60 * 1000)
+
       // Create companies record from diagnostic data
       const { data: company, error: companyErr } = await serviceClient
         .from('companies')
@@ -66,12 +72,18 @@ Deno.serve(async (req) => {
           contact_email: diag.contact_email,
           goal: diag.goal,
           plan: 'free',
+          trial_started_at: trialStartedAt.toISOString(),
+          trial_expires_at: trialExpiresAt.toISOString(),
         })
         .select('id')
         .single()
 
       if (companyErr || !company) return json({ error: companyErr?.message ?? 'Erro ao criar empresa' }, 500)
       companyId = company.id
+
+      await serviceClient.from('progress_events').insert({
+        company_id: companyId, event_type: 'trial_started', gp: 10, source: 'trial', dedupe_key: `trial_started:${companyId}`,
+      })
     }
 
     // Link diagnostic to company and user

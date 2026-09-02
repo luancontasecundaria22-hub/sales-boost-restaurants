@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { getTrialInfo } from './lib/trialState.ts'
 import './lib/analytics' // inicializa o PostHog antes da app renderizar
 import './lib/facebookSdk' // carrega o Facebook SDK (JS) — exigência da Meta
 import './index.css'
@@ -20,6 +21,7 @@ import SettingsPage from './pages/dashboard/SettingsPage.tsx'
 import OpportunitiesPage from './pages/dashboard/OpportunitiesPage.tsx'
 import MarketingAiHubPage from './pages/dashboard/MarketingAiHubPage.tsx'
 import BusinessProgressPage from './pages/dashboard/BusinessProgressPage.tsx'
+import TrialSummaryPage from './pages/dashboard/TrialSummaryPage.tsx'
 import MarketingAiSectionPage from './pages/dashboard/MarketingAiSectionPage.tsx'
 import ApprovalsPage from './pages/dashboard/ApprovalsPage.tsx'
 import ReportPage from './pages/dashboard/ReportPage.tsx'
@@ -57,6 +59,7 @@ function DashboardIndex() {
 function ClientRoute({ children }: { children: React.ReactNode }) {
   const { user, role, loading } = useAuth()
   const { company, loading: companyLoading } = useCompany()
+  const location = useLocation()
   if (loading) return <Spinner />
   if (!user) return <Navigate to="/login" replace />
   if (role === 'owner') return <Navigate to="/owner" replace />
@@ -65,6 +68,13 @@ function ClientRoute({ children }: { children: React.ReactNode }) {
   // place that gate is enforced, so it can't be skipped regardless of how
   // the account was created (signup, magic link, abandoned onboarding...).
   if (!company) return <Navigate to="/onboarding" replace />
+  // Trial acabou (ou foi cancelado) e não assinou — manda pra tela de
+  // resumo/conversão em vez do dashboard normal. Nunca apaga nada, só
+  // bloqueia o acesso até decidir continuar.
+  const trial = getTrialInfo(company)
+  if (trial.isBlocked && !location.pathname.startsWith('/dashboard/trial') && !location.pathname.startsWith('/dashboard/settings')) {
+    return <Navigate to="/dashboard/trial" replace />
+  }
   return <>{children}</>
 }
 
@@ -116,6 +126,7 @@ function RouterRoot() {
         <Route path="marketing-ai" element={<MarketingAiHubPage />} />
         <Route path="marketing-ai/:section" element={<MarketingAiSectionPage />} />
         <Route path="progresso" element={<BusinessProgressPage />} />
+        <Route path="trial" element={<TrialSummaryPage />} />
         <Route path="oportunidades" element={<OpportunitiesPage />} />
         <Route path="concorrentes" element={<Navigate to="/dashboard/marketing-ai/competitors" replace />} />
         <Route path="aprovacoes" element={<ApprovalsPage />} />

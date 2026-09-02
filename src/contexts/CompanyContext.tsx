@@ -20,6 +20,11 @@ export interface CompanyData {
   jarvis_enabled: boolean
   agent_enabled: boolean
   marketing_ai_enabled: boolean
+  trial_started_at: string | null
+  trial_expires_at: string | null
+  trial_cancelled_at: string | null
+  trial_intro_seen_at: string | null
+  stripe_subscription_id: string | null
 }
 
 interface CompanyContextType {
@@ -43,7 +48,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
     if (!user) { setCompany(null); setLoading(false); resetAnalytics(); return }
     const { data } = await supabase
       .from('companies')
-      .select('id, business_name, business_type, city, phone, website_url, instagram_url, facebook_url, google_place_id, google_rating, google_review_count, instagram_user_id, plan, jarvis_enabled, agent_enabled, marketing_ai_enabled')
+      .select('id, business_name, business_type, city, phone, website_url, instagram_url, facebook_url, google_place_id, google_rating, google_review_count, instagram_user_id, plan, jarvis_enabled, agent_enabled, marketing_ai_enabled, trial_started_at, trial_expires_at, trial_cancelled_at, trial_intro_seen_at, stripe_subscription_id')
       .eq('user_id', user.id)
       .maybeSingle()
     const c = data as CompanyData | null

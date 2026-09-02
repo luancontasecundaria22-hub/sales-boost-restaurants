@@ -4,6 +4,8 @@ import { useCompany } from '../../contexts/CompanyContext'
 import { LanguageProvider, useLang } from '../../contexts/LanguageContext'
 import { d } from '../../i18n-dash'
 import ProgressPopup from './marketingAi/ProgressPopup'
+import TrialStartModal from './TrialStartModal'
+import TrialStatusWidget from './TrialStatusWidget'
 
 const ORANGE = '#FF6D29'
 const SIDEBAR_BG = '#0D0A07'
@@ -161,9 +163,11 @@ export default function DashboardLayout() {
       <div style={{ display: 'flex', minHeight: '100vh', background: '#0E0B0A' }}>
         <SidebarInner />
         <main style={{ flex: 1, marginLeft: '240px', display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+          <TrialStatusWidget />
           <Outlet />
         </main>
       </div>
+      <TrialStartModal />
       <ProgressPopup />
     </LanguageProvider>
   )
