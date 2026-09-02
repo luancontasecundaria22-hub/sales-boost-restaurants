@@ -42,6 +42,10 @@ Deno.serve(async (req) => {
   authUrl.searchParams.set('response_type', 'code')
   authUrl.searchParams.set('scope', SCOPES.join(','))
   authUrl.searchParams.set('state', state)
+  // Não usamos Facebook Login em nenhum lugar do fluxo — esconde a opção
+  // "Continuar com Facebook" na tela do Instagram pra não confundir o dono
+  // (ele clicaria num caminho que a gente não suporta).
+  authUrl.searchParams.set('enable_fb_login', 'false')
 
   return Response.redirect(authUrl.toString(), 302)
 })

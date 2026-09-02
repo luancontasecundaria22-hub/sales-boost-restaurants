@@ -46,23 +46,27 @@ Deno.serve(async (req) => {
   const cleanCode = code.replace(/#_$/, '')
 
   try {
-    // 1. code → short-lived token (form-urlencoded)
-    const form = new URLSearchParams({
-      client_id: appId,
-      client_secret: appSecret,
-      grant_type: 'authorization_code',
-      redirect_uri: redirectUri,
-      code: cleanCode,
-    })
+    // 1. code → short-lived token — a doc oficial do Meta manda esse POST
+    // como multipart/form-data (exemplo em curl usa -F), não form-urlencoded.
+    const form = new FormData()
+    form.set('client_id', appId)
+    form.set('client_secret', appSecret)
+    form.set('grant_type', 'authorization_code')
+    form.set('redirect_uri', redirectUri)
+    form.set('code', cleanCode)
     const shortRes = await fetch('https://api.instagram.com/oauth/access_token', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: form.toString(),
+      body: form,
     })
     if (!shortRes.ok) throw new Error(`Short token failed: ${await shortRes.text()}`)
-    const shortJson = await shortRes.json() as { access_token: string; user_id?: number | string; permissions?: string }
-    const shortToken = shortJson.access_token
-    let igUserId = shortJson.user_id != null ? String(shortJson.user_id) : ''
+    const shortJson = await shortRes.json() as
+      { access_token?: string; user_id?: number | string; permissions?: string; data?: { access_token: string; user_id?: number | string; permissions?: string }[] }
+    // A doc oficial mostra a resposta embrulhada em "data": [...] — trata os
+    // dois formatos pra não quebrar se a API devolver liso (sem o wrapper).
+    const shortPayload = shortJson.data?.[0] ?? shortJson
+    const shortToken = shortPayload.access_token
+    let igUserId = shortPayload.user_id != null ? String(shortPayload.user_id) : ''
+    if (!shortToken) throw new Error(`Short token failed: resposta sem access_token — ${JSON.stringify(shortJson)}`)
 
     // 2. short → long-lived token (60 dias)
     const llRes = await fetch(`https://graph.instagram.com/access_token?` + new URLSearchParams({
