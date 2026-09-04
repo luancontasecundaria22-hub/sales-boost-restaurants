@@ -18,11 +18,11 @@ Deno.serve(async (req) => {
   const state = url.searchParams.get('state')
   const errorMsg = url.searchParams.get('error_description') || url.searchParams.get('error')
 
-  if (errorMsg) return htmlRedirect(`/dashboard/marketing-ai/conexoes?error=${encodeURIComponent(errorMsg)}`)
-  if (!code || !state) return htmlRedirect('/dashboard/marketing-ai/conexoes?error=missing_params')
+  if (errorMsg) return htmlRedirect(`/dashboard/settings?tab=conexoes?error=${encodeURIComponent(errorMsg)}`)
+  if (!code || !state) return htmlRedirect('/dashboard/settings?tab=conexoes?error=missing_params')
 
   let companyId: string
-  try { companyId = JSON.parse(atob(state)).company_id } catch { return htmlRedirect('/dashboard/marketing-ai/conexoes?error=invalid_state') }
+  try { companyId = JSON.parse(atob(state)).company_id } catch { return htmlRedirect('/dashboard/settings?tab=conexoes?error=invalid_state') }
 
   const appId = Deno.env.get('META_APP_ID')!
   const appSecret = Deno.env.get('META_APP_SECRET')!
@@ -65,10 +65,10 @@ Deno.serve(async (req) => {
     }).eq('id', companyId)
     if (updateErr) throw new Error(updateErr.message)
 
-    return htmlRedirect('/dashboard/marketing-ai/conexoes?meta_ads=connected')
+    return htmlRedirect('/dashboard/settings?tab=conexoes?meta_ads=connected')
   } catch (err) {
     console.error('meta-ads OAuth error:', err)
-    return htmlRedirect(`/dashboard/marketing-ai/conexoes?error=${encodeURIComponent(String(err))}`)
+    return htmlRedirect(`/dashboard/settings?tab=conexoes?error=${encodeURIComponent(String(err))}`)
   }
 })
 
