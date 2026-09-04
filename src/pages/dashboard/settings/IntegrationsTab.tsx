@@ -85,6 +85,9 @@ export default function IntegrationsTab() {
   const [metaBusinessPagesCount, setMetaBusinessPagesCount] = useState(0)
   const metaBusinessError = searchParams.get('error')
   const metaBusinessSuccess = searchParams.get('meta_business') === 'connected'
+  // Meta Ads state
+  const [metaAdsAccount, setMetaAdsAccount] = useState<{ id: string; name: string } | null>(null)
+  const metaAdsSuccess = searchParams.get('meta_ads') === 'connected'
 
   useEffect(() => {
     if (!user) return
@@ -95,7 +98,7 @@ export default function IntegrationsTab() {
     setLoading(true)
     const { data: company } = await supabase
       .from('companies')
-      .select('id, instagram_user_id, instagram_auto_post, instagram_post_frequency, whatsapp_number, whatsapp_connected_at, meta_business_name, meta_business_connected_at')
+      .select('id, instagram_user_id, instagram_auto_post, instagram_post_frequency, whatsapp_number, whatsapp_connected_at, meta_business_name, meta_business_connected_at, meta_ads_account_id, meta_ads_account_name')
       .eq('user_id', user!.id)
       .single()
 
@@ -108,6 +111,7 @@ export default function IntegrationsTab() {
     setWaConnectedAt(company.whatsapp_connected_at ?? null)
     setMetaBusinessName(company.meta_business_name ?? null)
     setMetaBusinessConnectedAt(company.meta_business_connected_at ?? null)
+    setMetaAdsAccount(company.meta_ads_account_id ? { id: company.meta_ads_account_id, name: company.meta_ads_account_name ?? company.meta_ads_account_id } : null)
 
     const { count: pagesCount } = await supabase
       .from('company_meta_pages')
@@ -238,6 +242,12 @@ export default function IntegrationsTab() {
     setMetaBusinessName(null)
     setMetaBusinessConnectedAt(null)
     setMetaBusinessPagesCount(0)
+  }
+
+  const handleDisconnectMetaAds = async () => {
+    if (!companyId) return
+    await supabase.from('companies').update({ meta_ads_account_id: null, meta_ads_account_name: null, meta_ads_access_token: null, meta_ads_token_expires_at: null }).eq('id', companyId)
+    setMetaAdsAccount(null)
   }
 
   if (loading) {
@@ -610,6 +620,47 @@ export default function IntegrationsTab() {
           <div style={{ padding: '12px 24px', background: 'rgba(74,222,128,0.04)', borderTop: `1px solid ${BORDER}` }}>
             <div style={{ fontSize: '12px', color: MUTED }}>
               ✓ Botão "Responder no Google" ativo em <strong style={{ color: 'white' }}>Avaliações</strong>. Conectado em {new Date(gbpIntegration.connected_at!).toLocaleDateString('pt-BR')}.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Meta Ads card */}
+      <div style={{ background: CARD, border: `1px solid ${metaAdsAccount ? 'rgba(255,109,41,0.25)' : BORDER}`, borderRadius: '14px', overflow: 'hidden', marginBottom: '20px' }}>
+        <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: metaAdsAccount ? 'rgba(255,109,41,0.12)' : 'rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🎯</div>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'white' }}>Meta Ads Manager</div>
+              <div style={{ fontSize: '12px', color: metaAdsAccount ? '#4ade80' : MUTED }}>
+                {metaAdsAccount ? `✓ Conectado · ${metaAdsAccount.name}` : 'Traz gasto, ROAS e campanhas reais pro painel de Campanhas'}
+              </div>
+            </div>
+          </div>
+          {companyId && (
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <a href={`${SUPABASE_URL}/functions/v1/meta-ads-oauth-start?company_id=${companyId}`}
+                style={{ padding: '8px 16px', background: metaAdsAccount ? 'rgba(255,255,255,0.04)' : ORANGE, color: metaAdsAccount ? MUTED : '#000', fontWeight: 700, fontSize: '12px', borderRadius: '8px', border: metaAdsAccount ? `1px solid ${BORDER}` : 'none', textDecoration: 'none', display: 'inline-block', cursor: 'pointer' }}>
+                {metaAdsAccount ? 'Reconectar' : 'Conectar →'}
+              </a>
+              {metaAdsAccount && (
+                <button onClick={handleDisconnectMetaAds}
+                  style={{ padding: '8px 14px', background: 'transparent', color: '#f87171', fontWeight: 600, fontSize: '12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', cursor: 'pointer' }}>
+                  Desconectar
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        {(metaAdsSuccess || igOauthError) && !metaAdsAccount && (
+          <div style={{ padding: '12px 24px', background: metaAdsSuccess ? 'rgba(74,222,128,0.06)' : 'rgba(239,68,68,0.08)', fontSize: '12px', color: metaAdsSuccess ? '#4ade80' : '#f87171', borderTop: `1px solid ${BORDER}` }}>
+            {metaAdsSuccess ? '✓ Conta de anúncios conectada! Os números reais entram no painel de Campanhas.' : `Erro: ${igOauthError}`}
+          </div>
+        )}
+        {!metaAdsAccount && (
+          <div style={{ padding: '0 24px 18px' }}>
+            <div style={{ fontSize: '12.5px', color: MUTED, lineHeight: 1.6 }}>
+              Conecte sua conta de anúncios da Meta pra trocar os números demo do painel de <strong style={{ color: 'white' }}>Campanhas</strong> pelos reais (investido, ROAS, CTR, conversões). Requer conta com <strong style={{ color: 'white' }}>Marketing API</strong> aprovada.
             </div>
           </div>
         )}

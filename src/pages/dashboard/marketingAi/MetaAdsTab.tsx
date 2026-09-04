@@ -1,10 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { CompanyData } from '../../../contexts/CompanyContext'
-import { CARD, MUTED, BORDER, D } from './shared'
+import { useAuth } from '../../../contexts/AuthContext'
+import { CARD, MUTED, BORDER, D, SUPABASE_URL } from './shared'
 import {
   buildMetaAdsDemo, fmtBRL, fmtNum, AD_STATUS_META, AD_RECO_META,
   type DemoAdCampaign, type AdRecommendation,
 } from './growthDemo'
+
+interface LiveAds {
+  account_name?: string
+  totals: { spend: number; revenue: number; roas: number; ctr: number; cpc: number; cpa: number; conversions: number }
+  campaigns: { id: string; name: string; objective: string; status: string; spend: number; roas: number; ctr: number; cpc: number; cpa: number }[]
+}
 
 const ORANGE = '#FF6D29'
 const GREEN = '#4ade80'
@@ -85,16 +92,49 @@ function RecoCard({ r, executed, onExecute }: { r: AdRecommendation; executed: b
 
 export default function MetaAdsTab({ company }: { company: Pick<CompanyData, 'id' | 'business_name'> }) {
   const demo = useMemo(() => buildMetaAdsDemo(company), [company])
+  const { session } = useAuth()
   const [executed, setExecuted] = useState<Set<string>>(new Set())
+  const [live, setLive] = useState<LiveAds | null>(null)
   const execute = (id: string) => setExecuted(prev => new Set(prev).add(id))
 
-  const { totals } = demo
+  // Puxa os números REAIS da conta de anúncios (se conectada). Sem conexão,
+  // mantém o demo — mesmo design, só trocam os números.
+  useEffect(() => {
+    if (!company.id || !session) return
+    let alive = true
+    fetch(`${SUPABASE_URL}/functions/v1/meta-ads-insights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ company_id: company.id }),
+    })
+      .then(r => r.json())
+      .then(d => { if (alive && d?.connected && d.totals) setLive(d as LiveAds) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [company.id, session])
+
+  // Campanhas reais no formato que a linha de campanha espera.
+  const liveCampaigns: DemoAdCampaign[] | null = live
+    ? live.campaigns.map(c => ({
+        ...c,
+        status: (c.status === 'active' ? 'active' : c.status === 'paused' ? 'paused' : 'learning') as DemoAdCampaign['status'],
+      } as DemoAdCampaign))
+    : null
+
+  const totals = live?.totals ?? demo.totals
+  const campaigns = liveCampaigns ?? demo.campaigns
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '26px' }}>
-      <div style={{ padding: '12px 16px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
-        ⏳ <strong>Modo demonstração.</strong> A Meta Ads Manager entra ao vivo quando sua conta for verificada pela Meta — aí estes números viram os reais da sua conta de anúncios, sem mudar nada nesta tela. "Executar recomendação da IA" aqui é uma simulação; ao vivo, cada ação continua passando pela sua aprovação.
-      </div>
+      {live ? (
+        <div style={{ padding: '12px 16px', background: 'rgba(74,222,128,0.06)', border: '1px solid rgba(74,222,128,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
+          🟢 <strong>Dados reais</strong> da sua conta de anúncios{live.account_name ? ` (${live.account_name})` : ''} — últimos 30 dias. Investido, ROAS, campanhas e conversões vêm direto da Meta. Públicos, criativos e recomendações da IA seguem sendo a leitura do agente; "Executar recomendação" continua passando pela sua aprovação.
+        </div>
+      ) : (
+        <div style={{ padding: '12px 16px', background: 'rgba(251,191,36,0.06)', border: '1px solid rgba(251,191,36,0.22)', borderRadius: '11px', fontSize: '11.5px', color: 'white', lineHeight: 1.6 }}>
+          ⏳ <strong>Modo demonstração.</strong> Conecte sua conta de anúncios em <strong>Conexões → Meta Ads Manager</strong> — aí estes números viram os reais da sua conta, sem mudar nada nesta tela. "Executar recomendação da IA" aqui é uma simulação; ao vivo, cada ação continua passando pela sua aprovação.
+        </div>
+      )}
 
       {/* KPIs agregados */}
       <section>
@@ -114,7 +154,9 @@ export default function MetaAdsTab({ company }: { company: Pick<CompanyData, 'id
       <section>
         <div style={{ fontSize: '13px', fontWeight: 800, color: 'white', marginBottom: '11px' }}>📊 Campanhas</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
-          {demo.campaigns.map(c => <CampaignRow key={c.id} c={c} />)}
+          {campaigns.length === 0
+            ? <div style={{ fontSize: '12px', color: MUTED, padding: '14px', textAlign: 'center', border: `1px dashed ${BORDER}`, borderRadius: '10px' }}>Nenhuma campanha ativa na sua conta nos últimos 30 dias.</div>
+            : campaigns.map(c => <CampaignRow key={c.id} c={c} />)}
         </div>
       </section>
 
